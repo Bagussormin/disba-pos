@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 1. CONFIG DASAR & BACKGROUND */
+:root {
+  --bg-dark: #020617; /* Slate-950 */
+  --accent-blue: #3b82f6; /* Blue-500 */
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Background Gahar dengan Gradasi Halus */
+  background: radial-gradient(circle at top right, #1e293b, #020617);
+  background-attachment: fixed;
+  color: #f8fafc;
+  min-height: 100vh;
+}
+
+/* 2. CUSTOM SCROLLBAR (Biar dashboard tetap elegan) */
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.3); /* Warna biru transparan */
+  border-radius: 10px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.6);
+}
+
+/* 3. UTILITAS KHUSUS DISBA POS */
+@layer utilities {
+  /* Efek Kaca Frosted */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Sembunyikan Scrollbar tapi tetap bisa scroll */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* 4. KONFIGURASI PRINT (Tetap kita jaga agar tidak rusak) */
+@media print {
+  /* Sembunyikan semua elemen kecuali yang di-print */
+  body > *:not(#receipt-print) {
+    display: none !important;
+  }
+
+  #receipt-print {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    background: white !important;
+    color: black !important;
+    padding: 10px;
+  }
+
+  /* Paksa warna muncul di print (untuk logo/total) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  @page {
+    margin: 0;
+    size: auto;
+  }
+}
+
+/* 5. ANIMASI HALUS */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+
+/* Utility untuk teks gradasi */
+.text-gradient-blue {
+  background: linear-gradient(to right, #60a5fa, #2563eb);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

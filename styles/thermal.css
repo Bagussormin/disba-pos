@@ -1,0 +1,22 @@
+.thermal {
+  width: 58mm;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .thermal,
+  .thermal * {
+    visibility: visible;
+  }
+
+  .thermal {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+}

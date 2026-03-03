@@ -1,0 +1,8 @@
+
+{
+  "name": "Disba POS",
+  "description": "A high-performance, enterprise-grade cloud POS system inspired by Quinos and Moka, featuring advanced inventory management, real-time analytics, and Gemini AI-powered business insights.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
