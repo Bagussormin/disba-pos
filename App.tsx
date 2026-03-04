@@ -85,7 +85,7 @@ export default function App() {
 
     setUser({ username: savedUsername, role: role });
     
-    // LOGIKA BARU: Arahkan Admin ke jalurnya sendiri secara otomatis
+    // Arahkan Admin ke jalurnya sendiri
     if (role === "admin") {
       window.history.pushState({}, "", "/admin/dashboard");
       setCurrentPath("/admin/dashboard");
@@ -106,7 +106,7 @@ export default function App() {
     setCurrentPath("/login");
   };
 
-  // --- LOGIKA RENDER ---
+  // --- LOGIKA RENDER (URUTAN SUDAH DIPERBAIKI) ---
 
   // 1. Prioritas Tertinggi: Kontrol Founder & Lisensi
   if (currentPath === "/founder-console") return <FounderDashboard />;
@@ -124,14 +124,11 @@ export default function App() {
     return <CustomerMenu tableId={tableId} />;
   }
 
-  // 4. JIKA BELUM LOGIN
-  if (!user) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
-
-  // 5. AREA ADMIN (Jika URL berawalan /admin)
+  // 4. AREA ADMIN (Cek URL /admin lebih dulu)
   if (currentPath.startsWith("/admin")) {
-    if (user.role !== "admin") return <AdminLogin />;
+    // Jika belum login ATAU login tapi bukan admin, tampilkan AdminLogin
+    if (!user || user.role !== "admin") return <AdminLogin />;
+    
     return (
       <AdminLayout>
         {(currentPath === "/admin/dashboard" || currentPath === "/admin") && <AdminHome />}
@@ -149,6 +146,11 @@ export default function App() {
         {currentPath === "/admin/settings/payments" && <MerchantBank />}
       </AdminLayout>
     );
+  }
+
+  // 5. JIKA BUKAN AREA ADMIN & BELUM LOGIN (Kasir/Waiter)
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   // 6. DASHBOARD UTAMA (Untuk Kasir & Waiter)
