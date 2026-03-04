@@ -1,15 +1,20 @@
 import { useState } from "react";
 import WaiterHome from "./WaiterHome";
-import WaiterOrder from "./WaiterOrder";
+import WaiterOrder from "./WaiterOrder"; // Pastikan nama file sesuai (WaiterOrder atau OrderEntry)
 import { LogOut } from "lucide-react";
 
 export default function WaiterApp() {
   const [activeBill, setActiveBill] = useState<number | null>(null);
 
   const handleLogOut = () => {
-    if (window.confirm("KELUAR?")) {
-      localStorage.clear();
-      window.location.href = "/";
+    if (window.confirm("KELUAR DARI SESI WAITER?")) {
+      // Menghapus sesi spesifik tanpa merusak 'system_ready'
+      localStorage.removeItem("role");
+      localStorage.removeItem("username");
+      localStorage.removeItem("is_admin");
+      
+      // Paksa ke halaman login staff
+      window.location.href = "/login";
     }
   };
 
@@ -30,14 +35,16 @@ export default function WaiterApp() {
         )}
       </div>
 
-      {/* TOMBOL LOGOUT KECIL DI BAWAH */}
-      <div className="fixed bottom-2 right-2 z-[99999]">
+      {/* SATU-SATUNYA TOMBOL LOGOUT (MELAYANG DI BAWAH) */}
+      <div className="fixed bottom-4 right-4 z-[99999]">
         <button 
           onClick={handleLogOut}
-          className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md border border-white/5 hover:border-red-500/30 px-2 py-1 rounded-md transition-all group opacity-40 hover:opacity-100"
+          className="flex items-center gap-2 bg-black/60 backdrop-blur-xl border border-white/10 hover:border-red-500/50 px-3 py-2 rounded-xl transition-all group shadow-2xl"
         >
-          <span className="text-[7px] font-black text-gray-500 group-hover:text-red-500 uppercase tracking-widest">Logout_Sess</span>
-          <LogOut size={9} className="text-gray-500 group-hover:text-red-500" />
+          <span className="text-[8px] font-black text-gray-400 group-hover:text-red-500 uppercase tracking-[0.2em] italic">
+            Terminate_Sess
+          </span>
+          <LogOut size={12} className="text-gray-400 group-hover:text-red-500" />
         </button>
       </div>
 

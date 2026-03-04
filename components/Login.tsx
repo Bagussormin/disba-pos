@@ -7,32 +7,29 @@ type Props = {
 };
 
 export default function Login({ onLoginSuccess }: Props) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     setLoading(true);
-    
-    // MENGGUNAKAN SUPABASE AUTH (Sesuai user yang kamu daftarkan tadi)
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("username", username)
+      .eq("password", password)
+      .single();
+      
 
-    if (error) {
-      alert("Akses Ditolak! " + error.message);
+    if (error || !data) {
+      alert("Akses Ditolak! Periksa Username & Password.");
       setLoading(false);
       return;
     }
 
-    if (data.user) {
-      // Simpan data login sederhana di browser
-      localStorage.setItem("role", "admin");
-      localStorage.setItem("username", data.user.email || "");
-      onLoginSuccess("admin");
-    }
-    
+    localStorage.setItem("role", data.role);
+    localStorage.setItem("username", data.username);
+    onLoginSuccess(data.role);
     setLoading(false);
   };
 
@@ -41,6 +38,7 @@ export default function Login({ onLoginSuccess }: Props) {
       
       {/* --- BACKGROUND FUTURISTIK DINAMIS --- */}
       <div className="absolute inset-0 z-0">
+        {/* 1. Efek Grid Bergerak (Cyber Grid) */}
         <div 
           className="absolute inset-0 opacity-20"
           style={{
@@ -51,12 +49,16 @@ export default function Login({ onLoginSuccess }: Props) {
             animation: 'grid-move 20s linear infinite'
           }}
         ></div>
+
+        {/* 2. Cahaya Aurora Bergerak (Mesh Gradient) */}
         <div className="absolute top-[-20%] left-[-10%] w-[100%] h-[100%] bg-blue-600/10 blur-[120px] rounded-full animate-float-slow"></div>
         <div className="absolute bottom-[-20%] right-[-10%] w-[100%] h-[100%] bg-indigo-500/10 blur-[120px] rounded-full animate-float-reverse"></div>
+        
+        {/* 3. Efek Scanline (Garis-garis TV Tua Tipis) */}
         <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] z-10"></div>
       </div>
 
-      {/* --- CARD LOGIN --- */}
+      {/* --- CARD LOGIN (DIAM & SOLID) --- */}
       <div className="glass-card w-full max-w-[310px] rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 relative z-20 bg-black/40 backdrop-blur-xl">
         
         {/* BRANDING */}
@@ -77,19 +79,18 @@ export default function Login({ onLoginSuccess }: Props) {
             DISBA <span className="text-blue-500">POS</span>
           </h1>
           <p className="text-[7px] font-bold text-blue-400/60 uppercase tracking-[0.5em] mt-2">
-            NES HOUSE AUTHORIZED ONLY
+            System Authorized Only
           </p>
         </div>
 
         {/* FORM INPUT */}
         <div className="space-y-4">
           <div className="space-y-1">
-            <label className="text-[8px] font-black text-blue-400 uppercase ml-4 tracking-widest">Email Access</label>
+            <label className="text-[8px] font-black text-blue-400 uppercase ml-4 tracking-widest">Operator ID</label>
             <input
-              type="email"
-              placeholder="name@neshouse.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full bg-black/60 border border-white/5 rounded-xl px-5 py-3 text-sm text-white placeholder:text-gray-800 outline-none focus:border-blue-500/50 transition-all font-bold"
             />
           </div>
@@ -110,17 +111,18 @@ export default function Login({ onLoginSuccess }: Props) {
             disabled={loading}
             className="w-full bg-blue-700 hover:bg-blue-600 text-white font-black py-3.5 rounded-xl shadow-[0_0_30px_rgba(29,78,216,0.4)] active:scale-95 transition-all uppercase tracking-widest text-[10px] mt-2 border border-blue-400/20"
           >
-            {loading ? "Verifying..." : "Enter System"}
+            {loading ? "Decrypting..." : "Access System"}
           </button>
         </div>
 
         <footer className="mt-8 text-center pt-4 opacity-20">
           <p className="text-[7px] font-bold text-gray-500 uppercase tracking-widest">
-            v2.1.0 &bull; Secure Auth Active
+            v2.0.6 &bull; Secure Connection
           </p>
         </footer>
       </div>
 
+      {/* --- CSS ANIMATIONS --- */}
       <style>{`
         @keyframes grid-move {
           0% { background-position: 0 0; }

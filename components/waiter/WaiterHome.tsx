@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { Layout, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 type Table = { id: number; name: string; status: string; area: string; x_pos: number; y_pos: number; };
 type OpenBill = { id: number; table_id: number; guest_name: string; status: string; };
@@ -70,21 +70,15 @@ export default function WaiterHome({ onOpenBill }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-[#020617] p-4 overflow-hidden select-none font-sans italic text-white">
+    /* PERBAIKAN: Menghapus fixed inset-0 agar Header di WaiterApp.tsx terlihat */
+    <div className="w-full h-[calc(100vh-120px)] overflow-hidden select-none font-sans italic text-white">
       <div className="max-w-7xl mx-auto flex flex-col h-full relative">
-        <header className="flex justify-between items-center mb-4 flex-shrink-0">
-          <h2 className="text-xl font-black tracking-tighter uppercase">
-            DISBA <span className="text-blue-500">FLOOR</span> 
-            <span className="ml-3 text-[8px] font-bold text-gray-700 tracking-[0.3em] uppercase">Control Unit</span>
-          </h2>
-        </header>
-
+        
         <div className="grid grid-cols-12 gap-4 h-full overflow-hidden pb-6">
           
-          {/* BAGIAN DENAH (SINKRON DENGAN ADMIN) */}
+          {/* BAGIAN DENAH */}
           <div className="col-span-12 lg:col-span-8 bg-white/[0.01] rounded-[2rem] border border-white/5 relative overflow-auto no-scrollbar shadow-2xl group">
             
-            {/* Background Grid agar estetik */}
             <div 
               className="absolute inset-0 opacity-20"
               style={{ 
@@ -96,7 +90,7 @@ export default function WaiterHome({ onOpenBill }: Props) {
             {loading ? (
               <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-blue-500" /></div>
             ) : (
-              <div className="relative min-w-[800px] min-h-[600px]">
+              <div className="relative min-w-[800px] min-h-[600px] p-10">
                 {tables.map((table) => {
                   const bill = bills.find(b => b.table_id === table.id);
                   const isOccupied = table.status === "open";
@@ -132,7 +126,6 @@ export default function WaiterHome({ onOpenBill }: Props) {
                         </div>
                       )}
 
-                      {/* Dot Indikator Status */}
                       <div className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full ${isOccupied ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500 opacity-30'}`}></div>
                     </button>
                   );
@@ -141,7 +134,7 @@ export default function WaiterHome({ onOpenBill }: Props) {
             )}
           </div>
 
-          {/* PANEL KANAN (INPUT NAMA GUEST) - Tetap Sama */}
+          {/* PANEL KANAN */}
           <div className="col-span-12 lg:col-span-4 bg-white/[0.02] rounded-[2rem] border border-white/5 p-6 flex flex-col shadow-2xl relative">
             {selectedTable ? (
               <div className="space-y-6">

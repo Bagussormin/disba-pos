@@ -35,11 +35,11 @@ import ProtocolLock from "./components/ProtocolLock";
 export default function App() {
   const [user, setUser] = useState<null | { username: string; role: string }>(null);
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
-
-  // --- STATE KONTROL LISENSI ---
   const [isLicenseActive, setIsLicenseActive] = useState(true);
 
-  // 1. MONITORING NAVIGASI & SESI
+  // --- SAKLAR UTAMA (DIBACA LANGSUNG DARI STORAGE) ---
+  const isSystemReady = localStorage.getItem("system_ready") === "true";
+
   useEffect(() => {
     const handleLocationChange = () => {
       setCurrentPath(window.location.pathname);
@@ -47,13 +47,12 @@ export default function App() {
 
     window.addEventListener("popstate", handleLocationChange);
     
-    // Cek Sesi Login & Lisensi
+    // Cek Sesi Login Staff & Admin
     const isAdminAuth = localStorage.getItem("is_admin") === "true";
     const savedRole = localStorage.getItem("role");
     const savedUser = localStorage.getItem("username");
     const licenseStatus = localStorage.getItem("disba_license_active") !== "false";
 
-    // Set Status Lisensi dari LocalStorage (Bisa dikontrol via Founder Dashboard)
     setIsLicenseActive(licenseStatus);
 
     if (isAdminAuth) {
@@ -62,10 +61,9 @@ export default function App() {
       setUser({ username: savedUser, role: savedRole });
     }
 
-    // AUTO-LOCK LOGIC: Berdasarkan Tanggal (NES House: 1 Tahun)
+    // Auto-lock expired
     const expiryDate = new Date("2027-03-03");
-    const today = new Date();
-    if (today > expiryDate) {
+    if (new Date() > expiryDate) {
       setIsLicenseActive(false);
       localStorage.setItem("disba_license_active", "false");
     }
@@ -73,11 +71,16 @@ export default function App() {
     return () => window.removeEventListener("popstate", handleLocationChange);
   }, []);
 
-  // 2. HANDLER LOGIN & LOGOUT (Multi-Tenant Ready)
+  // --- HANDLERS ---
+
+  const handleEnterSystem = () => {
+    localStorage.setItem("system_ready", "true");
+    // Gunakan window.location.href untuk paksa reload ke state baru
+    window.location.href = "/login"; 
+  };
+
   const handleLoginSuccess = (role: string) => {
     const savedUsername = localStorage.getItem("username") || "User";
-    
-    // Mendaftarkan Tenant ID secara otomatis (NES House sebagai Pilot Project)
     localStorage.setItem("tenant_id", "NES_HOUSE_001");
     localStorage.setItem("tenant_name", "NES House Cold Brew");
 
@@ -87,47 +90,46 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
-    setUser(null);
-    window.location.href = "/"; 
-  };
+    // HAPUS DATA STAFF SAJA
+    localStorage.removeItem("role");
+    localStorage.removeItem("username");
+    localStorage.removeItem("is_admin");
+    localStorage.removeItem("tenant_id");
 
-  const navigateToLogin = () => {
+    setUser(null);
+    
+    // PAKSA PINDAH KE LOGIN TANPA REFRESH KE "/"
     window.history.pushState({}, "", "/login");
     setCurrentPath("/login");
   };
 
-  // --- LOGIKA RENDER (SISTEM TINGKAT TINGGI) ---
+  // --- LOGIKA RENDER (URUTAN BARU - ANTI LOMPAT) ---
 
-  // A. PINTU RAHASIA FOUNDER (Akses Utama Kamu)
-  if (currentPath === "/founder-console") {
-    return <FounderDashboard />;
+  // 1. Prioritas Tertinggi: Kontrol Founder & Lisensi
+  if (currentPath === "/founder-console") return <FounderDashboard />;
+  if (!isLicenseActive) return <ProtocolLock />;
+
+  // 2. Jika Sistem Belum Ready (Owner Belum Isi Email)
+  if (!isSystemReady) {
+    return <LandingPage onEnterSystem={handleEnterSystem} />;
   }
 
-  // B. GERBANG PROTOKOL (Lockdown jika lisensi mati)
-  if (!isLicenseActive) {
-    return <ProtocolLock />;
-  }
-
-  // C. LANDING PAGE
-  if (currentPath === "/" && !user) {
-    return <LandingPage onEnterSystem={navigateToLogin} />;
-  }
-
-  // D. AREA PELANGGAN (QR MENU)
+  // 3. Area Publik (Menu QR)
   if (currentPath.includes("/menu/")) {
     const pathParts = currentPath.split("/");
-    const menuIndex = pathParts.indexOf("menu");
-    const tableId = pathParts[menuIndex + 1] || "unknown";
+    const tableId = pathParts[pathParts.length - 1] || "unknown";
     return <CustomerMenu tableId={tableId} />;
   }
 
-  // E. AREA ADMIN OUTLET
+  // 4. JIKA SUDAH READY, TAPI BELUM ADA USER LOGIN (INI KUNCINYA)
+  // Tidak peduli URL-nya apa, selama 'user' kosong, tampilkan LOGIN STAFF
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // 5. AREA ADMIN
   if (currentPath.startsWith("/admin")) {
-    if (user?.role !== "admin") {
-      return <AdminLogin />;
-    }
-    
+    if (user.role !== "admin") return <AdminLogin />;
     return (
       <AdminLayout>
         {(currentPath === "/admin/dashboard" || currentPath === "/admin") && <AdminHome />}
@@ -135,12 +137,10 @@ export default function App() {
         {currentPath === "/admin/menu" && <MenuMaster />}
         {currentPath === "/admin/recipes" && <RecipeManagement />}
         {currentPath === "/admin/inventory" && <InventoryApp />}
-
         {currentPath === "/admin/reports" && <SalesReport />} 
         {currentPath === "/admin/history" && <TransactionHistory />} 
         {currentPath === "/admin/orders" && <OrderHistory />}
         {currentPath === "/admin/shifts" && <ShiftReports />}
-
         {currentPath === "/admin/settings/users" && <UserManagement />}
         {currentPath === "/admin/settings/tables" && <TableLayout />}
         {currentPath === "/admin/settings/profile" && <OutletProfile />}
@@ -149,19 +149,14 @@ export default function App() {
     );
   }
 
-  // F. PROTEKSI LOGIN
-  if (!user || currentPath === "/login") {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
-
-  // G. DASHBOARD OPERASIONAL (KASIR/WAITER)
+  // 6. DASHBOARD UTAMA
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans italic">
       <div className="p-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex justify-between items-center shadow-xl not-italic">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
           <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80 text-cyan-400">
-             {localStorage.getItem("tenant_name") || "DISBA_CLIENT"}
+             {localStorage.getItem("tenant_name") || "NES HOUSE COLD BREW"}
           </span>
           <span className="text-[10px] font-medium text-gray-500">|</span>
           <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80">

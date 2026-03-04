@@ -35,7 +35,6 @@ export default function KasirHome() {
   const [loading, setLoading] = useState(false);
   const [itemSales, setItemSales] = useState<any[]>([]);
   
-  // State Summary yang diperbaiki untuk Split Report
   const [shiftSummary, setShiftSummary] = useState({ 
     totalSales: 0, 
     cashSales: 0, 
@@ -126,7 +125,6 @@ export default function KasirHome() {
   // --- PAYMENT HANDLERS ---
   const handleOpenSettlePreview = async () => {
     if (!selectedTable) return;
-    // Tandai meja sedang diproses agar tidak diutak-atik waiter
     await supabase.from("tables").update({ status: "closed", last_status_change: new Date().toISOString() }).eq("id", selectedTable.id);
     setShowPreviewModal(true);
   };
@@ -223,6 +221,7 @@ export default function KasirHome() {
     setShowCloseShiftModal(true);
   };
 
+  // --- PERBAIKAN: HANDLE CLOSE SHIFT (Hapus Clear) ---
   const handleCloseShift = async () => {
     setLoading(true);
     try {
@@ -232,15 +231,26 @@ export default function KasirHome() {
         total_sales: Number(shiftSummary.totalSales), 
         actual_ending_cash: Number(endingCash)
       }).eq("id", currentShift.id);
-      window.location.reload(); 
-    } catch (e: any) { alert(e.message); } 
-    finally { setLoading(false); }
+      
+      // Hapus hanya sesi staff agar tidak balik ke Landing Page
+      localStorage.removeItem("role");
+      localStorage.removeItem("username");
+      window.location.href = "/login"; 
+    } catch (e: any) { 
+      alert(e.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
+  // --- PERBAIKAN: HANDLE LOGOUT (Hapus Clear) ---
   const handleLogOut = () => { 
     if (window.confirm("Keluar dari Terminal Kasir?")) { 
-      localStorage.clear(); 
-      window.location.href = "/"; 
+      // JANGAN PAKAI localStorage.clear()
+      localStorage.removeItem("role"); 
+      localStorage.removeItem("username"); 
+      localStorage.removeItem("is_admin"); 
+      window.location.href = "/login"; 
     } 
   };
 
@@ -258,7 +268,7 @@ export default function KasirHome() {
             const name = item.name || "Unknown";
             summary[name] = { 
               qty: (summary[name]?.qty || 0) + Number(item.qty), 
-              total: (summary[name]?.total || 0) + (Number(item.qty) * Number(item.price)) 
+              total: (summary[name]?.total || 0) + (Number(item.qty) * (Number(item.price) || 0)) 
             };
           });
         }
@@ -332,19 +342,17 @@ export default function KasirHome() {
 
               {/* PAYMENT AREA */}
               <div className="p-4 bg-[#030712] border-t border-white/5">
-                {/* METODE SELECTION */}
                 <div className="flex gap-2 mb-4">
                   <button onClick={() => { setPaymentMethod("CASH"); setSelectedBank(null); }} className={`flex-1 py-3 rounded-xl text-[9px] font-black border transition-all flex items-center justify-center gap-2 ${paymentMethod === 'CASH' ? 'bg-blue-600 border-blue-400 shadow-lg' : 'bg-white/5 border-white/10 opacity-40'}`}><Banknote size={14}/> TUNAI</button>
                   <button onClick={() => { setPaymentMethod("TRANSFER"); setPaidAmount(getGrandTotal()); }} className={`flex-1 py-3 rounded-xl text-[9px] font-black border transition-all flex items-center justify-center gap-2 ${paymentMethod === 'TRANSFER' ? 'bg-purple-600 border-purple-400 shadow-lg' : 'bg-white/5 border-white/10 opacity-40'}`}><CreditCard size={14}/> TRANSFER</button>
                 </div>
 
-                {/* MERCHANT BANK SELECTION */}
                 {paymentMethod === "TRANSFER" && (
                   <div className="mb-4">
                     <p className="text-[8px] font-black text-purple-400 uppercase mb-2 px-1 italic flex items-center gap-1"><CreditCard size={10}/> Pilih Rekening:</p>
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                       {banks.map(bank => (
-                        <button key={bank.id} onClick={() => setSelectedBank(bank)} className={`flex-shrink-0 p-3 rounded-xl border min-w-[140px] text-left transition-all relative ${selectedBank?.id === bank.id ? 'border-purple-400 bg-purple-500/20' : 'border-white/10 bg-white/5 opacity-50'}`}>
+                        <button key={bank.id} onClick={() => setSelectedBank(bank)} className={`flex-shrink-0 p-3 rounded-xl border min-w-[140px] text-left transition-all relative ${selectedBank?.id === bank.id ? 'border-purple-400 bg-purple-50/20' : 'border-white/10 bg-white/5 opacity-50'}`}>
                           <p className="text-[8px] font-black text-white uppercase mb-1">{bank.bank_name}</p>
                           <p className="text-[10px] font-mono font-black text-purple-400">{bank.account_number}</p>
                           <p className="text-[7px] text-gray-500 font-bold truncate mt-1 italic">{bank.account_holder}</p>
@@ -355,7 +363,6 @@ export default function KasirHome() {
                   </div>
                 )}
 
-                {/* CALCULATIONS */}
                 <div className="grid grid-cols-4 gap-2 mb-4 text-center uppercase">
                   <div className="bg-white/5 p-2 rounded-xl border border-white/5"><p className="text-[7px] font-black text-gray-500 mb-0.5 tracking-tighter">Subtotal</p><p className="font-bold font-mono text-xs">{getSubtotal().toLocaleString()}</p></div>
                   <div className="bg-blue-600/5 p-2 rounded-xl border border-blue-500/20"><p className="text-[7px] font-black text-blue-500 mb-0.5 italic">Disc</p><input type="number" className="w-full bg-transparent font-bold font-mono text-xs outline-none text-blue-400 text-center" value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value))} /></div>
@@ -363,7 +370,6 @@ export default function KasirHome() {
                   <div className="bg-white/5 p-2 rounded-xl border border-white/5"><p className="text-[7px] font-black text-gray-500 mb-0.5 tracking-tighter">PB1(10%)</p><p className="font-bold font-mono text-xs">{getTax().toLocaleString()}</p></div>
                 </div>
 
-                {/* GRAND TOTAL */}
                 <div className="flex justify-between items-end mb-4 px-1">
                   <div className="flex flex-col">
                     <span className="text-[8px] font-black text-blue-500 tracking-widest uppercase italic">Total_Due</span>
@@ -415,7 +421,7 @@ export default function KasirHome() {
         </div>
       )}
 
-      {/* --- MODAL: CLOSE SHIFT (SPLIT REPORT) --- */}
+      {/* --- MODAL: CLOSE SHIFT --- */}
       {showCloseShiftModal && (
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[7000] p-4 backdrop-blur-md">
           <div className="bg-[#020617] p-8 rounded-[32px] border border-orange-500/20 w-full max-w-sm text-center shadow-2xl">
@@ -443,7 +449,7 @@ export default function KasirHome() {
                 <p className="text-[7px] font-black text-orange-500 mb-2 italic uppercase tracking-widest">Actual_Cash_In_Drawer</p>
                 <input type="number" className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 text-center text-3xl font-black text-orange-400 outline-none focus:border-orange-500" placeholder="0" onChange={(e) => setEndingCash(Number(e.target.value))} />
                 <p className="text-[7px] text-gray-500 mt-2 text-center italic">
-                   Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash) + shiftSummary.cashSales).toLocaleString()}</span>
+                   Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales).toLocaleString()}</span>
                 </p>
               </div>
             </div>
