@@ -75,7 +75,6 @@ export default function App() {
 
   const handleEnterSystem = () => {
     localStorage.setItem("system_ready", "true");
-    // Gunakan window.location.href untuk paksa reload ke state baru
     window.location.href = "/login"; 
   };
 
@@ -85,31 +84,35 @@ export default function App() {
     localStorage.setItem("tenant_name", "NES House Cold Brew");
 
     setUser({ username: savedUsername, role: role });
-    window.history.pushState({}, "", "/dashboard");
-    setCurrentPath("/dashboard");
+    
+    // LOGIKA BARU: Arahkan Admin ke jalurnya sendiri secara otomatis
+    if (role === "admin") {
+      window.history.pushState({}, "", "/admin/dashboard");
+      setCurrentPath("/admin/dashboard");
+    } else {
+      window.history.pushState({}, "", "/dashboard");
+      setCurrentPath("/dashboard");
+    }
   };
 
   const handleLogout = () => {
-    // HAPUS DATA STAFF SAJA
     localStorage.removeItem("role");
     localStorage.removeItem("username");
     localStorage.removeItem("is_admin");
     localStorage.removeItem("tenant_id");
 
     setUser(null);
-    
-    // PAKSA PINDAH KE LOGIN TANPA REFRESH KE "/"
     window.history.pushState({}, "", "/login");
     setCurrentPath("/login");
   };
 
-  // --- LOGIKA RENDER (URUTAN BARU - ANTI LOMPAT) ---
+  // --- LOGIKA RENDER ---
 
   // 1. Prioritas Tertinggi: Kontrol Founder & Lisensi
   if (currentPath === "/founder-console") return <FounderDashboard />;
   if (!isLicenseActive) return <ProtocolLock />;
 
-  // 2. Jika Sistem Belum Ready (Owner Belum Isi Email)
+  // 2. Jika Sistem Belum Ready
   if (!isSystemReady) {
     return <LandingPage onEnterSystem={handleEnterSystem} />;
   }
@@ -121,13 +124,12 @@ export default function App() {
     return <CustomerMenu tableId={tableId} />;
   }
 
-  // 4. JIKA SUDAH READY, TAPI BELUM ADA USER LOGIN (INI KUNCINYA)
-  // Tidak peduli URL-nya apa, selama 'user' kosong, tampilkan LOGIN STAFF
+  // 4. JIKA BELUM LOGIN
   if (!user) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // 5. AREA ADMIN
+  // 5. AREA ADMIN (Jika URL berawalan /admin)
   if (currentPath.startsWith("/admin")) {
     if (user.role !== "admin") return <AdminLogin />;
     return (
@@ -149,14 +151,14 @@ export default function App() {
     );
   }
 
-  // 6. DASHBOARD UTAMA
+  // 6. DASHBOARD UTAMA (Untuk Kasir & Waiter)
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans italic">
       <div className="p-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex justify-between items-center shadow-xl not-italic">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
           <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80 text-cyan-400">
-             {localStorage.getItem("tenant_name") || "NES HOUSE COLD BREW"}
+              {localStorage.getItem("tenant_name") || "NES HOUSE COLD BREW"}
           </span>
           <span className="text-[10px] font-medium text-gray-500">|</span>
           <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80">
@@ -174,7 +176,6 @@ export default function App() {
       <div className="p-4">
         {user.role === "kasir" && <KasirHome />}
         {user.role === "waiter" && <WaiterApp />}
-        {user.role === "admin" && <AdminHome />}
       </div>
     </div>
   );
