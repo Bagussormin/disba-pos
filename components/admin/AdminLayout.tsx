@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React from "react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [activePath, setActivePath] = useState(window.location.pathname);
+  // Membaca URL saat ini untuk menentukan menu mana yang sedang aktif
+  const activePath = window.location.pathname;
 
   // Daftar Menu Utama
   const menuItems = [
@@ -21,12 +22,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "PROFIL OUTLET", path: "/admin/settings/profile", icon: "🏪" },
     { name: "MERCHANT BANK", path: "/admin/settings/payments", icon: "💳" },
   ];
-  
-  const navigate = (path: string) => {
-    window.history.pushState({}, "", path);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    setActivePath(path);
-  };
 
   return (
     <div className="flex min-h-screen bg-[#020617] text-white font-sans uppercase">
@@ -46,9 +41,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex flex-col gap-1">
           <p className="text-[8px] text-blue-500 font-black tracking-widest mb-2 opacity-50">MAIN MENU</p>
           {menuItems.map((item) => (
-            <button
+            // Mengubah <button> menjadi <a> agar perpindahan halaman berjalan mulus
+            <a
               key={item.path}
-              onClick={() => navigate(item.path)}
+              href={item.path}
               className={`flex items-center gap-4 px-4 py-3 rounded-xl text-[10px] font-black transition-all duration-300 ${
                 activePath === item.path 
                   ? "bg-blue-600 text-white shadow-[0_0_25px_rgba(37,99,235,0.4)] scale-105" 
@@ -57,16 +53,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               <span className="text-sm">{item.icon}</span>
               {item.name}
-            </button>
+            </a>
           ))}
 
           {/* SETTINGS SECTION (Tahap 1) */}
           <div className="mt-6 flex flex-col gap-1">
             <p className="text-[8px] text-blue-500 font-black tracking-widest mb-2 opacity-50">CONFIGURATION</p>
             {settingItems.map((item) => (
-              <button
+              // Mengubah <button> menjadi <a>
+              <a
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                href={item.path}
                 className={`flex items-center gap-4 px-4 py-3 rounded-xl text-[10px] font-black transition-all duration-300 ${
                   activePath === item.path 
                     ? "bg-blue-600 text-white shadow-[0_0_25px_rgba(37,99,235,0.4)] scale-105" 
@@ -75,7 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               >
                 <span className="text-sm">{item.icon}</span>
                 {item.name}
-              </button>
+              </a>
             ))}
           </div>
         </nav>
