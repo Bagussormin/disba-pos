@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
+import { executePrint } from "../../lib/printer"; // <--- IMPORT PRINTER ENGINE DI SINI
 import { 
   LogOut, Receipt, MapPin, AlertTriangle, Wallet, Printer, Banknote, X, 
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, TrendingUp
@@ -142,9 +143,11 @@ export default function KasirHome() {
 
     setLoading(true);
     try {
+      const receiptNo = `INV-${Date.now()}`; // Simpan nomor nota untuk dikirim ke printer
+      
       const { error: trxError } = await supabase.from("transactions").insert({
         shift_id: currentShift.id,
-        receipt_no: `INV-${Date.now()}`,
+        receipt_no: receiptNo,
         subtotal: getSubtotal(),
         discount: safeDiscount,
         service_charge: getService(),
@@ -160,6 +163,32 @@ export default function KasirHome() {
 
       await supabase.from("open_bills").update({ status: "closed" }).eq("id", activeBill.id);
       await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id);
+
+      // --- EKSEKUSI CETAK STRUK DI SINI ---
+      const receiptData = {
+        orderId: receiptNo,
+        tableName: selectedTable?.name || "Takeaway",
+        cashier: localStorage.getItem("username") || "KASIR",
+        cashierName: localStorage.getItem("username") || "KASIR", // Dikirim dua-duanya agar kompatibel dengan LAN & Browser
+        items: orderItems,
+        subtotal: getSubtotal(),
+        discount: safeDiscount,
+        serviceCharge: getService(),
+        tax: getTax(),
+        total: getGrandTotal(),
+        paymentMethod: paymentMethod,
+        paid: paidAmount,
+        change: getChange()
+      };
+      
+      // Bungkus dengan try-catch terpisah agar kalau printer error, transaksi tetap sukses
+      try {
+        await executePrint(receiptData);
+      } catch (printErr) {
+        console.error("Print Failed:", printErr);
+        alert("Transaksi berhasil, tapi gagal terhubung ke Printer.");
+      }
+      // ------------------------------------
 
       setOrderItems([]);
       setPaidAmount(0);
@@ -221,7 +250,6 @@ export default function KasirHome() {
     setShowCloseShiftModal(true);
   };
 
-  // --- PERBAIKAN: HANDLE CLOSE SHIFT (Hapus Clear) ---
   const handleCloseShift = async () => {
     setLoading(true);
     try {
@@ -232,7 +260,6 @@ export default function KasirHome() {
         actual_ending_cash: Number(endingCash)
       }).eq("id", currentShift.id);
       
-      // Hapus hanya sesi staff agar tidak balik ke Landing Page
       localStorage.removeItem("role");
       localStorage.removeItem("username");
       window.location.href = "/login"; 
@@ -243,10 +270,8 @@ export default function KasirHome() {
     }
   };
 
-  // --- PERBAIKAN: HANDLE LOGOUT (Hapus Clear) ---
   const handleLogOut = () => { 
     if (window.confirm("Keluar dari Terminal Kasir?")) { 
-      // JANGAN PAKAI localStorage.clear()
       localStorage.removeItem("role"); 
       localStorage.removeItem("username"); 
       localStorage.removeItem("is_admin"); 
