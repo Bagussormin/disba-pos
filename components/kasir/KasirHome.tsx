@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { executePrint } from "../../lib/printer"; // <--- IMPORT PRINTER ENGINE DI SINI
+import { executePrint } from "../../lib/printer";
 import { 
   LogOut, Receipt, MapPin, AlertTriangle, Wallet, Printer, Banknote, X, 
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, TrendingUp
@@ -103,14 +103,24 @@ export default function KasirHome() {
     if (bRes.data) setBills(bRes.data);
   };
 
+  // --- PERBAIKAN: Fungsi penarik data menu yang lebih pintar ---
   const fetchOrderItems = async (billId: number) => {
-    const { data } = await supabase.from("order_items").select(`quantity, price_at_order, name`).eq("bill_id", billId);
+    const { data, error } = await supabase
+      .from("order_items")
+      .select(`*, menus(name)`) // Mencoba Join dengan tabel 'menus' untuk cari nama aslinya
+      .eq("bill_id", billId);
+      
     if (data) {
       setOrderItems(data.map((item: any) => ({
-        name: item.name || "MENU",
+        // Coba semua kemungkinan lokasi nama menu
+        name: item.menus?.name || item.menu_name || item.item_name || item.name || "MENU TIDAK DIKETAHUI",
         qty: item.quantity,
-        price: item.price_at_order
+        price: item.price_at_order || item.price || 0
       })));
+    }
+    
+    if (error) {
+      console.error("Gagal menarik detail order:", error);
     }
   };
 
@@ -143,7 +153,7 @@ export default function KasirHome() {
 
     setLoading(true);
     try {
-      const receiptNo = `INV-${Date.now()}`; // Simpan nomor nota untuk dikirim ke printer
+      const receiptNo = `INV-${Date.now()}`;
       
       const { error: trxError } = await supabase.from("transactions").insert({
         shift_id: currentShift.id,
@@ -164,12 +174,12 @@ export default function KasirHome() {
       await supabase.from("open_bills").update({ status: "closed" }).eq("id", activeBill.id);
       await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id);
 
-      // --- EKSEKUSI CETAK STRUK DI SINI ---
+      // --- EKSEKUSI CETAK STRUK ---
       const receiptData = {
         orderId: receiptNo,
         tableName: selectedTable?.name || "Takeaway",
         cashier: localStorage.getItem("username") || "KASIR",
-        cashierName: localStorage.getItem("username") || "KASIR", // Dikirim dua-duanya agar kompatibel dengan LAN & Browser
+        cashierName: localStorage.getItem("username") || "KASIR",
         items: orderItems,
         subtotal: getSubtotal(),
         discount: safeDiscount,
@@ -181,14 +191,12 @@ export default function KasirHome() {
         change: getChange()
       };
       
-      // Bungkus dengan try-catch terpisah agar kalau printer error, transaksi tetap sukses
       try {
         await executePrint(receiptData);
       } catch (printErr) {
         console.error("Print Failed:", printErr);
         alert("Transaksi berhasil, tapi gagal terhubung ke Printer.");
       }
-      // ------------------------------------
 
       setOrderItems([]);
       setPaidAmount(0);
