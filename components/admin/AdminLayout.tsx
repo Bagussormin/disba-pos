@@ -15,12 +15,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "SHIFT", path: "/admin/shifts", icon: "⏰" },
   ];
 
-  // Tambahan Menu Pengaturan (Tahap 1)
+  // Tambahan Menu Pengaturan
   const settingItems = [
     { name: "MANAJEMEN USER", path: "/admin/settings/users", icon: "👤" },
     { name: "LAYOUT MEJA", path: "/admin/settings/tables", icon: "🪑" },
     { name: "PROFIL OUTLET", path: "/admin/settings/profile", icon: "🏪" },
     { name: "MERCHANT BANK", path: "/admin/settings/payments", icon: "💳" },
+    { name: "PRINTER", path: "/admin/settings/printer", icon: "🖨️" }, // <--- Menu Printer Ditambahkan
   ];
 
   return (
@@ -41,7 +42,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex flex-col gap-1">
           <p className="text-[8px] text-blue-500 font-black tracking-widest mb-2 opacity-50">MAIN MENU</p>
           {menuItems.map((item) => (
-            // Mengubah <button> menjadi <a> agar perpindahan halaman berjalan mulus
             <a
               key={item.path}
               href={item.path}
@@ -56,11 +56,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </a>
           ))}
 
-          {/* SETTINGS SECTION (Tahap 1) */}
+          {/* SETTINGS SECTION */}
           <div className="mt-6 flex flex-col gap-1">
             <p className="text-[8px] text-blue-500 font-black tracking-widest mb-2 opacity-50">CONFIGURATION</p>
             {settingItems.map((item) => (
-              // Mengubah <button> menjadi <a>
               <a
                 key={item.path}
                 href={item.path}

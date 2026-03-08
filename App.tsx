@@ -27,6 +27,7 @@ import UserManagement from "./components/admin/UserManagement";
 import TableLayout from "./components/admin/TableLayout";       
 import OutletProfile from "./components/admin/OutletProfile";   
 import MerchantBank from "./components/admin/MerchantBank"; 
+import PrinterSettings from "./components/admin/PrinterSettings"; // <--- Import Printer Settings
 
 // --- IMPORT KOMPONEN KONTROL FOUNDER ---
 import FounderDashboard from "./components/FounderDashboard";
@@ -102,14 +103,11 @@ export default function App() {
     localStorage.removeItem("tenant_id");
 
     setUser(null);
-    // Gunakan window.location.href agar browser benar-benar bersih dan muat ulang
     window.location.href = "/login"; 
   };
 
   // --- LOGIKA RENDER ---
 
-  // PENTING: Normalisasi path agar kebal terhadap tanda (/) di akhir URL
-  // Contoh: "/admin/menu/" otomatis dianggap sebagai "/admin/menu"
   const normalizedPath = currentPath.endsWith('/') && currentPath !== '/' 
     ? currentPath.slice(0, -1) 
     : currentPath;
@@ -150,6 +148,7 @@ export default function App() {
         {normalizedPath === "/admin/settings/tables" && <TableLayout />}
         {normalizedPath === "/admin/settings/profile" && <OutletProfile />}
         {normalizedPath === "/admin/settings/payments" && <MerchantBank />}
+        {normalizedPath === "/admin/settings/printer" && <PrinterSettings />} {/* <--- Route Printer */}
       </AdminLayout>
     );
   }
