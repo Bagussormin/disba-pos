@@ -103,24 +103,55 @@ export default function KasirHome() {
     if (bRes.data) setBills(bRes.data);
   };
 
-  // --- PERBAIKAN: Fungsi penarik data menu yang lebih pintar ---
+  // --- PERBAIKAN: Fungsi Penerjemah product_id ke Nama Menu ---
   const fetchOrderItems = async (billId: number) => {
-    const { data, error } = await supabase
+    // 1. Tarik data pesanan (yang berisi product_id)
+    const { data: orderData, error: orderError } = await supabase
       .from("order_items")
-      .select(`*, menus(name)`) // Mencoba Join dengan tabel 'menus' untuk cari nama aslinya
+      .select("*")
       .eq("bill_id", billId);
-      
-    if (data) {
-      setOrderItems(data.map((item: any) => ({
-        // Coba semua kemungkinan lokasi nama menu
-        name: item.menus?.name || item.menu_name || item.item_name || item.name || "MENU TIDAK DIKETAHUI",
-        qty: item.quantity,
-        price: item.price_at_order || item.price || 0
-      })));
+
+    if (orderError) {
+      console.error("Gagal menarik pesanan:", orderError.message);
+      return;
     }
-    
-    if (error) {
-      console.error("Gagal menarik detail order:", error);
+
+    if (orderData && orderData.length > 0) {
+      // 2. Ekstrak semua product_id yang dipesan
+      const productIds = orderData.map((item: any) => item.product_id).filter(Boolean);
+      let menuMap: Record<string, string> = {};
+
+      if (productIds.length > 0) {
+        // 3. Tarik nama menu berdasarkan ID dari tabel 'menus'
+        const { data: menuData } = await supabase
+          .from("menus")
+          .select("id, name")
+          .in("id", productIds);
+
+        if (menuData) {
+          menuData.forEach((m: any) => { menuMap[m.id] = m.name; });
+        } else {
+          // Fallback: Jika nama tabel kamu ternyata 'products', bukan 'menus'
+          const { data: productData } = await supabase
+            .from("products")
+            .select("id, name")
+            .in("id", productIds);
+          
+          if (productData) {
+            productData.forEach((p: any) => { menuMap[p.id] = p.name; });
+          }
+        }
+      }
+
+      // 4. Gabungkan dan tampilkan di Kasir
+      setOrderItems(orderData.map((item: any) => ({
+        // Coba cocokan ID dengan nama. Kalau tidak ada, tampilkan ID-nya sementara
+        name: menuMap[item.product_id] || `PRODUK ID: ${item.product_id}`,
+        qty: item.quantity || 1,
+        price: item.price_at_order || 0
+      })));
+    } else {
+      setOrderItems([]);
     }
   };
 
