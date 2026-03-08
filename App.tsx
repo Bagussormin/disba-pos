@@ -102,14 +102,20 @@ export default function App() {
     localStorage.removeItem("tenant_id");
 
     setUser(null);
-    window.history.pushState({}, "", "/login");
-    setCurrentPath("/login");
+    // Gunakan window.location.href agar browser benar-benar bersih dan muat ulang
+    window.location.href = "/login"; 
   };
 
-  // --- LOGIKA RENDER (URUTAN SUDAH DIPERBAIKI) ---
+  // --- LOGIKA RENDER ---
+
+  // PENTING: Normalisasi path agar kebal terhadap tanda (/) di akhir URL
+  // Contoh: "/admin/menu/" otomatis dianggap sebagai "/admin/menu"
+  const normalizedPath = currentPath.endsWith('/') && currentPath !== '/' 
+    ? currentPath.slice(0, -1) 
+    : currentPath;
 
   // 1. Prioritas Tertinggi: Kontrol Founder & Lisensi
-  if (currentPath === "/founder-console") return <FounderDashboard />;
+  if (normalizedPath === "/founder-console") return <FounderDashboard />;
   if (!isLicenseActive) return <ProtocolLock />;
 
   // 2. Jika Sistem Belum Ready
@@ -118,32 +124,32 @@ export default function App() {
   }
 
   // 3. Area Publik (Menu QR)
-  if (currentPath.includes("/menu/")) {
-    const pathParts = currentPath.split("/");
+  if (normalizedPath.includes("/menu/")) {
+    const pathParts = normalizedPath.split("/");
     const tableId = pathParts[pathParts.length - 1] || "unknown";
     return <CustomerMenu tableId={tableId} />;
   }
 
   // 4. AREA ADMIN (Cek URL /admin lebih dulu)
-  if (currentPath.startsWith("/admin")) {
+  if (normalizedPath.startsWith("/admin")) {
     // Jika belum login ATAU login tapi bukan admin, tampilkan AdminLogin
     if (!user || user.role !== "admin") return <AdminLogin />;
     
     return (
       <AdminLayout>
-        {(currentPath === "/admin/dashboard" || currentPath === "/admin") && <AdminHome />}
-        {currentPath === "/admin/qr" && <TableQRManager />}
-        {currentPath === "/admin/menu" && <MenuMaster />}
-        {currentPath === "/admin/recipes" && <RecipeManagement />}
-        {currentPath === "/admin/inventory" && <InventoryApp />}
-        {currentPath === "/admin/reports" && <SalesReport />} 
-        {currentPath === "/admin/history" && <TransactionHistory />} 
-        {currentPath === "/admin/orders" && <OrderHistory />}
-        {currentPath === "/admin/shifts" && <ShiftReports />}
-        {currentPath === "/admin/settings/users" && <UserManagement />}
-        {currentPath === "/admin/settings/tables" && <TableLayout />}
-        {currentPath === "/admin/settings/profile" && <OutletProfile />}
-        {currentPath === "/admin/settings/payments" && <MerchantBank />}
+        {(normalizedPath === "/admin/dashboard" || normalizedPath === "/admin") && <AdminHome />}
+        {normalizedPath === "/admin/qr" && <TableQRManager />}
+        {normalizedPath === "/admin/menu" && <MenuMaster />}
+        {normalizedPath === "/admin/recipes" && <RecipeManagement />}
+        {normalizedPath === "/admin/inventory" && <InventoryApp />}
+        {normalizedPath === "/admin/reports" && <SalesReport />} 
+        {normalizedPath === "/admin/history" && <TransactionHistory />} 
+        {normalizedPath === "/admin/orders" && <OrderHistory />}
+        {normalizedPath === "/admin/shifts" && <ShiftReports />}
+        {normalizedPath === "/admin/settings/users" && <UserManagement />}
+        {normalizedPath === "/admin/settings/tables" && <TableLayout />}
+        {normalizedPath === "/admin/settings/profile" && <OutletProfile />}
+        {normalizedPath === "/admin/settings/payments" && <MerchantBank />}
       </AdminLayout>
     );
   }
