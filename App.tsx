@@ -150,19 +150,6 @@ export default function App() {
         {normalizedPath === "/admin/settings/profile" && <OutletProfile />}
         {normalizedPath === "/admin/settings/payments" && <MerchantBank />}
         {normalizedPath === "/admin/settings/printer" && <PrinterSettings />}
-        
-        {/* --- RADAR DEBUGGER --- */}
-        <div className="p-8 mt-10 border-2 border-red-500/50 bg-red-500/10 rounded-2xl text-center">
-          <p className="text-red-400 font-bold uppercase tracking-widest text-sm mb-2">
-            ⚠️ Radar Debugger Aktif
-          </p>
-          <p className="text-white text-lg font-mono">
-            URL yang dibaca React saat ini: <span className="text-yellow-400 font-black">"{normalizedPath}"</span>
-          </p>
-          <p className="text-gray-400 text-[10px] mt-4 uppercase tracking-widest">
-            Jika komponen aslinya tidak muncul di atas kotak ini, berarti nama file atau rutenya ada yang salah ketik.
-          </p>
-        </div>
       </AdminLayout>
     );
   }
