@@ -1,49 +1,60 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Printer, MapPin } from "lucide-react";
-import QRCode from "qrcode"; // Library baru untuk offline QR
+import QRCode from "qrcode";
 
 export default function TableQRManager() {
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [areas, setAreas] = useState<string[]>([]); // Menyimpan area secara dinamis
 
-  const areaOrder = ["LOBBY", "LOUNGE", "ROOFTOP", "LANTAI 2", "VIP"];
+  // 🔒 KUNCI MULTI-OUTLET
+  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE";
 
   useEffect(() => {
     fetchTables();
-  }, []);
+  }, [tenantId]);
 
   const fetchTables = async () => {
     setLoading(true);
     const { data } = await supabase
       .from("tables")
       .select("*")
+      .eq("tenant_id", tenantId) // 🔒 Hanya tarik meja milik outlet ini
       .order("name", { ascending: true });
     
-    if (data) setTables(data);
+    if (data) {
+      setTables(data);
+      // Ekstrak nama area unik secara otomatis dari data meja
+      const uniqueAreas = Array.from(new Set(data.map((t) => (t.area || "UNASSIGNED").toUpperCase())));
+      setAreas(uniqueAreas as string[]);
+    }
     setLoading(false);
   };
 
-  const groupedTables = areaOrder.reduce((acc: any, area) => {
-    const areaTables = tables.filter(t => (t.area || "").toUpperCase() === area);
-    if (areaTables.length > 0) acc[area] = areaTables;
+  // Grouping meja berdasarkan area dinamis
+  const groupedTables = areas.reduce((acc: any, area) => {
+    acc[area] = tables.filter(t => (t.area || "UNASSIGNED").toUpperCase() === area);
     return acc;
   }, {});
 
-  // FUNGSI PRINT OFFLINE
+  // FUNGSI PRINT UNIVERSAL
   const printQR = async (tableId: string, tableName: string) => {
-  // Ganti 'localhost' dengan IP Laptop agar HP tamu bisa akses
-  const ipAddress = "192.168.0.112:3000/"; 
-  const qrUrl = `http://${ipAddress}:3000/menu/${tableId}`;
+    // 🌐 URL otomatis mendeteksi domain saat ini (Localhost / Vercel)
+    // Format Link: /menu?tenant=NES_HOUSE&table=MEJA-01
+    const baseUrl = window.location.origin;
+    const qrUrl = `${baseUrl}/menu?tenant=${tenantId}&table=${tableId}`;
 
-  try {
-    // ... sisa kode generator QR kamu (tetap sama)
-      // Membuat gambar QR secara lokal (tanpa internet)
+    try {
+      // Generate QR Code
       const qrImageData = await QRCode.toDataURL(qrUrl, {
         width: 300,
         margin: 2,
         color: { dark: "#000000", light: "#ffffff" }
       });
+
+      // Format nama outlet agar lebih rapi (Hilangkan underscore jika ada)
+      const displayTenantName = tenantId.replace(/_/g, " ");
 
       const printWindow = window.open('', '_blank');
       if (printWindow) {
@@ -51,7 +62,7 @@ export default function TableQRManager() {
           <html>
             <body style="text-align:center;font-family:sans-serif;padding:30px;">
               <div style="border:5px solid black;padding:20px;border-radius:20px;display:inline-block;min-width:300px;">
-                <h2 style="margin:0;font-size:24px;">DISBA POS</h2>
+                <h2 style="margin:0;font-size:24px;text-transform:uppercase;">${displayTenantName}</h2>
                 <p style="font-size:12px;color:#3b82f6;font-weight:bold;margin-top:5px;">SCAN TO ORDER</p>
                 <img src="${qrImageData}" style="margin:15px 0;" />
                 <div style="background:black;color:white;padding:10px;border-radius:10px;">
@@ -74,7 +85,7 @@ export default function TableQRManager() {
     <div className="min-h-screen bg-[#020617] p-6 text-white">
       <div className="mb-8 border-b border-white/10 pb-4">
         <h2 className="text-2xl font-black uppercase italic text-blue-500">QR Manager</h2>
-        <p className="text-xs text-gray-400 font-mono">Server: {window.location.host}</p>
+        <p className="text-xs text-gray-400 font-mono">Outlet: {tenantId} | Server: {window.location.host}</p>
       </div>
 
       {loading ? (
@@ -82,8 +93,8 @@ export default function TableQRManager() {
            MENGAMBIL DATA MEJA...
         </div>
       ) : (
-        areaOrder.map((area) => groupedTables[area] && (
-          <div key={area} className="mb-10">
+        areas.map((area) => groupedTables[area] && groupedTables[area].length > 0 && (
+          <div key={area} className="mb-10 animate-in fade-in duration-500">
             <div className="flex items-center gap-3 mb-4">
               <MapPin size={16} className="text-blue-500" />
               <h3 className="text-sm font-black tracking-[0.3em] uppercase">{area}</h3>
@@ -92,8 +103,8 @@ export default function TableQRManager() {
             
             <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-3">
               {groupedTables[area].map((table: any) => (
-                <div key={table.id} className="bg-white/5 border border-white/5 p-3 rounded-2xl">
-                  <div className="text-[10px] font-black mb-2 truncate opacity-70">{table.name}</div>
+                <div key={table.id} className="bg-white/5 border border-white/5 p-3 rounded-2xl group hover:border-blue-500/50 transition-all">
+                  <div className="text-[10px] font-black mb-2 truncate opacity-70" title={table.name}>{table.name}</div>
                   <button
                     onClick={() => printQR(table.id, table.name)}
                     className="w-full bg-white text-black py-2 rounded-lg font-black text-[9px] uppercase flex items-center justify-center gap-1 hover:bg-blue-600 hover:text-white transition-all"

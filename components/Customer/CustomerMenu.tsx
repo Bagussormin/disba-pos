@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Image as ImageIcon, Loader2, Plus, Minus, CheckCircle2, Lock } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 export default function CustomerMenu({ tableId: propsTableId }: { tableId?: string }) {
-  const { tableId: urlTableId } = useParams();
-  const activeTableId = propsTableId || urlTableId;
+  // --- TANGKAP URL MULTI-OUTLET (DARI HASIL SCAN QR) ---
+  const [searchParams] = useSearchParams();
+  const { tableId: urlTablePath } = useParams();
+  
+  // Membaca ?tenant=... dan ?table=... dari URL
+  const urlTenantId = searchParams.get("tenant");
+  const urlTableId = searchParams.get("table");
+
+  // Penentuan ID (Fleksibel: dari Props, Query Parameter, atau URL Path)
+  const activeTableId = propsTableId || urlTableId || urlTablePath;
+  const tenantId = urlTenantId || "GLOBAL"; // Default jika tidak ada tenant
 
   // --- STATE UTAMA ---
   const [menuItems, setMenuItems] = useState<any[]>([]);
@@ -24,17 +33,16 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   useEffect(() => {
     if (activeTableId) {
       fetchMenuAndTable();
-      fetchExistingBill(); // Cari bill aktif jika tamu refresh atau scan ulang
+      fetchExistingBill();
 
-      const tableChannel = supabase.channel(`table-status-${activeTableId}`)
+      // Buat nama channel unik per outlet dan meja agar tidak tabrakan
+      const tableChannel = supabase.channel(`table-${tenantId}-${activeTableId}`)
         .on('postgres_changes', 
           { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${activeTableId}` }, 
           (payload) => {
             const newStatus = payload.new.status.toLowerCase();
-            
             if (newStatus === "closed" || newStatus === "payment") {
               setTableStatus("closed");
-              // PENTING: Matikan koneksi agar tidak "terbuka lagi" saat status jadi available
               supabase.removeChannel(tableChannel); 
             } else {
               setTableStatus(newStatus);
@@ -45,7 +53,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
 
       return () => { supabase.removeChannel(tableChannel); };
     }
-  }, [activeTableId]);
+  }, [activeTableId, tenantId]);
 
   // 2. LISTENER REALTIME PESANAN (SUMMARY)
   useEffect(() => {
@@ -69,6 +77,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         .from("tables")
         .select("name, status")
         .eq("id", Number(activeTableId))
+        .eq("tenant_id", tenantId) // 🔒 Filter Meja
         .single();
       
       if (table) {
@@ -77,10 +86,12 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       }
 
       const { data: menuData } = await supabase
-        .from("menus")
+        .from("products") // 👈 GANTI KE "products" AGAR SINKRON DENGAN BACKOFFICE
         .select("*")
-        .eq("is_available", true)
+        .eq("tenant_id", tenantId) // 🔒 Filter Menu
+        // .eq("is_available", true) // Aktifkan jika kolom ini sudah Anda buat di tabel products
         .order("category", { ascending: true });
+        
       if (menuData) setMenuItems(menuData);
     } catch (err) {
       console.error("Load error:", err);
@@ -92,6 +103,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .from("open_bills")
       .select("id")
       .eq("table_id", Number(activeTableId))
+      .eq("tenant_id", tenantId) // 🔒 Filter Bill
       .eq("status", "open")
       .maybeSingle();
     
@@ -145,6 +157,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           .from("open_bills")
           .insert({
             table_id: numericTableId,
+            tenant_id: tenantId, // 🔒 Injeksi Outlet
             status: "open",
             order_source: "customer",
             guest_name: `Tamu ${tableName || activeTableId}`
@@ -158,6 +171,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const orderData = cart.map((item) => ({
         bill_id: currentBillId,
         product_id: item.id,
+        tenant_id: tenantId, // 🔒 Injeksi Outlet di tiap item
         name: item.name,
         quantity: item.qty,
         price_at_order: item.price,
@@ -168,7 +182,8 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const { error: itemErr } = await supabase.from("order_items").insert(orderData);
       if (itemErr) throw itemErr;
 
-      await supabase.from("tables").update({ status: "open" }).eq("id", numericTableId);
+      // Update status meja menjadi open (sedang makan)
+      await supabase.from("tables").update({ status: "open" }).eq("id", numericTableId).eq("tenant_id", tenantId);
 
       setIsSuccess(true);
       setCart([]);
@@ -197,7 +212,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] leading-relaxed mb-8">
             Meja ini sedang dalam proses penyelesaian transaksi. Terima kasih.
           </p>
-          <p className="text-[9px] font-black text-blue-500 uppercase italic">DISBA SYSTEM</p>
+          <p className="text-[9px] font-black text-blue-500 uppercase italic">{tenantId.replace(/_/g, " ")} SYSTEM</p>
         </div>
       </div>
     );
@@ -205,10 +220,10 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-sans pb-44">
-      {/* HEADER */}
+      {/* HEADER DINAMIS SESUAI OUTLET */}
       <header className="mb-8 pt-4 text-center">
         <h1 className="text-3xl font-black italic tracking-tighter uppercase">
-          DISBA <span className="text-blue-500">MENU</span>
+          {tenantId.replace(/_/g, " ").split(" ")[0]} <span className="text-blue-500">MENU</span>
         </h1>
         <div className="flex justify-center items-center gap-2 mt-2">
           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
