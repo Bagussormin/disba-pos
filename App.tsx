@@ -81,9 +81,6 @@ export default function App() {
 
   const handleLoginSuccess = (role: string) => {
     const savedUsername = localStorage.getItem("username") || "User";
-    
-    // 💡 Catatan: Di versi multi-outlet sesungguhnya nanti, data tenant ini 
-    // idealnya didapat dari hasil fetch login ke database.
     localStorage.setItem("tenant_id", "NES_HOUSE_001");
     localStorage.setItem("tenant_name", "NES House Cold Brew");
 
@@ -119,24 +116,19 @@ export default function App() {
   if (normalizedPath === "/founder-console") return <FounderDashboard />;
   if (!isLicenseActive) return <ProtocolLock />;
 
-  // 2. Jika Sistem Belum Ready
-  if (!isSystemReady) {
-    return <LandingPage onEnterSystem={handleEnterSystem} />;
-  }
-
   // -------------------------------------------------------------
-  // 3. AREA PUBLIK (MENU QR) - 🔥 SUDAH DIPERBAIKI UNTUK MULTI-OUTLET
+  // 2. AREA PUBLIK (MENU QR) - HARUS DI ATAS!
+  // Supaya HP tamu yang memori (localStorage)-nya kosong tidak diblokir
   // -------------------------------------------------------------
   if (normalizedPath.startsWith("/menu")) {
-    let tableId = "unknown";
-    
-    // Fallback jika masih ada yang scan pakai format lama (/menu/MEJA-01)
-    if (normalizedPath.includes("/menu/")) {
-      const pathParts = normalizedPath.split("/");
-      tableId = pathParts[pathParts.length - 1] || "unknown";
-    }
-    
-    return <CustomerMenu tableId={tableId} />;
+    // Biarkan kosong tanpa parameter tableId="unknown".
+    // Komponen CustomerMenu sudah cukup pintar membaca ?table=26 dari URL
+    return <CustomerMenu />;
+  }
+
+  // 3. Jika Sistem Belum Ready (Hanya berlaku untuk Kasir/Admin)
+  if (!isSystemReady) {
+    return <LandingPage onEnterSystem={handleEnterSystem} />;
   }
 
   // 4. AREA ADMIN (Cek URL /admin lebih dulu)
