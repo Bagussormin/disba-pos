@@ -103,50 +103,22 @@ export default function KasirHome() {
     if (bRes.data) setBills(bRes.data);
   };
 
-  // --- PERBAIKAN: Fungsi Penerjemah product_id ke Nama Menu ---
+  // --- PERBAIKAN: Fungsi Tarik Pesanan (Sudah menggunakan JOIN Supabase) ---
   const fetchOrderItems = async (billId: number) => {
-    // 1. Tarik data pesanan (yang berisi product_id)
-    const { data: orderData, error: orderError } = await supabase
+    const { data: orderData, error } = await supabase
       .from("order_items")
-      .select("*")
+      .select(`*, products(name)`)
       .eq("bill_id", billId);
 
-    if (orderError) {
-      console.error("Gagal menarik pesanan:", orderError.message);
+    if (error) {
+      console.error("Gagal menarik pesanan:", error.message);
       return;
     }
 
     if (orderData && orderData.length > 0) {
-      // 2. Ekstrak semua product_id yang dipesan
-      const productIds = orderData.map((item: any) => item.product_id).filter(Boolean);
-      let menuMap: Record<string, string> = {};
-
-      if (productIds.length > 0) {
-        // 3. Tarik nama menu berdasarkan ID dari tabel 'menus'
-        const { data: menuData } = await supabase
-          .from("menus")
-          .select("id, name")
-          .in("id", productIds);
-
-        if (menuData) {
-          menuData.forEach((m: any) => { menuMap[m.id] = m.name; });
-        } else {
-          // Fallback: Jika nama tabel kamu ternyata 'products', bukan 'menus'
-          const { data: productData } = await supabase
-            .from("products")
-            .select("id, name")
-            .in("id", productIds);
-          
-          if (productData) {
-            productData.forEach((p: any) => { menuMap[p.id] = p.name; });
-          }
-        }
-      }
-
-      // 4. Gabungkan dan tampilkan di Kasir
       setOrderItems(orderData.map((item: any) => ({
-        // Coba cocokan ID dengan nama. Kalau tidak ada, tampilkan ID-nya sementara
-        name: menuMap[item.product_id] || `PRODUK ID: ${item.product_id}`,
+        // Langsung mengambil nama dari relasi tabel products
+        name: item.products?.name || `PRODUK ID: ${item.product_id}`,
         qty: item.quantity || 1,
         price: item.price_at_order || 0
       })));
