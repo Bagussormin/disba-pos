@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { printReceipt } from '../../lib/PrinterService';
+import { printReceipt } from '../../lib/printer';
 
 interface CartItem {
   name: string;
