@@ -22,7 +22,18 @@ export const executePrint = async (receiptData: any) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          target_ip: lanIp, // Mengirim IP hasil settingan Admin ke backend
+          target_ip: lanIp, 
+          
+          // --- TAMBAHAN HEADER & FOOTER UNTUK LAN ---
+          header_title: "NES HOUSE COLD BREW",
+          header_address: "Jl. Sudirman No 61 AB, Pematang Siantar",
+          header_contact: "IG: @nes bar | Telp: 0821-6418-7865",
+          footer_thanks: "--- TERIMA KASIH ---",
+          footer_message: "Silakan berkunjung kembali",
+          footer_wifi: "WiFi: NES_GUEST / Pass: neshouse2026",
+          // ------------------------------------------
+          
+          payment_method: receiptData.paymentMethod, // WAJIB ADA AGAR LACI BISA NENDANG SAAT CASH SAJA
           table_name: receiptData.tableName || "Takeaway",
           cashier: receiptData.cashierName || localStorage.getItem("username"),
           items_list: receiptData.items,
@@ -51,7 +62,7 @@ export const executePrint = async (receiptData: any) => {
   }
 };
 
-// Fungsi Print Browser Biasa (Bisa dipakai kalau outlet tidak punya LAN)
+// Fungsi Print Browser Biasa 
 const printViaBrowser = (data: any, size: string) => {
   const width = size === "58mm" ? "58mm" : "80mm";
   const iframe = document.createElement("iframe");
@@ -62,32 +73,69 @@ const printViaBrowser = (data: any, size: string) => {
   document.body.appendChild(iframe);
 
   const itemsHtml = data.items.map((item: any) => `
-    <div style="display: flex; justify-content: space-between;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
       <span>${item.qty}x ${item.name}</span>
       <span>${(item.price * item.qty).toLocaleString("id-ID")}</span>
     </div>
   `).join("");
 
+  // --- DESAIN STRUK HTML (SUDAH DISAMAKAN DENGAN NES HOUSE) ---
   const htmlContent = `
     <html>
       <head>
         <style>
           @page { margin: 0; size: ${width} auto; }
-          body { font-family: monospace; width: ${width}; margin: 0; padding: 10px; font-size: 12px; }
-          .center { text-align: center; font-weight: bold; }
-          .divider { border-bottom: 1px dashed #000; margin: 5px 0; }
+          body { font-family: 'Courier New', Courier, monospace; width: ${width}; margin: 0; padding: 10px; font-size: 12px; color: #000; }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
+          .header-title { font-size: 16px; font-weight: 900; margin-bottom: 2px; }
+          .header-sub { font-size: 10px; margin-bottom: 2px; }
+          .footer-text { font-size: 10px; margin-top: 4px; }
         </style>
       </head>
       <body>
-        <div class="center">DISBA CAFE</div>
+        <div class="center header-title">NES HOUSE COLD BREW</div>
+        <div class="center header-sub">Jl. Sudirman No 61 AB, Pematang Siantar</div>
+        <div class="center header-sub">IG: @nes bar | Telp: 0821-6418-7865</div>
         <div class="divider"></div>
+        
+        <div style="font-size: 10px; margin-bottom: 5px;">
+          <div>Waktu: ${new Date().toLocaleString('id-ID')}</div>
+          <div>Meja : ${data.tableName || "Takeaway"}</div>
+          <div>Kasir: ${data.cashierName || "Kasir"}</div>
+        </div>
+        <div class="divider"></div>
+
         ${itemsHtml}
+        
         <div class="divider"></div>
-        <div style="display: flex; justify-content: space-between; font-weight: bold;">
+        <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;">
           <span>TOTAL</span>
           <span>Rp ${data.total.toLocaleString("id-ID")}</span>
         </div>
-        <div class="center" style="margin-top: 10px;">TERIMA KASIH</div>
+        
+        ${data.paymentMethod === "CASH" ? `
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 4px;">
+            <span>Tunai</span>
+            <span>Rp ${data.paid.toLocaleString("id-ID")}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px;">
+            <span>Kembali</span>
+            <span>Rp ${data.change.toLocaleString("id-ID")}</span>
+          </div>
+        ` : `
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 4px;">
+            <span>Metode Bayar</span>
+            <span>${data.paymentMethod}</span>
+          </div>
+        `}
+
+        <div class="divider" style="margin-top: 15px;"></div>
+        <div class="center bold footer-text">--- TERIMA KASIH ---</div>
+        <div class="center footer-text">Silakan berkunjung kembali</div>
+        <div class="center footer-text" style="margin-top: 8px;">WiFi: NES_GUEST</div>
+        <div class="center footer-text">Pass: neshouse2026</div>
       </body>
     </html>
   `;
