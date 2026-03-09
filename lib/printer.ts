@@ -10,30 +10,26 @@ export const executePrint = async (receiptData: any) => {
 
   // 2. LOGIKA PERCABANGAN PRINTER
   if (printerType === "lan") {
-    // KONDISI A: MENGGUNAKAN PRINTER LAN (Mengirim ke PrinterService.ts)
     if (!lanIp) {
       alert("Alamat IP Printer LAN belum disetting di Admin!");
       return;
     }
 
     try {
-      // Mengirim request ke Server Jembatan (PrinterService.ts) di localhost:4000
       const response = await fetch("http://localhost:4000/print-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           target_ip: lanIp, 
           
-          // --- TAMBAHAN HEADER & FOOTER UNTUK LAN ---
           header_title: "NES HOUSE COLD BREW",
           header_address: "Jl. Sudirman No 61 AB, Pematang Siantar",
           header_contact: "IG: @nes bar | Telp: 0821-6418-7865",
           footer_thanks: "--- TERIMA KASIH ---",
           footer_message: "Silakan berkunjung kembali",
           footer_wifi: "WiFi: NES_GUEST / Pass: neshouse2026",
-          // ------------------------------------------
           
-          payment_method: receiptData.paymentMethod, // WAJIB ADA AGAR LACI BISA NENDANG SAAT CASH SAJA
+          payment_method: receiptData.paymentMethod, 
           table_name: receiptData.tableName || "Takeaway",
           cashier: receiptData.cashierName || localStorage.getItem("username"),
           items_list: receiptData.items,
@@ -79,7 +75,6 @@ const printViaBrowser = (data: any, size: string) => {
     </div>
   `).join("");
 
-  // --- DESAIN STRUK HTML (SUDAH DISAMAKAN DENGAN NES HOUSE) ---
   const htmlContent = `
     <html>
       <head>
@@ -109,6 +104,30 @@ const printViaBrowser = (data: any, size: string) => {
 
         ${itemsHtml}
         
+        <div class="divider"></div>
+
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+          <span>Subtotal</span>
+          <span>Rp ${data.subtotal.toLocaleString("id-ID")}</span>
+        </div>
+        
+        ${data.discount > 0 ? `
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+          <span>Discount</span>
+          <span>-Rp ${data.discount.toLocaleString("id-ID")}</span>
+        </div>` : ''}
+        
+        ${data.serviceCharge > 0 ? `
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+          <span>Service (5%)</span>
+          <span>Rp ${data.serviceCharge.toLocaleString("id-ID")}</span>
+        </div>` : ''}
+        
+        ${data.tax > 0 ? `
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+          <span>PB1 (10%)</span>
+          <span>Rp ${data.tax.toLocaleString("id-ID")}</span>
+        </div>` : ''}
         <div class="divider"></div>
         <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;">
           <span>TOTAL</span>
