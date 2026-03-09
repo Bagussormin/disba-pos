@@ -81,6 +81,9 @@ export default function App() {
 
   const handleLoginSuccess = (role: string) => {
     const savedUsername = localStorage.getItem("username") || "User";
+    
+    // 💡 Catatan: Di versi multi-outlet sesungguhnya nanti, data tenant ini 
+    // idealnya didapat dari hasil fetch login ke database.
     localStorage.setItem("tenant_id", "NES_HOUSE_001");
     localStorage.setItem("tenant_name", "NES House Cold Brew");
 
@@ -121,10 +124,18 @@ export default function App() {
     return <LandingPage onEnterSystem={handleEnterSystem} />;
   }
 
-  // 3. Area Publik (Menu QR)
-  if (normalizedPath.includes("/menu/")) {
-    const pathParts = normalizedPath.split("/");
-    const tableId = pathParts[pathParts.length - 1] || "unknown";
+  // -------------------------------------------------------------
+  // 3. AREA PUBLIK (MENU QR) - 🔥 SUDAH DIPERBAIKI UNTUK MULTI-OUTLET
+  // -------------------------------------------------------------
+  if (normalizedPath.startsWith("/menu")) {
+    let tableId = "unknown";
+    
+    // Fallback jika masih ada yang scan pakai format lama (/menu/MEJA-01)
+    if (normalizedPath.includes("/menu/")) {
+      const pathParts = normalizedPath.split("/");
+      tableId = pathParts[pathParts.length - 1] || "unknown";
+    }
+    
     return <CustomerMenu tableId={tableId} />;
   }
 
