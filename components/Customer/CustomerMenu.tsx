@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Image as ImageIcon, Loader2, Plus, Minus, CheckCircle2, Lock } from "lucide-react";
-import { useParams, useSearchParams } from "react-router-dom";
+// ❌ KITA HAPUS react-router-dom AGAR TIDAK CRASH DENGAN SISTEM ROUTING MANUAL ANDA
 
 export default function CustomerMenu({ tableId: propsTableId }: { tableId?: string }) {
-  // --- TANGKAP URL MULTI-OUTLET (DARI HASIL SCAN QR) ---
-  const [searchParams] = useSearchParams();
-  const { tableId: urlTablePath } = useParams();
-  
-  // Membaca ?tenant=... dan ?table=... dari URL
+  // --- TANGKAP URL MANUAL (VANILLA JS, BEBAS CRASH) ---
+  const searchParams = new URLSearchParams(window.location.search);
   const urlTenantId = searchParams.get("tenant");
   const urlTableId = searchParams.get("table");
 
-  // Penentuan ID (Fleksibel: dari Props, Query Parameter, atau URL Path)
-  const activeTableId = propsTableId || urlTableId || urlTablePath;
-  const tenantId = urlTenantId || "GLOBAL"; // Default jika tidak ada tenant
+  // Fallback jika masih ada yang scan pakai format path lama (/menu/26)
+  const pathParts = window.location.pathname.split("/");
+  const pathTableId = pathParts.length > 2 ? pathParts[pathParts.length - 1] : null;
+
+  // Penentuan ID Meja & Outlet
+  const activeTableId = propsTableId || urlTableId || pathTableId;
+  const tenantId = urlTenantId || "NES_HOUSE_001"; // Default fallback
 
   // --- STATE UTAMA ---
   const [menuItems, setMenuItems] = useState<any[]>([]);
@@ -24,6 +25,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("SEMUA");
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isError, setIsError] = useState(false);
   
   // --- STATE PESANAN ---
   const [activeBillId, setActiveBillId] = useState<number | null>(null);
@@ -31,31 +33,33 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
 
   // 1. SINKRONISASI AWAL & LISTENER STATUS MEJA
   useEffect(() => {
-    if (activeTableId) {
-      fetchMenuAndTable();
-      fetchExistingBill();
-
-      // Buat nama channel unik per outlet dan meja agar tidak tabrakan
-      const tableChannel = supabase.channel(`table-${tenantId}-${activeTableId}`)
-        .on('postgres_changes', 
-          { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${activeTableId}` }, 
-          (payload) => {
-            const newStatus = payload.new.status.toLowerCase();
-            if (newStatus === "closed" || newStatus === "payment") {
-              setTableStatus("closed");
-              supabase.removeChannel(tableChannel); 
-            } else {
-              setTableStatus(newStatus);
-            }
-          }
-        )
-        .subscribe();
-
-      return () => { supabase.removeChannel(tableChannel); };
+    if (!activeTableId) {
+      setIsError(true);
+      return;
     }
+
+    fetchMenuAndTable();
+    fetchExistingBill();
+
+    const tableChannel = supabase.channel(`table-${tenantId}-${activeTableId}`)
+      .on('postgres_changes', 
+        { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${activeTableId}` }, 
+        (payload) => {
+          const newStatus = payload.new.status.toLowerCase();
+          if (newStatus === "closed" || newStatus === "payment") {
+            setTableStatus("closed");
+            supabase.removeChannel(tableChannel); 
+          } else {
+            setTableStatus(newStatus);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(tableChannel); };
   }, [activeTableId, tenantId]);
 
-  // 2. LISTENER REALTIME PESANAN (SUMMARY)
+  // 2. LISTENER REALTIME PESANAN
   useEffect(() => {
     if (activeBillId) {
       fetchOrderedItems();
@@ -73,28 +77,32 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   // --- FUNCTIONS DATA ---
   const fetchMenuAndTable = async () => {
     try {
+      // 1. MENCARI NAMA MEJA BERDASARKAN ID (cth: ID 26 -> Billiard 3)
       const { data: table } = await supabase
         .from("tables")
         .select("name, status")
         .eq("id", Number(activeTableId))
-        .eq("tenant_id", tenantId) // 🔒 Filter Meja
+        .eq("tenant_id", tenantId)
         .single();
       
       if (table) {
-        setTableName(table.name);
+        setTableName(table.name); // Di sinilah tulisan "Billiard 3" dimasukkan ke layar!
         setTableStatus(table.status.toLowerCase());
+      } else {
+        setIsError(true); // Jika meja tidak ditemukan
       }
 
+      // 2. MENGAMBIL DAFTAR MENU
       const { data: menuData } = await supabase
-        .from("products") // 👈 GANTI KE "products" AGAR SINKRON DENGAN BACKOFFICE
+        .from("products")
         .select("*")
-        .eq("tenant_id", tenantId) // 🔒 Filter Menu
-        // .eq("is_available", true) // Aktifkan jika kolom ini sudah Anda buat di tabel products
+        .eq("tenant_id", tenantId)
         .order("category", { ascending: true });
         
       if (menuData) setMenuItems(menuData);
     } catch (err) {
       console.error("Load error:", err);
+      setIsError(true);
     }
   };
 
@@ -103,13 +111,11 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .from("open_bills")
       .select("id")
       .eq("table_id", Number(activeTableId))
-      .eq("tenant_id", tenantId) // 🔒 Filter Bill
+      .eq("tenant_id", tenantId)
       .eq("status", "open")
       .maybeSingle();
     
-    if (data) {
-      setActiveBillId(data.id);
-    }
+    if (data) setActiveBillId(data.id);
   };
 
   const fetchOrderedItems = async () => {
@@ -157,7 +163,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           .from("open_bills")
           .insert({
             table_id: numericTableId,
-            tenant_id: tenantId, // 🔒 Injeksi Outlet
+            tenant_id: tenantId,
             status: "open",
             order_source: "customer",
             guest_name: `Tamu ${tableName || activeTableId}`
@@ -171,7 +177,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const orderData = cart.map((item) => ({
         bill_id: currentBillId,
         product_id: item.id,
-        tenant_id: tenantId, // 🔒 Injeksi Outlet di tiap item
+        tenant_id: tenantId,
         name: item.name,
         quantity: item.qty,
         price_at_order: item.price,
@@ -182,7 +188,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const { error: itemErr } = await supabase.from("order_items").insert(orderData);
       if (itemErr) throw itemErr;
 
-      // Update status meja menjadi open (sedang makan)
       await supabase.from("tables").update({ status: "open" }).eq("id", numericTableId).eq("tenant_id", tenantId);
 
       setIsSuccess(true);
@@ -195,6 +200,18 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       setLoading(false);
     }
   };
+
+  // --- UI GATING (ERROR SCREEN) ---
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center">
+        <div className="max-w-xs">
+          <h2 className="text-2xl font-black text-red-500 mb-2">QR TIDAK VALID</h2>
+          <p className="text-gray-400 text-xs">Silakan scan QR Code yang ada di meja Anda, atau hubungi pelayan kami.</p>
+        </div>
+      </div>
+    );
+  }
 
   // --- UI GATING (LOCK SCREEN) ---
   const isLocked = tableStatus === "closed" || tableStatus === "payment";
@@ -228,7 +245,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         <div className="flex justify-center items-center gap-2 mt-2">
           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            TABLE: <span className="text-white">{tableName || activeTableId}</span>
+            TABLE: <span className="text-white">{tableName || "Loading..."}</span>
           </p>
         </div>
       </header>
@@ -309,7 +326,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           })}
       </div>
 
-      {/* ORDER SUMMARY (Realtime Total) */}
+      {/* ORDER SUMMARY */}
       {orderedItems.length > 0 && (
         <div className="mt-12 p-6 bg-white/[0.02] border border-dashed border-white/10 rounded-[2.5rem]">
           <div className="flex justify-between items-center mb-6">
@@ -337,7 +354,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
             ))}
           </div>
           
-          {/* TOTAL TAGIHAN */}
           <div className="mt-8 pt-6 border-t border-white/10 flex justify-between items-end">
             <span className="text-[10px] font-black italic uppercase text-gray-400">Total_Tagihan_</span>
             <span className="text-2xl font-black italic text-blue-500">
