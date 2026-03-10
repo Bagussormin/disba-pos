@@ -6,7 +6,7 @@ interface CartItem {
   price: number;
   qty: number;
 }
-
+``
 interface Props {
   cartItems: CartItem[];
   subtotal: number;

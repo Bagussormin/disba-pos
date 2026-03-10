@@ -20,6 +20,9 @@ export default function KasirHome() {
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [banks, setBanks] = useState<any[]>([]);
 
+  // 🔒 KUNCI MULTI-OUTLET
+  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
+
   // --- STATE MODALS ---
   const [showStartShiftModal, setShowStartShiftModal] = useState(false);
   const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
@@ -53,9 +56,9 @@ export default function KasirHome() {
     fetchData();
     fetchBanks();
 
-    const channel = supabase.channel('pos-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills' }, () => fetchData())
+    const channel = supabase.channel(`pos-realtime-${tenantId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .subscribe();
 
     const interval = setInterval(fetchData, 10000);
@@ -96,19 +99,20 @@ export default function KasirHome() {
 
   const fetchData = async () => {
     const [tRes, bRes] = await Promise.all([
-      supabase.from("tables").select("*").order("name", { ascending: true }),
-      supabase.from("open_bills").select("*").eq("status", "open")
+      supabase.from("tables").select("*").eq("tenant_id", tenantId).order("name", { ascending: true }),
+      supabase.from("open_bills").select("*").eq("tenant_id", tenantId).eq("status", "open")
     ]);
     if (tRes.data) setTables(tRes.data);
     if (bRes.data) setBills(bRes.data);
   };
 
-  // --- PERBAIKAN: Fungsi Tarik Pesanan (Sudah menggunakan JOIN Supabase) ---
+  // --- PERBAIKAN: Fungsi Tarik Pesanan (Membaca tabel "menus") ---
   const fetchOrderItems = async (billId: number) => {
     const { data: orderData, error } = await supabase
       .from("order_items")
-      .select(`*, products(name)`)
-      .eq("bill_id", billId);
+      .select(`*, menus(name)`) // 🔥 SUDAH DIUBAH KE TABEL "menus"
+      .eq("bill_id", billId)
+      .eq("tenant_id", tenantId);
 
     if (error) {
       console.error("Gagal menarik pesanan:", error.message);
@@ -117,8 +121,8 @@ export default function KasirHome() {
 
     if (orderData && orderData.length > 0) {
       setOrderItems(orderData.map((item: any) => ({
-        // Langsung mengambil nama dari relasi tabel products
-        name: item.products?.name || `PRODUK ID: ${item.product_id}`,
+        // 🔥 Mengambil nama asli dari tabel menus, bukan dari tabel lama
+        name: item.menus?.name || item.name || `PRODUK ID: ${item.product_id}`,
         qty: item.quantity || 1,
         price: item.price_at_order || 0
       })));
@@ -139,13 +143,13 @@ export default function KasirHome() {
   // --- PAYMENT HANDLERS ---
   const handleOpenSettlePreview = async () => {
     if (!selectedTable) return;
-    await supabase.from("tables").update({ status: "closed", last_status_change: new Date().toISOString() }).eq("id", selectedTable.id);
+    await supabase.from("tables").update({ status: "closed", last_status_change: new Date().toISOString() }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
     setShowPreviewModal(true);
   };
 
   const handleCancelSettle = async () => {
     if (!selectedTable) return;
-    await supabase.from("tables").update({ status: "open" }).eq("id", selectedTable.id);
+    await supabase.from("tables").update({ status: "open" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
     setShowPreviewModal(false);
   };
 
@@ -160,6 +164,7 @@ export default function KasirHome() {
       
       const { error: trxError } = await supabase.from("transactions").insert({
         shift_id: currentShift.id,
+        tenant_id: tenantId, // 🔒 Simpan transaksi ke tenant ini
         receipt_no: receiptNo,
         subtotal: getSubtotal(),
         discount: safeDiscount,
@@ -174,8 +179,8 @@ export default function KasirHome() {
 
       if (trxError) throw trxError;
 
-      await supabase.from("open_bills").update({ status: "closed" }).eq("id", activeBill.id);
-      await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id);
+      await supabase.from("open_bills").update({ status: "closed" }).eq("id", activeBill.id).eq("tenant_id", tenantId);
+      await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
 
       // --- EKSEKUSI CETAK STRUK ---
       const receiptData = {
@@ -215,7 +220,7 @@ export default function KasirHome() {
 
   // --- SHIFT LOGIC ---
   const checkActiveShift = async () => {
-    const { data } = await supabase.from("shifts").select("*").eq("status", "open").maybeSingle();
+    const { data } = await supabase.from("shifts").select("*").eq("status", "open").eq("tenant_id", tenantId).maybeSingle();
     if (data) { 
       setCurrentShift(data); 
       setShowStartShiftModal(false); 
@@ -226,6 +231,7 @@ export default function KasirHome() {
 
   const handleStartShift = async () => {
     const { data, error } = await supabase.from("shifts").insert({
+      tenant_id: tenantId,
       cashier_name: "KASIR UTAMA", 
       starting_cash: Number(startCash), 
       status: 'open', 
@@ -243,7 +249,8 @@ export default function KasirHome() {
     
     const { data: trx } = await supabase.from("transactions")
       .select("total, payment_method")
-      .eq("shift_id", currentShift.id);
+      .eq("shift_id", currentShift.id)
+      .eq("tenant_id", tenantId);
     
     if (trx) {
       const total = trx.reduce((sum, t) => sum + Number(t.total), 0);
@@ -269,7 +276,7 @@ export default function KasirHome() {
         end_time: new Date().toISOString(),
         total_sales: Number(shiftSummary.totalSales), 
         actual_ending_cash: Number(endingCash)
-      }).eq("id", currentShift.id);
+      }).eq("id", currentShift.id).eq("tenant_id", tenantId);
       
       localStorage.removeItem("role");
       localStorage.removeItem("username");
@@ -294,7 +301,7 @@ export default function KasirHome() {
   const fetchItemSales = async () => {
     if (!currentShift) return;
     setLoading(true);
-    const { data: transactions } = await supabase.from("transactions").select("items").eq("shift_id", currentShift.id);
+    const { data: transactions } = await supabase.from("transactions").select("items").eq("shift_id", currentShift.id).eq("tenant_id", tenantId);
     const summary: any = {};
     if (transactions) {
       transactions.forEach((trx: any) => {
