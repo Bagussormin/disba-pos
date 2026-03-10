@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Image as ImageIcon, Loader2, Plus, Minus, CheckCircle2, Lock } from "lucide-react";
-// ❌ KITA HAPUS react-router-dom AGAR TIDAK CRASH DENGAN SISTEM ROUTING MANUAL ANDA
 
 export default function CustomerMenu({ tableId: propsTableId }: { tableId?: string }) {
   // --- TANGKAP URL MANUAL (VANILLA JS, BEBAS CRASH) ---
@@ -77,7 +76,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   // --- FUNCTIONS DATA ---
   const fetchMenuAndTable = async () => {
     try {
-      // 1. MENCARI NAMA MEJA BERDASARKAN ID (cth: ID 26 -> Billiard 3)
+      // 1. MENCARI NAMA MEJA BERDASARKAN ID
       const { data: table } = await supabase
         .from("tables")
         .select("name, status")
@@ -86,17 +85,18 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         .single();
       
       if (table) {
-        setTableName(table.name); // Di sinilah tulisan "Billiard 3" dimasukkan ke layar!
+        setTableName(table.name); 
         setTableStatus(table.status.toLowerCase());
       } else {
-        setIsError(true); // Jika meja tidak ditemukan
+        setIsError(true);
       }
 
-      // 2. MENGAMBIL DAFTAR MENU
+      // 2. MENGAMBIL DAFTAR MENU (🔥 SUDAH DIKEMBALIKAN KE TABEL "menus")
       const { data: menuData } = await supabase
-        .from("products")
+        .from("menus") 
         .select("*")
         .eq("tenant_id", tenantId)
+        .eq("is_available", true) // 🔥 Sembunyikan menu yang sedang kosong
         .order("category", { ascending: true });
         
       if (menuData) setMenuItems(menuData);
@@ -298,7 +298,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-black text-[11px] uppercase italic tracking-tight truncate">{item.name}</h3>
-                  <p className="text-blue-500 text-sm font-black mt-0.5">RP {item.price.toLocaleString()}</p>
+                  <p className="text-blue-500 text-sm font-black mt-0.5">RP {Number(item.price).toLocaleString('id-ID')}</p>
                 </div>
                 
                 {/* TOMBOL KONTROL */}
@@ -348,7 +348,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
                   </span>
                 </div>
                 <span className="text-[10px] font-mono font-bold text-white">
-                  {(item.quantity * item.price_at_order).toLocaleString()}
+                  {(item.quantity * item.price_at_order).toLocaleString('id-ID')}
                 </span>
               </div>
             ))}
@@ -357,7 +357,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           <div className="mt-8 pt-6 border-t border-white/10 flex justify-between items-end">
             <span className="text-[10px] font-black italic uppercase text-gray-400">Total_Tagihan_</span>
             <span className="text-2xl font-black italic text-blue-500">
-              RP {calculateTotalOrdered().toLocaleString()}
+              RP {calculateTotalOrdered().toLocaleString('id-ID')}
             </span>
           </div>
         </div>
@@ -369,7 +369,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           <div className="bg-blue-600 rounded-[2.5rem] p-4 flex justify-between items-center shadow-2xl pointer-events-auto animate-in slide-in-from-bottom">
             <div className="ml-4">
               <p className="text-[8px] font-black opacity-70 uppercase tracking-widest">{cart.reduce((a, b) => a + b.qty, 0)} Items</p>
-              <p className="font-black text-xl italic tracking-tighter">RP {cart.reduce((a, b) => a + b.qty * b.price, 0).toLocaleString()}</p>
+              <p className="font-black text-xl italic tracking-tighter">RP {cart.reduce((a, b) => a + b.qty * b.price, 0).toLocaleString('id-ID')}</p>
             </div>
             <button 
               onClick={submitOrder} 
