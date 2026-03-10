@@ -14,6 +14,9 @@ export default function WaiterOrder({ billId, onBack }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tableName, setTableName] = useState("");
 
+  // 🔒 KUNCI MULTI-OUTLET
+  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
+
   useEffect(() => {
     const initializeData = async () => {
       await fetchProducts();
@@ -28,12 +31,20 @@ export default function WaiterOrder({ billId, onBack }: Props) {
       .from("open_bills")
       .select("tables(name)")
       .eq("id", billId)
+      .eq("tenant_id", tenantId) // 🔥 Keamanan ekstra
       .single();
     if (data) setTableName((data as any).tables.name);
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from("products").select("*").order("name");
+    // 🔥 UBAH DARI "products" KE "menus" DAN TAMBAH FILTER TENANT
+    const { data } = await supabase
+      .from("menus")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("is_available", true) // 🔥 Sembunyikan menu kosong
+      .order("name");
+
     if (data) {
       setProducts(data);
       const uniqueCategories = ["ALL", ...new Set(data.map((p: Product) => p.category))];
@@ -42,16 +53,18 @@ export default function WaiterOrder({ billId, onBack }: Props) {
   };
 
   const fetchExistingOrder = async () => {
+    // 🔥 SINKRONKAN JUGA PENGAMBILAN DATA EXISTING KE TABEL "menus"
     const { data, error } = await supabase
       .from("order_items")
-      .select(`quantity, products (id, name, price, category)`)
-      .eq("bill_id", billId);
+      .select(`quantity, menus (id, name, price, category)`) // 🔥 Ubah products jadi menus
+      .eq("bill_id", billId)
+      .eq("tenant_id", tenantId); // 🔥 Keamanan ekstra
 
     if (error) return;
 
     if (data && data.length > 0) {
       const existingCart = data.map((item: any) => ({
-        product: item.products,
+        product: item.menus, // 🔥 Ubah item.products jadi item.menus
         quantity: item.quantity,
         isLocked: true 
       }));
@@ -110,6 +123,7 @@ export default function WaiterOrder({ billId, onBack }: Props) {
     try {
       const orderData = newItems.map((item) => ({
         bill_id: billId,
+        tenant_id: tenantId, // 🔥 Wajib ikut dikirim agar tidak ditolak Supabase
         product_id: item.product.id,
         quantity: item.quantity,
         price_at_order: item.product.price,
