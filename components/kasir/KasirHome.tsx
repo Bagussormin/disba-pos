@@ -53,7 +53,7 @@ export default function KasirHome() {
   const prevTableIdRef = useRef<any>(null);
   const areaOrder = ["LOBBY", "LOUNGE", "ROOFTOP", "LANTAI 2", "VIP"];
 
-  // --- AUTO PRINT DAPUR/BAR (OMNICHANNEL) ---
+  // --- AUTO PRINT DAPUR/BAR (OMNICHANNEL ROUTING) ---
   const handleAutoPrintDapur = async (newOrderItem: any) => {
     try {
       // 1. Ambil nama meja
@@ -63,9 +63,18 @@ export default function KasirHome() {
 
       if (bill && menu) {
         const tableName = (bill as any).tables?.name || "QR/WAITER";
+        const category = (menu.category || "FOOD").toUpperCase();
         
-        // 3. Kasir otomatis nembak IP Printer Dapur/Bar
-        await fetch("http://192.168.1.24:4000/print-order", {
+        // 3. LOGIKA ROUTING PRINTER
+        // Daftar kategori yang masuk ke Printer Bar (.24)
+        const barCategories = ["COFFEE", "TEA", "MOCKTAIL", "BEVERAGE", "JUICE", "MINUMAN", "DRINK"]; 
+        const isBarItem = barCategories.some(cat => category.includes(cat));
+        
+        // Jika termasuk minuman, ke Bar (.24). Jika tidak, ke Dapur (.30)
+        const targetIp = isBarItem ? "192.168.1.24" : "192.168.1.30";
+        
+        // 4. Tembak ke IP yang sesuai
+        await fetch(`http://${targetIp}:4000/print-order`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -73,10 +82,10 @@ export default function KasirHome() {
             items: [{
               name: menu.name,
               qty: newOrderItem.quantity,
-              category: menu.category || "FOOD"
+              category: category
             }]
           })
-        }).catch(() => console.warn("Printer Dapur Offline / Tidak dalam satu jaringan Wi-Fi"));
+        }).catch(() => console.warn(`Gagal memanggil printer di IP ${targetIp}`));
       }
     } catch (error) {
       console.error("Gagal Auto-Print:", error);
@@ -93,7 +102,7 @@ export default function KasirHome() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` }, (payload) => {
-        // 🔥 JIKA ADA PESANAN MASUK DARI QR / WAITER, KASIR LANGSUNG CETAK KE DAPUR!
+        // 🔥 JIKA ADA PESANAN MASUK DARI QR / WAITER, KASIR LANGSUNG CETAK KE DAPUR/BAR!
         handleAutoPrintDapur(payload.new);
         
         // Trigger layar kasir agar me-refresh daftar pesanan
