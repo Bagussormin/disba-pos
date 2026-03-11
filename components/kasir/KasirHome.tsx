@@ -23,6 +23,9 @@ export default function KasirHome() {
   // 🔒 KUNCI MULTI-OUTLET
   const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
 
+  // --- TRIGGER UNTUK REFRESH PESANAN BARU ---
+  const [lastIncomingOrder, setLastIncomingOrder] = useState<number>(0);
+
   // --- STATE MODALS ---
   const [showStartShiftModal, setShowStartShiftModal] = useState(false);
   const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
@@ -50,7 +53,37 @@ export default function KasirHome() {
   const prevTableIdRef = useRef<any>(null);
   const areaOrder = ["LOBBY", "LOUNGE", "ROOFTOP", "LANTAI 2", "VIP"];
 
-  // --- INITIAL LOAD ---
+  // --- AUTO PRINT DAPUR/BAR (OMNICHANNEL) ---
+  const handleAutoPrintDapur = async (newOrderItem: any) => {
+    try {
+      // 1. Ambil nama meja
+      const { data: bill } = await supabase.from("open_bills").select("tables(name)").eq("id", newOrderItem.bill_id).single();
+      // 2. Ambil nama menu dan kategori
+      const { data: menu } = await supabase.from("menus").select("name, category").eq("id", newOrderItem.product_id).single();
+
+      if (bill && menu) {
+        const tableName = (bill as any).tables?.name || "QR/WAITER";
+        
+        // 3. Kasir otomatis nembak IP Printer Dapur/Bar
+        await fetch("http://192.168.1.24:4000/print-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            table_name: tableName,
+            items: [{
+              name: menu.name,
+              qty: newOrderItem.quantity,
+              category: menu.category || "FOOD"
+            }]
+          })
+        }).catch(() => console.warn("Printer Dapur Offline / Tidak dalam satu jaringan Wi-Fi"));
+      }
+    } catch (error) {
+      console.error("Gagal Auto-Print:", error);
+    }
+  };
+
+  // --- INITIAL LOAD & REALTIME RADAR ---
   useEffect(() => {
     checkActiveShift();
     fetchData();
@@ -59,6 +92,13 @@ export default function KasirHome() {
     const channel = supabase.channel(`pos-realtime-${tenantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` }, (payload) => {
+        // 🔥 JIKA ADA PESANAN MASUK DARI QR / WAITER, KASIR LANGSUNG CETAK KE DAPUR!
+        handleAutoPrintDapur(payload.new);
+        
+        // Trigger layar kasir agar me-refresh daftar pesanan
+        setLastIncomingOrder(Date.now());
+      })
       .subscribe();
 
     const interval = setInterval(fetchData, 10000);
@@ -67,6 +107,13 @@ export default function KasirHome() {
       clearInterval(interval); 
     };
   }, []);
+
+  // --- REFRESH DAFTAR PESANAN SECARA OTOMATIS SAAT ADA ORDER BARU ---
+  useEffect(() => {
+    if (activeBill) {
+      fetchOrderItems(activeBill.id);
+    }
+  }, [lastIncomingOrder]);
 
   // --- SELECTION LOGIC ---
   useEffect(() => {
@@ -106,11 +153,10 @@ export default function KasirHome() {
     if (bRes.data) setBills(bRes.data);
   };
 
-  // --- PERBAIKAN: Fungsi Tarik Pesanan (Membaca tabel "menus") ---
   const fetchOrderItems = async (billId: number) => {
     const { data: orderData, error } = await supabase
       .from("order_items")
-      .select(`*, menus(name)`) // 🔥 SUDAH DIUBAH KE TABEL "menus"
+      .select(`*, menus(name)`)
       .eq("bill_id", billId)
       .eq("tenant_id", tenantId);
 
@@ -121,7 +167,6 @@ export default function KasirHome() {
 
     if (orderData && orderData.length > 0) {
       setOrderItems(orderData.map((item: any) => ({
-        // 🔥 Mengambil nama asli dari tabel menus, bukan dari tabel lama
         name: item.menus?.name || item.name || `PRODUK ID: ${item.product_id}`,
         qty: item.quantity || 1,
         price: item.price_at_order || 0
@@ -164,7 +209,7 @@ export default function KasirHome() {
       
       const { error: trxError } = await supabase.from("transactions").insert({
         shift_id: currentShift.id,
-        tenant_id: tenantId, // 🔒 Simpan transaksi ke tenant ini
+        tenant_id: tenantId, 
         receipt_no: receiptNo,
         subtotal: getSubtotal(),
         discount: safeDiscount,
