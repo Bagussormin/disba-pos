@@ -53,27 +53,24 @@ export default function KasirHome() {
   const prevTableIdRef = useRef<any>(null);
   const areaOrder = ["LOBBY", "LOUNGE", "ROOFTOP", "LANTAI 2", "VIP"];
 
-  // --- AUTO PRINT DAPUR/BAR (OMNICHANNEL ROUTING) ---
+  // --- AUTO PRINT DAPUR/BAR DENGAN MATA-MATA (CONSOLE LOG) ---
   const handleAutoPrintDapur = async (newOrderItem: any) => {
+    console.log("1️⃣ Memulai proses Auto-Print untuk ID Produk:", newOrderItem.product_id);
     try {
-      // 1. Ambil nama meja
       const { data: bill } = await supabase.from("open_bills").select("tables(name)").eq("id", newOrderItem.bill_id).single();
-      // 2. Ambil nama menu dan kategori
       const { data: menu } = await supabase.from("menus").select("name, category").eq("id", newOrderItem.product_id).single();
 
       if (bill && menu) {
         const tableName = (bill as any).tables?.name || "QR/WAITER";
         const category = (menu.category || "FOOD").toUpperCase();
         
-        // 3. LOGIKA ROUTING PRINTER
-        // Daftar kategori yang masuk ke Printer Bar (.24)
         const barCategories = ["COFFEE", "TEA", "MOCKTAIL", "BEVERAGE", "JUICE", "MINUMAN", "DRINK"]; 
         const isBarItem = barCategories.some(cat => category.includes(cat));
-        
-        // Jika termasuk minuman, ke Bar (.24). Jika tidak, ke Dapur (.30)
         const targetIp = isBarItem ? "192.168.1.24" : "192.168.1.30";
         
-        // 4. Tembak ke IP yang sesuai
+        console.log(`2️⃣ Data ditemukan! Meja: ${tableName}, Menu: ${menu.name}, Kategori: ${category}`);
+        console.log(`3️⃣ Mengirim perintah cetak ke IP: ${targetIp}`);
+        
         await fetch(`http://${targetIp}:4000/print-order`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -85,10 +82,14 @@ export default function KasirHome() {
               category: category
             }]
           })
-        }).catch(() => console.warn(`Gagal memanggil printer di IP ${targetIp}`));
+        })
+        .then(res => console.log(`✅ BERHASIL! Printer ${targetIp} merespons dengan status:`, res.status))
+        .catch(err => console.error(`❌ GAGAL! Tidak bisa menembus Printer ${targetIp}. Error:`, err));
+      } else {
+        console.warn("❌ Gagal mengambil data Meja atau Menu dari Supabase. Cek ID nya.");
       }
     } catch (error) {
-      console.error("Gagal Auto-Print:", error);
+      console.error("❌ Terjadi Error di fungsi Auto Print:", error);
     }
   };
 
@@ -98,17 +99,21 @@ export default function KasirHome() {
     fetchData();
     fetchBanks();
 
+    console.log("📡 Mengaktifkan Radar Realtime untuk Tenant:", tenantId);
+
     const channel = supabase.channel(`pos-realtime-${tenantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` }, (payload) => {
-        // 🔥 JIKA ADA PESANAN MASUK DARI QR / WAITER, KASIR LANGSUNG CETAK KE DAPUR/BAR!
-        handleAutoPrintDapur(payload.new);
         
-        // Trigger layar kasir agar me-refresh daftar pesanan
+        console.log("🔥 BINGO! ADA PESANAN BARU MASUK DARI SUPABASE:", payload.new);
+        
+        handleAutoPrintDapur(payload.new);
         setLastIncomingOrder(Date.now());
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("📡 Status Koneksi Realtime Supabase:", status);
+      });
 
     const interval = setInterval(fetchData, 10000);
     return () => { 
