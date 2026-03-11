@@ -64,12 +64,11 @@ export default function KasirHome() {
         const tableName = (bill as any).tables?.name || "QR/WAITER";
         const category = (menu.category || "FOOD").toUpperCase();
         
-        const barCategories = ["COFFEE", "TEA", "MOCKTAIL", "BEVERAGE", "JUICE", "MINUMAN", "DRINK"]; 
-        const isBarItem = barCategories.some(cat => category.includes(cat));
-        const targetIp = isBarItem ? "192.168.1.24" : "192.168.1.30";
-        
         console.log(`2️⃣ Data ditemukan! Meja: ${tableName}, Menu: ${menu.name}, Kategori: ${category}`);
-        console.log(`3️⃣ Mengirim perintah cetak ke IP: ${targetIp}`);
+        
+        // 🔥 INI PERBAIKANNYA: Tembak ke IP Server Node.js Anda (192.168.1.49)
+        const targetIp = "192.168.1.49"; 
+        console.log(`3️⃣ Mengirim pesanan ke Print Server di IP: ${targetIp}`);
         
         await fetch(`http://${targetIp}:4000/print-order`, {
           method: "POST",
@@ -83,8 +82,12 @@ export default function KasirHome() {
             }]
           })
         })
-        .then(res => console.log(`✅ BERHASIL! Printer ${targetIp} merespons dengan status:`, res.status))
-        .catch(err => console.error(`❌ GAGAL! Tidak bisa menembus Printer ${targetIp}. Error:`, err));
+        .then(res => console.log(`✅ BERHASIL! Print Server merespons:`, res.status))
+        .catch(err => {
+          console.error(`❌ GAGAL! Tidak bisa menembus Print Server. Error:`, err);
+          // TAMPILKAN POP-UP JIKA GAGAL KONEK
+          alert(`Gagal konek ke Print Server 192.168.1.49!\nPesan Error: ${err.message}\nPastikan Server.js sedang RUNNING dan Chrome diset Allow Insecure Content!`);
+        });
       } else {
         console.warn("❌ Gagal mengambil data Meja atau Menu dari Supabase. Cek ID nya.");
       }
