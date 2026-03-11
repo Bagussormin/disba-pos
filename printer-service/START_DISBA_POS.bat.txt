@@ -1,0 +1,9 @@
+@echo off
+title DISBA PRINT BRIDGE
+color 0b
+echo ===================================================
+echo      🚀 DISBA PRINT BRIDGE ONLINE - PORT 4000
+echo      JANGAN DITUTUP JENDELA INI (MINIMIZE SAJA)
+echo ===================================================
+node server.js
+pause

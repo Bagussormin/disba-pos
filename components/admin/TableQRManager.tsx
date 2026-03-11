@@ -9,7 +9,7 @@ export default function TableQRManager() {
   const [areas, setAreas] = useState<string[]>([]);
 
   // 🔒 KUNCI MULTI-OUTLET (DIPERBAIKI: Harus sama persis dengan yang ada di Database)
-  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
+  const tenantId = "NES_HOUSE_001";
 
   useEffect(() => {
     fetchTables();

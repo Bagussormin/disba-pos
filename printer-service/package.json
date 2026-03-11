@@ -1,7 +1,6 @@
 {
   "name": "printer-service",
   "version": "1.0.0",
-  "type": "module",
   "description": "Service Printer Multi-Channel Disba POS",
   "main": "PrinterService.js",
   "dependencies": {

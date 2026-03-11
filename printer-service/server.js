@@ -1,13 +1,11 @@
-import net from 'node:net';
-import express from 'express';
-import cors from 'cors';
-import { Jimp } from 'jimp';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const net = require('node:net');
+const express = require('express');
+const cors = require('cors');
+// Mengatasi beda versi library Jimp
+const jimpObj = require('jimp');
+const Jimp = jimpObj.Jimp || jimpObj; 
+const path = require('node:path');
+const fs = require('node:fs');
 
 const app = express();
 app.use(cors());
@@ -21,7 +19,8 @@ const PRINTERS = {
 
 // --- FUNGSI LOGO ---
 async function getLogoBuffer() {
-    const logoPath = path.join(__dirname, 'logo.png');
+    // 🔥 PERBAIKAN EXE: Pakai process.cwd() agar EXE bisa baca logo di folder yang sama
+    const logoPath = path.join(process.cwd(), 'logo.png');
     if (!fs.existsSync(logoPath)) return null;
     try {
         const image = await Jimp.read(logoPath);
@@ -80,7 +79,7 @@ const sendToDevice = async (ip, port, content, label, includeLogo = false) => {
 // --- ENDPOINT KASIR ---
 app.post('/print-receipt', async (req, res) => {
     const d = req.body;
-    console.log("DEBUG KASIR DATA:", d); // Cek data yang masuk di terminal
+    console.log("DEBUG KASIR DATA:", d); 
 
     const noTrx = d.receipt_no || d.order_id || d.id || d.transaction_id || "-";
     const namaPelanggan = (d.customer_name || d.customer || d.pelanggan || "-").toUpperCase();
@@ -155,4 +154,4 @@ app.post('/print-order', async (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(4000, '0.0.0.0', () => console.log("🚀 SERVER V13.0 ONLINE - IP: 192.168.1.49"));
+app.listen(4000, '0.0.0.0', () => console.log("🚀 DISBA PRINT BRIDGE ONLINE - PORT 4000"));
