@@ -67,7 +67,7 @@ export default function KasirHome() {
         console.log(`2️⃣ Data ditemukan! Meja: ${tableName}, Menu: ${menu.name}, Kategori: ${category}`);
         
         // 🔥 INI PERBAIKANNYA: Tembak ke IP Server Node.js Anda (192.168.1.49)
-        const targetIp = "192.168.1.49"; 
+        const targetIp = "192.168.1.80"; 
         console.log(`3️⃣ Mengirim pesanan ke Print Server di IP: ${targetIp}`);
         
         await fetch(`http://${targetIp}:4000/print-order`, {
