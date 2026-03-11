@@ -13,14 +13,25 @@ export default function WaiterHome({ onOpenBill }: Props) {
   const [guestName, setGuestName] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // 🔒 KUNCI MULTI-OUTLET (SaaS Mindset)
+  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
+
   const fetchTables = async () => {
-    const { data } = await supabase.from("tables").select("*").order("id");
+    const { data } = await supabase
+      .from("tables")
+      .select("*")
+      .eq("tenant_id", tenantId) // 🔥 Filter dinamis per outlet
+      .order("id");
     if (data) setTables(data);
     setLoading(false);
   };
 
   const fetchBills = async () => {
-    const { data } = await supabase.from("open_bills").select("*").eq("status", "open");
+    const { data } = await supabase
+      .from("open_bills")
+      .select("*")
+      .eq("tenant_id", tenantId) // 🔥 Filter dinamis per outlet
+      .eq("status", "open");
     if (data) setBills(data);
   };
 
@@ -28,9 +39,10 @@ export default function WaiterHome({ onOpenBill }: Props) {
     fetchTables();
     fetchBills();
 
-    const channel = supabase.channel('waiter-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => fetchTables())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills' }, () => fetchBills())
+    // 🔥 Realtime yang dikunci khusus untuk outlet ini saja
+    const channel = supabase.channel(`waiter-realtime-${tenantId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchTables())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchBills())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -44,6 +56,7 @@ export default function WaiterHome({ onOpenBill }: Props) {
       const { data: bill, error: billError } = await supabase
         .from("open_bills")
         .insert({ 
+          tenant_id: tenantId, // 🔥 Wajib diisi agar outlet lain tidak bisa melihat ini
           table_id: tableIdClean, 
           guest_name: guestName.toUpperCase(), 
           status: "open" 
@@ -55,7 +68,8 @@ export default function WaiterHome({ onOpenBill }: Props) {
       await supabase
         .from("tables")
         .update({ status: "open" })
-        .eq("id", tableIdClean);
+        .eq("id", tableIdClean)
+        .eq("tenant_id", tenantId); // Keamanan ekstra
 
       onOpenBill(bill.id);
 
@@ -149,7 +163,7 @@ export default function WaiterHome({ onOpenBill }: Props) {
                   <div className="space-y-4">
                     <div className="p-4 rounded-2xl bg-orange-500/5 border border-white/5">
                       <p className="text-[7px] font-black text-orange-500 uppercase mb-1">GUEST_DATA</p>
-                      <p className="text-lg font-black text-white uppercase italic tracking-tight">{guestName}</p>
+                      <p className="text-lg font-black text-white uppercase italic tracking-tight">{guestName || "GUEST"}</p>
                     </div>
                     <button 
                       onClick={handleExistingOrder}
