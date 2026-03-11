@@ -6,10 +6,10 @@ import QRCode from "qrcode";
 export default function TableQRManager() {
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [areas, setAreas] = useState<string[]>([]); // Menyimpan area secara dinamis
+  const [areas, setAreas] = useState<string[]>([]);
 
-  // 🔒 KUNCI MULTI-OUTLET
-  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE";
+  // 🔒 KUNCI MULTI-OUTLET (DIPERBAIKI: Harus sama persis dengan yang ada di Database)
+  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
 
   useEffect(() => {
     fetchTables();
@@ -20,12 +20,12 @@ export default function TableQRManager() {
     const { data } = await supabase
       .from("tables")
       .select("*")
-      .eq("tenant_id", tenantId) // 🔒 Hanya tarik meja milik outlet ini
+      .eq("tenant_id", tenantId) // 🔒 Tarik meja milik NES_HOUSE_001
       .order("name", { ascending: true });
     
     if (data) {
       setTables(data);
-      // Ekstrak nama area unik secara otomatis dari data meja
+      // Ekstrak nama area unik
       const uniqueAreas = Array.from(new Set(data.map((t) => (t.area || "UNASSIGNED").toUpperCase())));
       setAreas(uniqueAreas as string[]);
     }
@@ -41,7 +41,6 @@ export default function TableQRManager() {
   // FUNGSI PRINT UNIVERSAL
   const printQR = async (tableId: string, tableName: string) => {
     // 🌐 URL otomatis mendeteksi domain saat ini (Localhost / Vercel)
-    // Format Link: /menu?tenant=NES_HOUSE&table=MEJA-01
     const baseUrl = window.location.origin;
     const qrUrl = `${baseUrl}/menu?tenant=${tenantId}&table=${tableId}`;
 
@@ -53,7 +52,7 @@ export default function TableQRManager() {
         color: { dark: "#000000", light: "#ffffff" }
       });
 
-      // Format nama outlet agar lebih rapi (Hilangkan underscore jika ada)
+      // Format nama outlet agar lebih rapi
       const displayTenantName = tenantId.replace(/_/g, " ");
 
       const printWindow = window.open('', '_blank');
@@ -91,6 +90,11 @@ export default function TableQRManager() {
       {loading ? (
         <div className="flex items-center gap-3 text-blue-500 font-bold animate-pulse text-xs">
            MENGAMBIL DATA MEJA...
+        </div>
+      ) : tables.length === 0 ? (
+        // Menambahkan pesan jika meja masih kosong
+        <div className="text-center p-10 bg-white/5 rounded-2xl border border-white/10">
+          <p className="text-gray-400 font-mono text-sm">Tidak ada meja yang ditemukan untuk outlet {tenantId}.</p>
         </div>
       ) : (
         areas.map((area) => groupedTables[area] && groupedTables[area].length > 0 && (
