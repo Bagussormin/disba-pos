@@ -21,7 +21,7 @@ export default function KasirHome() {
   const [banks, setBanks] = useState<any[]>([]);
 
   // 🔒 KUNCI MULTI-OUTLET
-  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
+  const tenantId = localStorage.getItem("tenant_id") || "ALPHA_001";
 
   // --- TRIGGER UNTUK REFRESH PESANAN BARU ---
   const [lastIncomingOrder, setLastIncomingOrder] = useState<number>(0);
