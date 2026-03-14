@@ -8,16 +8,21 @@ export default function MerchantBank() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
   useEffect(() => {
-    fetchBanks();
-  }, []);
+    if (tenantId) fetchBanks();
+  }, [tenantId]);
 
   // 1. FUNGSI AMBIL DATA
   const fetchBanks = async () => {
     try {
+      // 🔥 FILTER BANK PER OUTLET
       const { data, error } = await supabase
         .from("merchant_banks")
         .select("*")
+        .eq("tenant_id", tenantId)
         .order("id", { ascending: true });
       
       if (error) throw error;
@@ -28,9 +33,9 @@ export default function MerchantBank() {
     }
   };
 
-  // 2. FUNGSI SIMPAN DATA (SUDAH DISESUAIKAN KE account_holder)
+  // 2. FUNGSI SIMPAN DATA
   const handleAddBank = async () => {
-    if (!newBank.bank_name || !newBank.account_number) {
+    if (!newBank.bank_name || !newBank.account_number || !tenantId) {
       return alert("Minimal isi Nama Bank & No. Rekening!");
     }
     
@@ -38,15 +43,16 @@ export default function MerchantBank() {
     setErrorMessage(null);
 
     try {
+      // 🔥 INJEKSI IDENTITAS OUTLET KE BANK BARU
       const { error } = await supabase
         .from("merchant_banks")
         .insert([
           {
             bank_name: newBank.bank_name.toUpperCase(),
             account_number: newBank.account_number,
-            // DISESUAIKAN: Mengirim ke kolom account_holder
             account_holder: newBank.account_name.toUpperCase(), 
-            is_active: true
+            is_active: true,
+            tenant_id: tenantId 
           }
         ]);
 
@@ -68,18 +74,25 @@ export default function MerchantBank() {
 
   // 3. FUNGSI UPDATE STATUS
   const toggleStatus = async (id: number, currentStatus: boolean) => {
+    if (!tenantId) return;
     const { error } = await supabase
       .from("merchant_banks")
       .update({ is_active: !currentStatus })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("tenant_id", tenantId); // 🔥 AMANKAN
     
     if (!error) fetchBanks();
   };
 
   // 4. FUNGSI HAPUS
   const deleteBank = async (id: number) => {
+    if (!tenantId) return;
     if (confirm("Hapus akun bank ini secara permanen?")) {
-      const { error } = await supabase.from("merchant_banks").delete().eq("id", id);
+      const { error } = await supabase
+        .from("merchant_banks")
+        .delete()
+        .eq("id", id)
+        .eq("tenant_id", tenantId); // 🔥 AMANKAN
       if (!error) fetchBanks();
     }
   };
@@ -92,7 +105,7 @@ export default function MerchantBank() {
           <Building2 className="text-blue-500" size={32} /> 
           MERCHANT_<span className="text-blue-500">BANK</span>
         </h2>
-        <p className="text-gray-500 text-[10px] font-bold tracking-[0.3em] mt-2 uppercase italic">Integrasi Pembayaran Non-Tunai Kasir</p>
+        <p className="text-gray-500 text-[10px] font-bold tracking-[0.3em] mt-2 uppercase italic">Integrasi Pembayaran Non-Tunai Kasir | {tenantId}</p>
       </div>
 
       {/* ALERT JIKA ADA ERROR DATABASE */}
@@ -138,8 +151,8 @@ export default function MerchantBank() {
               </div>
               <button 
                 onClick={handleAddBank} 
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-2xl font-black text-[10px] flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 uppercase tracking-widest mt-4 disabled:opacity-50"
+                disabled={loading || !tenantId}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 p-4 rounded-2xl font-black text-[10px] flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 uppercase tracking-widest mt-4"
               >
                 {loading ? "SAVING..." : <><Plus size={16}/> Simpan_Bank</>}
               </button>
@@ -177,7 +190,6 @@ export default function MerchantBank() {
                   <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none italic">Verified_Merchant</p>
                   <h4 className="text-2xl font-black italic uppercase tracking-tighter">{bank.bank_name}</h4>
                   <p className="text-lg font-mono font-bold text-white/80">{bank.account_number}</p>
-                  {/* DISESUAIKAN: Menampilkan dari bank.account_holder */}
                   <p className="text-[9px] font-black text-gray-500 uppercase mt-2 italic">
                     {bank.account_holder || "NO_HOLDER_NAME"}
                   </p>

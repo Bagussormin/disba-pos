@@ -5,31 +5,64 @@ import { Store, Save, Loader2, Mail, Phone, Globe, ShieldCheck, Box } from "luci
 export default function OutletProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState<any>({
     name: "",
     address: "",
     phone: "",
-    email: "nessbarandpool@gmail.com",
+    email: "",
     is_public: true,
     company_type: "Personal",
     business_type: "Restoran",
     inventory_method: "Average"
   });
 
-  useEffect(() => { fetchProfile(); }, []);
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
+  useEffect(() => { 
+    if (tenantId) fetchProfile(); 
+  }, [tenantId]);
 
   const fetchProfile = async () => {
     setLoading(true);
-    const { data } = await supabase.from("outlet_profile").select("*").eq("id", 1).single();
-    if (data) setProfile(data);
+    // 🔥 FILTER: Tarik profil berdasarkan tenant_id, BUKAN id=1
+    const { data } = await supabase
+      .from("outlet_profile")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .maybeSingle(); // Gunakan maybeSingle agar tidak error jika belum ada profil
+      
+    if (data) {
+      setProfile(data);
+    } else {
+      // Set nama default jika belum ada profil di database
+      setProfile(prev => ({ ...prev, name: tenantId }));
+    }
     setLoading(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!tenantId) return alert("Sesi tidak valid!");
+    
     setSaving(true);
-    await supabase.from("outlet_profile").upsert({ id: 1, ...profile });
-    alert("INFO TOKO BERHASIL DIPERBARUI!");
+    
+    // 🔥 INJEKSI: Pastikan tenant_id tersimpan saat upsert
+    const payload = { 
+      ...profile, 
+      tenant_id: tenantId 
+    };
+    
+    // Gunakan match/eq tenant_id untuk update, BUKAN id=1
+    const { error } = await supabase
+      .from("outlet_profile")
+      .upsert(payload, { onConflict: 'tenant_id' }); // Pastikan kolom tenant_id punya constraint UNIQUE di Supabase
+      
+    if (error) {
+      alert("GAGAL MENYIMPAN: " + error.message);
+    } else {
+      alert("INFO TOKO BERHASIL DIPERBARUI!");
+    }
     setSaving(false);
   };
 
@@ -38,7 +71,7 @@ export default function OutletProfile() {
   return (
     <div className="max-w-5xl animate-in fade-in duration-500 italic uppercase font-sans">
       <div className="mb-8">
-        <h1 className="text-2xl font-black tracking-tighter italic">Info Toko</h1>
+        <h1 className="text-2xl font-black tracking-tighter italic">Info Toko <span className="text-blue-500 text-sm">({tenantId})</span></h1>
       </div>
 
       <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-2 gap-6 not-italic">
@@ -52,16 +85,16 @@ export default function OutletProfile() {
           <div className="space-y-4">
             <div>
               <label className="text-[9px] font-black text-gray-500 block mb-2 ml-2">NAMA TOKO</label>
-              <input type="text" className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl font-bold uppercase text-white" 
-                value={profile.name} onChange={(e) => setProfile({...profile, name: e.target.value})} />
+              <input type="text" className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl font-bold uppercase text-white outline-none focus:border-blue-500" 
+                value={profile.name || ""} onChange={(e) => setProfile({...profile, name: e.target.value})} required />
             </div>
 
             <div>
               <label className="text-[9px] font-black text-gray-500 block mb-2 ml-2">EMAIL</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-4 text-gray-600" size={18} />
-                <input type="email" className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl font-bold text-white lowercase" 
-                  value={profile.email} onChange={(e) => setProfile({...profile, email: e.target.value})} />
+                <input type="email" className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl font-bold text-white lowercase outline-none focus:border-blue-500" 
+                  value={profile.email || ""} onChange={(e) => setProfile({...profile, email: e.target.value})} />
               </div>
             </div>
 
@@ -69,8 +102,8 @@ export default function OutletProfile() {
               <label className="text-[9px] font-black text-gray-500 block mb-2 ml-2">TELPON</label>
               <div className="relative">
                 <Phone className="absolute left-4 top-4 text-gray-600" size={18} />
-                <input type="text" className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl font-bold text-white" 
-                  value={profile.phone} onChange={(e) => setProfile({...profile, phone: e.target.value})} />
+                <input type="text" className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl font-bold text-white outline-none focus:border-blue-500" 
+                  value={profile.phone || ""} onChange={(e) => setProfile({...profile, phone: e.target.value})} />
               </div>
             </div>
           </div>
@@ -88,7 +121,7 @@ export default function OutletProfile() {
                 <p className="text-[10px] font-black text-white">PUBLIKASI TOKO</p>
                 <p className="text-[8px] text-gray-500 italic">Siap publikasikan toko untuk pembeli</p>
               </div>
-              <select className="bg-emerald-600 text-[10px] font-black px-4 py-2 rounded-xl"
+              <select className="bg-emerald-600 text-[10px] font-black px-4 py-2 rounded-xl outline-none"
                 value={profile.is_public ? "Ya" : "Tidak"} onChange={(e) => setProfile({...profile, is_public: e.target.value === "Ya"})}>
                 <option>Ya</option>
                 <option>Tidak</option>
@@ -98,13 +131,13 @@ export default function OutletProfile() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-[9px] font-black text-gray-500 block mb-2 ml-2 uppercase">Tipe Perusahaan</label>
-                <input type="text" className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl font-bold text-white uppercase" 
-                  value={profile.company_type} readOnly />
+                <input type="text" className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl font-bold text-white uppercase outline-none focus:border-blue-500" 
+                  value={profile.company_type || ""} onChange={(e) => setProfile({...profile, company_type: e.target.value})} />
               </div>
               <div>
                 <label className="text-[9px] font-black text-gray-500 block mb-2 ml-2 uppercase">Tipe Bisnis</label>
-                <input type="text" className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl font-bold text-white uppercase" 
-                  value={profile.business_type} readOnly />
+                <input type="text" className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl font-bold text-white uppercase outline-none focus:border-blue-500" 
+                  value={profile.business_type || ""} onChange={(e) => setProfile({...profile, business_type: e.target.value})} />
               </div>
             </div>
 
@@ -113,15 +146,21 @@ export default function OutletProfile() {
                 <Box className="text-blue-500" size={16} />
                 <p className="text-[10px] font-black text-white">STOK SISTEM</p>
               </div>
-              <p className="text-xl font-black text-blue-400 italic tracking-tighter">
-                {profile.inventory_method}
-              </p>
+              <select 
+                className="w-full bg-transparent text-xl font-black text-blue-400 italic tracking-tighter outline-none appearance-none cursor-pointer"
+                value={profile.inventory_method || "Average"}
+                onChange={(e) => setProfile({...profile, inventory_method: e.target.value})}
+              >
+                <option className="bg-slate-900 text-sm">Average</option>
+                <option className="bg-slate-900 text-sm">FIFO</option>
+                <option className="bg-slate-900 text-sm">LIFO</option>
+              </select>
             </div>
           </div>
         </div>
 
         <div className="lg:col-span-2">
-          <button disabled={saving} className="w-full bg-blue-600 hover:bg-blue-700 py-5 rounded-[1.5rem] font-black italic tracking-widest text-[11px] flex justify-center items-center gap-3 transition-all">
+          <button disabled={saving || !tenantId} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 py-5 rounded-[1.5rem] font-black italic tracking-widest text-[11px] flex justify-center items-center gap-3 transition-all">
             {saving ? <Loader2 className="animate-spin" size={20} /> : <><Save size={20} /> SIMPAN PERUBAHAN INFO TOKO</>}
           </button>
         </div>

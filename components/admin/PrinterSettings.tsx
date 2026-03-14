@@ -5,31 +5,41 @@ export default function PrinterSettings() {
   const [autoPrint, setAutoPrint] = useState(false);
   const [printerType, setPrinterType] = useState("browser");
   const [lanIp, setLanIp] = useState("");
+  const [localPrinterIp, setLocalPrinterIp] = useState("");
+
+  // 🔥 KUNCI MASTER MULTI-OUTLET (Untuk membedakan settingan per outlet di browser yang sama)
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "DEFAULT" : "DEFAULT";
 
   // Tarik data pengaturan saat halaman dimuat
   useEffect(() => {
-    const savedSize = localStorage.getItem("disba_printer_size") || "58mm";
-    const savedAuto = localStorage.getItem("disba_printer_auto") === "true";
-    const savedType = localStorage.getItem("disba_printer_type") || "browser";
-    const savedIp = localStorage.getItem("disba_printer_lan_ip") || "";
+    // Menggunakan tenantId pada key localStorage agar settingan Alpha tidak menimpa settingan NES House
+    const savedSize = localStorage.getItem(`disba_printer_size_${tenantId}`) || "58mm";
+    const savedAuto = localStorage.getItem(`disba_printer_auto_${tenantId}`) === "true";
+    const savedType = localStorage.getItem(`disba_printer_type_${tenantId}`) || "browser";
+    const savedLanIp = localStorage.getItem(`disba_printer_lan_ip_${tenantId}`) || "";
+    const savedLocalIp = localStorage.getItem("printer_ip") || "127.0.0.1"; // IP Print Server Node.js (Kasir)
     
     setPaperSize(savedSize);
     setAutoPrint(savedAuto);
     setPrinterType(savedType);
-    setLanIp(savedIp);
-  }, []);
+    setLanIp(savedLanIp);
+    setLocalPrinterIp(savedLocalIp);
+  }, [tenantId]);
 
   // Simpan pengaturan ke browser outlet tersebut
   const handleSave = () => {
-    localStorage.setItem("disba_printer_size", paperSize);
-    localStorage.setItem("disba_printer_auto", String(autoPrint));
-    localStorage.setItem("disba_printer_type", printerType);
+    localStorage.setItem(`disba_printer_size_${tenantId}`, paperSize);
+    localStorage.setItem(`disba_printer_auto_${tenantId}`, String(autoPrint));
+    localStorage.setItem(`disba_printer_type_${tenantId}`, printerType);
+    
+    // Simpan IP Print Server Node.js (Dibutuhkan oleh file KasirHome dan WaiterOrder)
+    localStorage.setItem("printer_ip", localPrinterIp);
     
     if (printerType === "lan") {
-      localStorage.setItem("disba_printer_lan_ip", lanIp);
+      localStorage.setItem(`disba_printer_lan_ip_${tenantId}`, lanIp);
     }
     
-    alert("🖨️ Pengaturan Printer berhasil disimpan untuk outlet ini!");
+    alert(`🖨️ Pengaturan Printer berhasil disimpan untuk outlet ${tenantId}!`);
   };
 
   return (
@@ -39,9 +49,25 @@ export default function PrinterSettings() {
       </h2>
 
       <div className="space-y-6">
+        
+        {/* IP KASIR (PRINT SERVER) */}
+        <div className="space-y-2 bg-blue-500/10 p-4 rounded-xl border border-blue-500/20">
+          <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">IP Komputer Kasir (Print Server)</label>
+          <input 
+            type="text" 
+            placeholder="127.0.0.1 (Jika komputer ini adalah kasir)"
+            value={localPrinterIp}
+            onChange={(e) => setLocalPrinterIp(e.target.value)}
+            className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold font-mono text-white focus:border-blue-500/50 outline-none"
+          />
+          <p className="text-[8px] text-gray-400 mt-1 uppercase">
+            * Isi 127.0.0.1 jika di Kasir. Isi IP Kasir (misal: 192.168.1.10) jika di tablet Waiter.
+          </p>
+        </div>
+
         {/* UKURAN KERTAS */}
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Ukuran Kertas Thermal</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Ukuran Kertas Thermal</label>
           <div className="flex gap-4">
             <button 
               onClick={() => setPaperSize("58mm")}
@@ -60,7 +86,7 @@ export default function PrinterSettings() {
 
         {/* METODE CETAK */}
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Metode Koneksi</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Metode Koneksi</label>
           <select 
             value={printerType}
             onChange={(e) => setPrinterType(e.target.value)}
@@ -73,17 +99,17 @@ export default function PrinterSettings() {
 
           {/* MUNCUL JIKA MEMILIH LAN */}
           {printerType === "lan" && (
-            <div className="mt-4 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
-               <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Alamat IP Printer LAN</label>
+            <div className="mt-4 p-4 bg-purple-900/20 border border-purple-500/30 rounded-xl">
+               <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Alamat IP Printer LAN (Dapur/Bar)</label>
                <input 
                  type="text" 
                  placeholder="Contoh: 192.168.1.120"
                  value={lanIp}
                  onChange={(e) => setLanIp(e.target.value)}
-                 className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2 mt-2 text-sm text-white focus:border-blue-500/50 outline-none"
+                 className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-2 mt-2 text-sm text-white focus:border-purple-500/50 outline-none"
                />
-               <p className="text-[9px] text-gray-400 mt-2">
-                 *Membutuhkan aplikasi bridge lokal (seperti QZ Tray) di komputer kasir.
+               <p className="text-[9px] text-gray-400 mt-2 uppercase">
+                 * Digunakan khusus jika Anda menggunakan printer ethernet langsung ke jaringan.
                </p>
             </div>
           )}

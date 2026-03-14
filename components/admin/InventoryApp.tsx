@@ -22,17 +22,22 @@ export default function InventoryApp() {
   const [selectedInvId, setSelectedInvId] = useState("");
   const [stockAmount, setStockAmount] = useState("");
 
-  useEffect(() => { loadData(); }, [activeSubMenu]);
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
+  useEffect(() => { 
+    if (tenantId) loadData(); 
+  }, [activeSubMenu, tenantId]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: menus } = await supabase.from("menus").select("*").order("category");
-      const { data: inv } = await supabase.from("inventory").select("*").order("item_name");
-      const { data: rec } = await supabase.from("recipes").select(`*, inventory:inventory_id (item_name, unit)`);
+      // 🔥 FILTER PER OUTLET
+      const { data: menus } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category");
+      const { data: inv } = await supabase.from("inventory").select("*").eq("tenant_id", tenantId).order("item_name");
+      const { data: rec } = await supabase.from("recipes").select(`*, inventory:inventory_id (item_name, unit)`).eq("tenant_id", tenantId);
       
       if (menus) setMenuList(menus);
-      // Data Items difilter unik berdasarkan item_name untuk menghindari tampilan double seperti di screenshot
       if (inv) {
         const uniqueItems = inv.reduce((acc: any[], current) => {
           const x = acc.find(item => item.item_name === current.item_name);
@@ -46,34 +51,54 @@ export default function InventoryApp() {
   };
 
   const handleAddMaterial = async () => {
-    if (!newMaterial.name || !newMaterial.unit) return alert("LENGKAPI DATA!");
+    if (!newMaterial.name || !newMaterial.unit || !tenantId) return alert("LENGKAPI DATA!");
+    
+    // 🔥 INJEKSI IDENTITAS OUTLET
     const { error } = await supabase.from("inventory").insert([{ 
       item_name: newMaterial.name.toUpperCase(), 
       unit: newMaterial.unit.toUpperCase(), 
       current_stock: parseFloat(newMaterial.stock) || 0,
-      min_stock: parseFloat(newMaterial.min) || 10
+      min_stock: parseFloat(newMaterial.min) || 10,
+      tenant_id: tenantId
     }]);
     if (!error) { setModalType(null); loadData(); }
   };
 
   const handleStockIn = async () => {
+    if (!tenantId) return;
     const amount = parseFloat(stockAmount);
     if (isNaN(amount) || amount <= 0) return;
+    
+    // 🔥 AMANKAN PROSES UPDATE
     const { error } = await supabase.from("inventory")
       .update({ current_stock: (selectedItem.current_stock || 0) + amount })
-      .eq("id", selectedItem.id);
+      .eq("id", selectedItem.id)
+      .eq("tenant_id", tenantId);
+      
     if (!error) { setModalType(null); setStockAmount(""); loadData(); }
   };
 
   const saveRecipe = async () => {
-    if (!selectedInvId || !recipeUsage) return;
+    if (!selectedInvId || !recipeUsage || !tenantId) return;
+    
+    // 🔥 INJEKSI IDENTITAS OUTLET KE RESEP
     const { error } = await supabase.from("recipes").insert([{ 
       menu_id: selectedMenu.id, 
       inventory_id: selectedInvId, 
-      usage_quantity: parseFloat(recipeUsage) 
+      usage_quantity: parseFloat(recipeUsage),
+      tenant_id: tenantId
     }]);
+    
     if (!error) { setModalType(null); setRecipeUsage(""); loadData(); }
   };
+  
+  const deleteInventory = async (id: string) => {
+    if(!tenantId) return;
+    if(confirm("Hapus resource ini?")) {
+      await supabase.from("inventory").delete().eq("id", id).eq("tenant_id", tenantId);
+      loadData();
+    }
+  }
 
   const filteredItems = items.filter(i => i.item_name.toLowerCase().includes(searchTerm.toLowerCase()));
   const groupedMenu = menuList.reduce((acc: any, menu: any) => {
@@ -90,7 +115,7 @@ export default function InventoryApp() {
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
         <div>
           <h1 className="text-2xl font-black italic tracking-tighter text-white">CENTRAL_INVENTORY_V1</h1>
-          <p className="text-[10px] text-slate-500 font-mono">SYSTEM_STATUS: <span className="text-emerald-500">OPERATIONAL</span></p>
+          <p className="text-[10px] text-slate-500 font-mono">SYSTEM_STATUS: <span className="text-emerald-500">OPERATIONAL</span> | <span className="text-blue-500">{tenantId}</span></p>
         </div>
 
         <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
@@ -120,7 +145,7 @@ export default function InventoryApp() {
           <p className="text-xl font-mono font-bold text-blue-500">{recipes.length}</p>
         </div>
         <div className="bg-white/5 border border-white/5 p-4 rounded-2xl flex flex-col justify-end">
-           <button onClick={() => setModalType("ADD_MATERIAL")} className="w-full py-2 bg-white/10 hover:bg-blue-600 text-[10px] font-black rounded-lg transition-all flex items-center justify-center gap-2">
+           <button onClick={() => setModalType("ADD_MATERIAL")} disabled={!tenantId} className="w-full py-2 bg-white/10 hover:bg-blue-600 disabled:opacity-50 text-[10px] font-black rounded-lg transition-all flex items-center justify-center gap-2">
              <Plus size={14}/> NEW_ITEM
            </button>
         </div>
@@ -247,7 +272,7 @@ export default function InventoryApp() {
                         </span>
                       </td>
                       <td className="px-8 py-4 text-right">
-                         <button className="p-2 text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                         <button onClick={() => deleteInventory(item.id)} className="p-2 text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
                       </td>
                     </tr>
                   ))}

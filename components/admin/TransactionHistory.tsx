@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { Search, Calendar, Hash, User, MapPin, Eye, Receipt, ArrowRight, FileText } from "lucide-react";
+import { Search, Calendar, User, MapPin, Eye, Receipt, ArrowRight, FileText } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -11,11 +11,16 @@ export default function TransactionHistory() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
   const fetchTransactions = async () => {
+    if(!tenantId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("transactions")
       .select("*")
+      .eq("tenant_id", tenantId) // 🔥 FILTER OUTLET
       .gte("created_at", `${startDate}T00:00:00`)
       .lte("created_at", `${endDate}T23:59:59`)
       .order("created_at", { ascending: false });
@@ -26,10 +31,10 @@ export default function TransactionHistory() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, tenantId]);
 
   const filteredData = transactions.filter(t => 
-    t.receipt_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.receipt_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.cashier_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -38,19 +43,16 @@ export default function TransactionHistory() {
     const doc = new jsPDF();
     const dateRange = `${startDate} to ${endDate}`;
 
-    // Header PDF
     doc.setFontSize(18);
-    doc.text("TRANSACTION ARCHIVE REPORT", 14, 20);
+    doc.text(`TRANSACTION ARCHIVE - ${tenantId || "STORE"}`, 14, 20);
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(`Periode: ${dateRange}`, 14, 28);
     doc.text(`Total Transaksi: ${filteredData.length}`, 14, 33);
 
-    // Garis pemisah
     doc.setDrawColor(200);
     doc.line(14, 38, 196, 38);
 
-    // Tabel Data
     autoTable(doc, {
       startY: 45,
       head: [["Tanggal", "No. Resi", "Kasir", "Meja", "Total (IDR)"]],
@@ -58,15 +60,14 @@ export default function TransactionHistory() {
         new Date(t.created_at).toLocaleDateString('id-ID'),
         t.receipt_no,
         t.cashier_name || "System",
-        t.table_name,
+        t.table_name || t.table_number || "N/A",
         t.total.toLocaleString()
       ]),
       headStyles: { fillColor: [0, 102, 204], textColor: 255 },
       alternateRowStyles: { fillColor: [245, 245, 245] },
     });
 
-    // Simpan File
-    doc.save(`Transaction_Archive_${startDate}_${endDate}.pdf`);
+    doc.save(`Archive_${tenantId}_${startDate}_${endDate}.pdf`);
   };
 
   return (
@@ -79,7 +80,6 @@ export default function TransactionHistory() {
             <h1 className="text-3xl font-black italic tracking-tighter uppercase">Transaction <span className="text-blue-500">Archive</span></h1>
           </div>
           
-          {/* Tombol Download PDF */}
           <button 
             onClick={downloadPDF}
             className="bg-red-600 hover:bg-red-500 px-6 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 transition-all shadow-lg shadow-red-600/20"
@@ -143,7 +143,7 @@ export default function TransactionHistory() {
                     </div>
                   </div>
                 </td>
-                <td className="px-8 py-5 text-[11px] font-black uppercase italic text-gray-300">{trx.table_name}</td>
+                <td className="px-8 py-5 text-[11px] font-black uppercase italic text-gray-300">{trx.table_name || trx.table_number || "N/A"}</td>
                 <td className="px-8 py-5 text-[12px] font-black text-emerald-400 italic">RP {trx.total.toLocaleString()}</td>
                 <td className="px-8 py-5 text-right">
                   <button className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/5">
@@ -152,6 +152,9 @@ export default function TransactionHistory() {
                 </td>
               </tr>
             ))}
+            {filteredData.length === 0 && !loading && (
+               <tr><td colSpan={5} className="py-10 text-center text-gray-500 italic text-xs">No transactions match your search.</td></tr>
+            )}
           </tbody>
         </table>
       </div>

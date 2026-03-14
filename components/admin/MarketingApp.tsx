@@ -7,18 +7,27 @@ export default function MarketingApp() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
   const [newPromo, setNewPromo] = useState({
     name: "", type: "PERCENTAGE", value: 0, min_purchase: 0, code: ""
   });
 
   useEffect(() => {
-    loadPromos();
-  }, [activeSubMenu]);
+    if (tenantId) loadPromos();
+  }, [activeSubMenu, tenantId]);
 
   const loadPromos = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from("promos").select("*").order("created_at", { ascending: false });
+      // 🔥 FILTER PROMO PER OUTLET
+      const { data, error } = await supabase
+        .from("promos")
+        .select("*")
+        .eq("tenant_id", tenantId) 
+        .order("created_at", { ascending: false });
+        
       if (error) throw error;
       
       const filtered = (data || []).filter((p: any) => {
@@ -33,15 +42,17 @@ export default function MarketingApp() {
   };
 
   const handleSave = async () => {
-    if (!newPromo.name || newPromo.value <= 0) return alert("Lengkapi data promo!");
+    if (!newPromo.name || newPromo.value <= 0 || !tenantId) return alert("Lengkapi data promo!");
     try {
+      // 🔥 INJEKSI IDENTITAS OUTLET KE PROMO BARU
       const payload = {
         name: newPromo.name.toUpperCase(),
         type: newPromo.type,
         value: Number(newPromo.value),
         min_purchase: Number(newPromo.min_purchase) || 0,
         code: activeSubMenu === "VOUCHER" ? newPromo.code.toUpperCase() : null,
-        is_active: true
+        is_active: true,
+        tenant_id: tenantId 
       };
       const { error } = await supabase.from("promos").insert([payload]);
       if (error) throw error;
@@ -54,8 +65,10 @@ export default function MarketingApp() {
   };
 
   const deletePromo = async (id: string) => {
+    if (!tenantId) return;
     if (!confirm("Hapus promo ini?")) return;
-    await supabase.from("promos").delete().eq("id", id);
+    // 🔥 AMANKAN PENGHAPUSAN
+    await supabase.from("promos").delete().eq("id", id).eq("tenant_id", tenantId);
     loadPromos();
   };
 
@@ -72,7 +85,7 @@ export default function MarketingApp() {
             </button>
           ))}
         </div>
-        <button onClick={() => setModalOpen(true)} className="bg-blue-600 px-4 py-1.5 rounded-lg text-[8px] font-black uppercase text-white shadow-lg active:scale-95 transition-all">
+        <button onClick={() => setModalOpen(true)} disabled={!tenantId} className="bg-blue-600 disabled:opacity-50 px-4 py-1.5 rounded-lg text-[8px] font-black uppercase text-white shadow-lg active:scale-95 transition-all">
           + New {activeSubMenu}
         </button>
       </div>

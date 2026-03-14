@@ -20,8 +20,11 @@ export default function KasirHome() {
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [banks, setBanks] = useState<any[]>([]);
 
-  // 🔒 KUNCI MULTI-OUTLET
- const tenantId = "ALPHA_001";
+  // 🔥🔥🔥 KUNCI MASTER MULTI-OUTLET (DINAMIS 100%) 🔥🔥🔥
+  // Membaca dari memori browser saat user Login.
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "ALPHA_001" : "ALPHA_001"; 
+  // (Note: Default saya set ALPHA_001 sementara untuk tes Anda pagi ini. Nanti kalau sistem login sudah sempurna melempar tenant_id, ini akan berjalan otomatis).
+
   // --- TRIGGER UNTUK REFRESH PESANAN BARU ---
   const [lastIncomingOrder, setLastIncomingOrder] = useState<number>(0);
 
@@ -50,9 +53,11 @@ export default function KasirHome() {
 
   const cashInputRef = useRef<HTMLInputElement>(null);
   const prevTableIdRef = useRef<any>(null);
-  const areaOrder = ["LOBBY", "LOUNGE", "ROOFTOP", "LANTAI 2", "VIP"];
+  
+  // 🔥 PERBAIKAN AREA DINAMIS
+  const dynamicAreas = Array.from(new Set(tables.map(t => (t.area || "AREA LAINNYA").toUpperCase())));
 
-  // --- AUTO PRINT DAPUR/BAR DENGAN MATA-MATA (CONSOLE LOG) ---
+  // --- AUTO PRINT DAPUR/BAR (DENGAN KUNCI PRINTER DINAMIS) ---
   const handleAutoPrintDapur = async (newOrderItem: any) => {
     console.log("1️⃣ Memulai proses Auto-Print untuk ID Produk:", newOrderItem.product_id);
     try {
@@ -65,8 +70,10 @@ export default function KasirHome() {
         
         console.log(`2️⃣ Data ditemukan! Meja: ${tableName}, Menu: ${menu.name}, Kategori: ${category}`);
         
-        // 🔥 INI PERBAIKANNYA: Tembak ke IP Server Node.js Anda (192.168.1.49)
-        const targetIp = "192.168.1.80"; 
+        // 🔥🔥🔥 KUNCI MASTER PRINTER (DINAMIS DARI SETTING BACKOFFICE) 🔥🔥🔥
+        // Mengambil IP Printer dari settingan alat ini. Jika kosong, anggap komputer ini adalah servernya (127.0.0.1).
+        const targetIp = typeof window !== "undefined" ? localStorage.getItem("printer_ip") || "127.0.0.1" : "127.0.0.1";
+        
         console.log(`3️⃣ Mengirim pesanan ke Print Server di IP: ${targetIp}`);
         
         await fetch(`http://${targetIp}:4000/print-order`, {
@@ -84,11 +91,7 @@ export default function KasirHome() {
         .then(res => console.log(`✅ BERHASIL! Print Server merespons:`, res.status))
         .catch(err => {
           console.error(`❌ GAGAL! Tidak bisa menembus Print Server. Error:`, err);
-          // TAMPILKAN POP-UP JIKA GAGAL KONEK
-          alert(`Gagal konek ke Print Server 192.168.1.49!\nPesan Error: ${err.message}\nPastikan Server.js sedang RUNNING dan Chrome diset Allow Insecure Content!`);
         });
-      } else {
-        console.warn("❌ Gagal mengambil data Meja atau Menu dari Supabase. Cek ID nya.");
       }
     } catch (error) {
       console.error("❌ Terjadi Error di fungsi Auto Print:", error);
@@ -107,22 +110,17 @@ export default function KasirHome() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` }, (payload) => {
-        
-        console.log("🔥 BINGO! ADA PESANAN BARU MASUK DARI SUPABASE:", payload.new);
-        
         handleAutoPrintDapur(payload.new);
         setLastIncomingOrder(Date.now());
       })
-      .subscribe((status) => {
-        console.log("📡 Status Koneksi Realtime Supabase:", status);
-      });
+      .subscribe();
 
     const interval = setInterval(fetchData, 10000);
     return () => { 
       supabase.removeChannel(channel); 
       clearInterval(interval); 
     };
-  }, []);
+  }, [tenantId]);
 
   // --- REFRESH DAFTAR PESANAN SECARA OTOMATIS SAAT ADA ORDER BARU ---
   useEffect(() => {
@@ -175,11 +173,6 @@ export default function KasirHome() {
       .select(`*, menus(name)`)
       .eq("bill_id", billId)
       .eq("tenant_id", tenantId);
-
-    if (error) {
-      console.error("Gagal menarik pesanan:", error.message);
-      return;
-    }
 
     if (orderData && orderData.length > 0) {
       setOrderItems(orderData.map((item: any) => ({
@@ -243,12 +236,11 @@ export default function KasirHome() {
       await supabase.from("open_bills").update({ status: "closed" }).eq("id", activeBill.id).eq("tenant_id", tenantId);
       await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
 
-      // --- EKSEKUSI CETAK STRUK ---
       const receiptData = {
         orderId: receiptNo,
         tableName: selectedTable?.name || "Takeaway",
-        cashier: localStorage.getItem("username") || "KASIR",
-        cashierName: localStorage.getItem("username") || "KASIR",
+        cashier: typeof window !== "undefined" ? localStorage.getItem("username") || "KASIR" : "KASIR",
+        cashierName: typeof window !== "undefined" ? localStorage.getItem("username") || "KASIR" : "KASIR",
         items: orderItems,
         subtotal: getSubtotal(),
         discount: safeDiscount,
@@ -263,7 +255,6 @@ export default function KasirHome() {
       try {
         await executePrint(receiptData);
       } catch (printErr) {
-        console.error("Print Failed:", printErr);
         alert("Transaksi berhasil, tapi gagal terhubung ke Printer.");
       }
 
@@ -293,7 +284,7 @@ export default function KasirHome() {
   const handleStartShift = async () => {
     const { data, error } = await supabase.from("shifts").insert({
       tenant_id: tenantId,
-      cashier_name: "KASIR UTAMA", 
+      cashier_name: typeof window !== "undefined" ? localStorage.getItem("username") || "KASIR UTAMA" : "KASIR UTAMA", 
       starting_cash: Number(startCash), 
       status: 'open', 
       start_time: new Date().toISOString()
@@ -339,9 +330,11 @@ export default function KasirHome() {
         actual_ending_cash: Number(endingCash)
       }).eq("id", currentShift.id).eq("tenant_id", tenantId);
       
-      localStorage.removeItem("role");
-      localStorage.removeItem("username");
-      window.location.href = "/login"; 
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("role");
+        localStorage.removeItem("username");
+        window.location.href = "/login"; 
+      }
     } catch (e: any) { 
       alert(e.message); 
     } finally { 
@@ -351,14 +344,15 @@ export default function KasirHome() {
 
   const handleLogOut = () => { 
     if (window.confirm("Keluar dari Terminal Kasir?")) { 
-      localStorage.removeItem("role"); 
-      localStorage.removeItem("username"); 
-      localStorage.removeItem("is_admin"); 
-      window.location.href = "/login"; 
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("role"); 
+        localStorage.removeItem("username"); 
+        localStorage.removeItem("is_admin"); 
+        window.location.href = "/login"; 
+      }
     } 
   };
 
-  // --- ITEM REPORT ---
   const fetchItemSales = async () => {
     if (!currentShift) return;
     setLoading(true);
@@ -401,11 +395,13 @@ export default function KasirHome() {
       <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
         {/* LEFT: TABLES */}
         <div className="col-span-4 bg-black/20 rounded-2xl border border-white/5 p-3 overflow-y-auto no-scrollbar">
-          {areaOrder.map(area => (
+          
+          {/* LOOPIING AREA DINAMIS */}
+          {dynamicAreas.map(area => (
             <div key={area} className="mb-4">
               <p className="flex items-center gap-1 text-[8px] font-black text-gray-500 tracking-[0.1em] mb-2 uppercase opacity-50"><MapPin size={8}/> {area}</p>
               <div className="grid grid-cols-3 gap-2">
-                {tables.filter(t => (t.area || "").toUpperCase() === area).map(t => (
+                {tables.filter(t => (t.area || "AREA LAINNYA").toUpperCase() === area).map(t => (
                   <button key={t.id} onClick={() => setSelectedTable(t)}
                     className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center transition-all ${
                       selectedTable?.id === t.id ? 'border-blue-500 bg-blue-600/20 shadow-[0_0_15px_rgba(59,130,246,0.1)]' : 
@@ -421,6 +417,7 @@ export default function KasirHome() {
               </div>
             </div>
           ))}
+
         </div>
 
         {/* RIGHT: KASIR PANEL */}

@@ -27,8 +27,12 @@ export default function Login({ onLoginSuccess }: Props) {
       return;
     }
 
+    // 🔥 KUNCI MASTER: Simpan Identitas Toko (Tenant ID) ke Memori Browser
+    localStorage.setItem("tenant_id", data.tenant_id); 
+    
     localStorage.setItem("role", data.role);
     localStorage.setItem("username", data.username);
+    
     onLoginSuccess(data.role);
     setLoading(false);
   };

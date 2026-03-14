@@ -1,8 +1,11 @@
 import React from "react";
+import { LogOut } from "lucide-react"; // Pastikan Lucide icon diimport
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Membaca URL saat ini untuk menentukan menu mana yang sedang aktif
   const activePath = window.location.pathname;
+
+  // 🔥 MENGAMBIL NAMA OUTLET DARI MEMORI BROWSER
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : "UNKNOWN_OUTLET";
 
   // Daftar Menu Utama
   const menuItems = [
@@ -21,8 +24,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "LAYOUT MEJA", path: "/admin/settings/tables", icon: "🪑" },
     { name: "PROFIL OUTLET", path: "/admin/settings/profile", icon: "🏪" },
     { name: "MERCHANT BANK", path: "/admin/settings/payments", icon: "💳" },
-    { name: "PRINTER", path: "/admin/settings/printer", icon: "🖨️" }, // <--- Menu Printer Ditambahkan
+    { name: "PRINTER", path: "/admin/settings/printer", icon: "🖨️" },
   ];
+
+  // 🔥 FUNGSI LOGOUT AMAN
+  const handleLogOut = () => {
+    if (window.confirm("Keluar dari Sistem Backoffice?")) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("role");
+        localStorage.removeItem("username");
+        localStorage.removeItem("is_admin");
+        localStorage.removeItem("tenant_id"); // Hancurkan KTP digital
+        window.location.href = "/login";
+      }
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-[#020617] text-white font-sans uppercase">
@@ -36,10 +52,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <p className="text-[8px] text-gray-500 font-bold tracking-[0.3em] mt-1">
             ENTERPRISE EDITION
           </p>
+          {/* 🔥 MENAMPILKAN OUTLET AKTIF */}
+          <div className="mt-3 bg-blue-500/10 border border-blue-500/20 px-3 py-2 rounded-lg">
+            <p className="text-[7px] text-blue-400 font-black tracking-widest">ACTIVE TENANT:</p>
+            <p className="text-[10px] font-black text-white truncate">{tenantId}</p>
+          </div>
         </div>
 
         {/* NAVIGATION LIST */}
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col gap-1 flex-1">
           <p className="text-[8px] text-blue-500 font-black tracking-widest mb-2 opacity-50">MAIN MENU</p>
           {menuItems.map((item) => (
             <a
@@ -75,6 +96,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ))}
           </div>
         </nav>
+
+        {/* 🔥 TOMBOL LOGOUT */}
+        <div className="mt-auto pt-4 border-t border-white/5">
+          <button 
+            onClick={handleLogOut}
+            className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500 border border-red-500/20 hover:border-red-500 text-red-500 hover:text-white py-3 rounded-xl transition-all text-[10px] font-black"
+          >
+            <LogOut size={14} /> LOGOUT
+          </button>
+        </div>
       </div>
 
       {/* MAIN CONTENT AREA */}

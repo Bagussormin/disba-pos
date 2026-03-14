@@ -81,7 +81,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         .from("tables")
         .select("name, status")
         .eq("id", Number(activeTableId))
-        .eq("tenant_id", tenantId)
+        .eq("tenant_id", tenantId) // 🔥 PENGUNCI OUTLET
         .single();
       
       if (table) {
@@ -91,12 +91,12 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         setIsError(true);
       }
 
-      // 2. MENGAMBIL DAFTAR MENU (🔥 SUDAH DIKEMBALIKAN KE TABEL "menus")
+      // 2. MENGAMBIL DAFTAR MENU
       const { data: menuData } = await supabase
         .from("menus") 
         .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("is_available", true) // 🔥 Sembunyikan menu yang sedang kosong
+        .eq("tenant_id", tenantId) // 🔥 PENGUNCI OUTLET
+        .eq("is_available", true)
         .order("category", { ascending: true });
         
       if (menuData) setMenuItems(menuData);
@@ -111,7 +111,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .from("open_bills")
       .select("id")
       .eq("table_id", Number(activeTableId))
-      .eq("tenant_id", tenantId)
+      .eq("tenant_id", tenantId) // 🔥 PENGUNCI OUTLET
       .eq("status", "open")
       .maybeSingle();
     
@@ -124,6 +124,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .from("order_items")
       .select("name, quantity, price_at_order, status")
       .eq("bill_id", activeBillId)
+      // tenant_id dihilangkan karena order_items sudah menempel pada bill_id unik
       .order("created_at", { ascending: false });
     if (data) setOrderedItems(data);
   };
@@ -163,7 +164,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           .from("open_bills")
           .insert({
             table_id: numericTableId,
-            tenant_id: tenantId,
+            tenant_id: tenantId, // 🔥 PENGUNCI OUTLET
             status: "open",
             order_source: "customer",
             guest_name: `Tamu ${tableName || activeTableId}`
@@ -177,7 +178,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const orderData = cart.map((item) => ({
         bill_id: currentBillId,
         product_id: item.id,
-        tenant_id: tenantId,
+        tenant_id: tenantId, // 🔥 PENGUNCI OUTLET
         name: item.name,
         quantity: item.qty,
         price_at_order: item.price,

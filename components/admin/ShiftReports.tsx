@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { 
-  Calendar, ChevronLeft, ChevronRight, 
-  Loader2, ShoppingBag, RefreshCcw, Download
-} from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Loader2, ShoppingBag, RefreshCcw, Download } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -15,9 +12,12 @@ export default function ShiftReports() {
   const [loading, setLoading] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState({ cash: 0, transfer: 0, total: 0, count: 0 });
 
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
   useEffect(() => {
-    fetchShiftsByDate();
-  }, [selectedDate]);
+    if (tenantId) fetchShiftsByDate();
+  }, [selectedDate, tenantId]);
 
   useEffect(() => {
     if (selectedShift) {
@@ -30,6 +30,7 @@ export default function ShiftReports() {
     const { data } = await supabase
       .from("shifts")
       .select("*")
+      .eq("tenant_id", tenantId) // 🔥 FILTER OUTLET
       .gte("start_time", `${selectedDate}T00:00:00`)
       .lte("start_time", `${selectedDate}T23:59:59`)
       .order("start_time", { ascending: false });
@@ -48,8 +49,8 @@ export default function ShiftReports() {
     setLoading(true);
     try {
       const [trxRes, prodRes] = await Promise.all([
-        supabase.from("transactions").select("*").eq("shift_id", shiftId),
-        supabase.from("products").select("id, name, price")
+        supabase.from("transactions").select("*").eq("shift_id", shiftId).eq("tenant_id", tenantId), // 🔥 FILTER
+        supabase.from("products").select("id, name, price").eq("tenant_id", tenantId) // 🔥 FILTER
       ]);
 
       if (trxRes.error) throw trxRes.error;
@@ -94,14 +95,14 @@ export default function ShiftReports() {
   const exportPDF = () => {
     if (!selectedShift) return;
     const doc = new jsPDF();
-    doc.text("DISBA POS - AUDIT SHIFT", 14, 20);
+    doc.text(`DISBA POS - AUDIT SHIFT (${tenantId})`, 14, 20);
     autoTable(doc, {
       startY: 30,
       head: [['ITEM', 'QTY', 'TOTAL']],
       body: itemSales.map((i) => [i.name.toUpperCase(), i.qty, `Rp ${i.total.toLocaleString()}`]),
       theme: 'grid'
     });
-    doc.save(`Audit_${selectedShift.id}.pdf`);
+    doc.save(`Audit_${tenantId}_${selectedShift.id}.pdf`);
   };
 
   return (
@@ -136,6 +137,7 @@ export default function ShiftReports() {
           onChange={(e) => setSelectedShift(shifts.find(s => s.id === Number(e.target.value)))}
         >
           {shifts.map(s => <option key={s.id} value={s.id} className="bg-[#0a1128]">#{s.id} - {s.cashier_name}</option>)}
+          {shifts.length === 0 && <option value="" disabled>NO SHIFT DATA</option>}
         </select>
       </div>
 
@@ -143,7 +145,6 @@ export default function ShiftReports() {
         <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-blue-500" size={30} /></div>
       ) : selectedShift ? (
         <div className="max-w-4xl space-y-4">
-          
           {/* COMPACT STATS */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-white/10 border border-white/15 rounded-2xl p-4">
@@ -187,7 +188,6 @@ export default function ShiftReports() {
               </div>
             </div>
           </div>
-
         </div>
       ) : null}
     </div>

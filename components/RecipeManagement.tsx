@@ -13,20 +13,25 @@ export default function RecipeManagement() {
   
   const [loading, setLoading] = useState(false);
 
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (tenantId) fetchData();
+  }, [tenantId]);
 
   const fetchData = async () => {
-    const { data: m } = await supabase.from("menus").select("*").order("name");
-    const { data: inv } = await supabase.from("inventory").select("*").order("name");
+    // 🔥 FILTER DATA BERDASARKAN OUTLET
+    const { data: m } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).order("name");
+    const { data: inv } = await supabase.from("inventory").select("*").eq("tenant_id", tenantId).order("item_name");
     setMenus(m || []);
     setInventory(inv || []);
     fetchRecipes();
   };
 
   const fetchRecipes = async () => {
-    const { data } = await supabase.from("recipes").select("*").order('id', { ascending: false });
+    // 🔥 FILTER RESEP BERDASARKAN OUTLET
+    const { data } = await supabase.from("recipes").select("*").eq("tenant_id", tenantId).order('id', { ascending: false });
     setRecipes(data || []);
   };
 
@@ -57,15 +62,20 @@ export default function RecipeManagement() {
   };
 
   const savePackage = async () => {
-    if (!packageName || packagePrice <= 0 || bundleItems.length < 1) {
+    if (!packageName || packagePrice <= 0 || bundleItems.length < 1 || !tenantId) {
       return alert("Lengkapi nama, harga, dan minimal 1 isi komponen!");
     }
     setLoading(true);
 
-    // 1. Masukkan ke tabel menus dulu
+    // 1. Masukkan ke tabel menus dulu (🔥 SUNTIKKAN TENANT_ID)
     const { data: newMenu, error: menuErr } = await supabase
       .from("menus")
-      .insert([{ name: packageName, price: packagePrice, is_package: true }])
+      .insert([{ 
+        name: packageName.toUpperCase(), 
+        price: packagePrice, 
+        is_package: true,
+        tenant_id: tenantId 
+      }])
       .select().single();
 
     if (menuErr) {
@@ -74,11 +84,12 @@ export default function RecipeManagement() {
       return;
     }
 
-    // 2. Mapping isinya ke recipes
+    // 2. Mapping isinya ke recipes (🔥 SUNTIKKAN TENANT_ID)
     const mappings = bundleItems.map(item => ({
       menu_id: newMenu.id,
       sub_menu_id: Number(item.id),
-      qty_needed: item.qty
+      qty_needed: item.qty,
+      tenant_id: tenantId
     }));
 
     const { error: recipeErr } = await supabase.from("recipes").insert(mappings);
@@ -96,8 +107,11 @@ export default function RecipeManagement() {
   };
 
   const deleteRecipe = async (id: number) => {
-    await supabase.from("recipes").delete().eq("id", id);
-    fetchRecipes();
+    if (!tenantId) return;
+    if (confirm("Hapus item resep ini?")) {
+      await supabase.from("recipes").delete().eq("id", id).eq("tenant_id", tenantId);
+      fetchRecipes();
+    }
   };
 
   return (
@@ -167,8 +181,8 @@ export default function RecipeManagement() {
 
           <button 
             onClick={savePackage}
-            disabled={loading}
-            className="w-full bg-blue-600 p-5 rounded-[1.5rem] font-black text-[12px] shadow-xl shadow-blue-500/20 active:scale-95 transition-all"
+            disabled={loading || !tenantId}
+            className="w-full bg-blue-600 disabled:bg-gray-700 p-5 rounded-[1.5rem] font-black text-[12px] shadow-xl shadow-blue-500/20 active:scale-95 transition-all"
           >
             {loading ? "PROCESSING..." : "SIMPAN & PUBLISH PAKET"}
           </button>
@@ -232,6 +246,11 @@ export default function RecipeManagement() {
                   </tr>
                 );
               })}
+              {recipes.length === 0 && (
+                 <tr>
+                   <td colSpan={3} className="p-10 text-center text-gray-500 text-xs">Belum ada paket/bundle di outlet ini.</td>
+                 </tr>
+              )}
             </tbody>
           </table>
         </div>

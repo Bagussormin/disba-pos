@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, Target, ShieldCheck } from 'lucide-react';
-import { supabase } from "../lib/supabase";
+// Hapus import supabase karena verifikasi dipindah ke Login.tsx
 import logoDisba from "./assets/logo-disba.png"; 
 
 interface LandingPageProps {
@@ -8,46 +8,17 @@ interface LandingPageProps {
 }
 
 export default function LandingPage({ onEnterSystem }: LandingPageProps) {
-  const outletName = "NES House Cold Brew";
-  const [showAuthForm, setShowAuthForm] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Fungsi Verifikasi Email & Password Outlet (NES House)
-  const handleOutletLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Fungsi Langsung Buka Gerbang Sistem
+  const handleEnter = () => {
     setLoading(true);
-    
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
-
-      if (error) {
-        alert("Akses Outlet Ditolak! Periksa Email & Password NES House.");
-        setLoading(false);
-        return;
-      }
-
-      if (data.user) {
-        // --- KUNCI SISTEM DISINI ---
-        // Kita set true agar App.tsx tahu bahwa gerbang Initialize sudah dilewati
-        localStorage.setItem("system_ready", "true");
-        
-        // Simpan nama outlet jika ingin digunakan secara global
-        localStorage.setItem("tenant_name", "NES HOUSE");
-
-        // Panggil fungsi callback untuk pindah ke Login Staff
-        onEnterSystem(); 
-      }
-    } catch (err) {
-      console.error("Critical Error:", err);
-      alert("Terjadi kesalahan sistem. Coba lagi.");
-    } finally {
-      setLoading(false);
-    }
+    // Simulasi loading booting system (opsional, untuk efek visual)
+    setTimeout(() => {
+      // Set agar tidak perlu lewat Landing Page lagi jika di-refresh
+      localStorage.setItem("system_ready", "true");
+      onEnterSystem(); 
+    }, 800);
   };
 
   return (
@@ -67,80 +38,48 @@ export default function LandingPage({ onEnterSystem }: LandingPageProps) {
           <Target className="absolute -top-1 -right-1 text-cyan-400 opacity-60 animate-pulse" size={18} />
         </div>
 
-        {/* 2. IDENTITAS OUTLET */}
+        {/* 2. IDENTITAS SISTEM */}
         <div className="space-y-2 md:space-y-4 px-2">
           <div className="inline-flex items-center gap-2 px-3 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
             <span className="text-[7px] md:text-[8px] font-black uppercase tracking-[0.3em] text-blue-400 not-italic">
-              Official_Access_Point
+              Enterprise_Cloud_System
             </span>
           </div>
           
-          <h1 className="text-3xl md:text-6xl font-black uppercase tracking-tighter italic leading-none">
+          <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter italic leading-none">
             DISBA<span className="text-[#b4975a]">.</span>POS
           </h1>
 
           <div className="py-1">
-            <p className="text-[10px] md:text-sm font-black uppercase tracking-[0.2em] text-white/90 italic">
-              Terminal: <span className="text-[#b4975a] underline decoration-blue-500/50 underline-offset-4">{outletName}</span>
+            <p className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-gray-500 italic">
+              Advanced Point of Sales Platform
             </p>
           </div>
         </div>
 
-        {/* 3. AUTH SECTION */}
-        <div className="w-full max-w-[240px] md:max-w-[280px]">
-          {!showAuthForm ? (
-            /* TAMPILAN AWAL */
+        {/* 3. ACTION SECTION */}
+        <div className="w-full max-w-[240px] md:max-w-[280px] pt-4">
             <button 
-              onClick={() => setShowAuthForm(true)}
-              className="group relative w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-[#020617] font-black uppercase text-[10px] md:text-xs tracking-[0.2em] rounded-xl transition-all duration-300 hover:bg-cyan-500 hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] active:scale-95"
+              onClick={handleEnter}
+              disabled={loading}
+              className="group relative w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-[#020617] font-black uppercase text-[10px] md:text-xs tracking-[0.2em] rounded-xl transition-all duration-300 hover:bg-cyan-500 hover:text-white hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] active:scale-95 disabled:opacity-50 disabled:cursor-wait"
             >
-              Initialize_Login <LogIn size={14} className="group-hover:translate-x-1 transition-transform" />
+              {loading ? (
+                "BOOTING_SYSTEM..."
+              ) : (
+                <>Initialize_Terminal <LogIn size={14} className="group-hover:translate-x-1 transition-transform" /></>
+              )}
             </button>
-          ) : (
-            /* FORM INPUT */
-            <form onSubmit={handleOutletLogin} className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <input 
-                type="email" 
-                placeholder="OUTLET EMAIL" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-[10px] outline-none focus:border-cyan-500 transition-all text-white placeholder:text-gray-600"
-                required
-              />
-              <input 
-                type="password" 
-                placeholder="OUTLET PASSWORD" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-[10px] outline-none focus:border-cyan-500 transition-all text-white placeholder:text-gray-600"
-                required
-              />
-              <button 
-                type="submit"
-                disabled={loading}
-                className="w-full py-4 bg-cyan-600 text-white font-black text-[10px] rounded-xl uppercase tracking-widest hover:bg-cyan-500 transition-all shadow-lg active:scale-95 disabled:opacity-50"
-              >
-                {loading ? "AUTHORIZING..." : "VERIFY_SYSTEM →"}
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setShowAuthForm(false)} 
-                className="text-[8px] text-gray-500 uppercase tracking-widest mt-2 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-            </form>
-          )}
           
           <div className="flex items-center justify-center gap-2 text-[6px] md:text-[7px] font-bold text-gray-700 uppercase tracking-widest italic opacity-50 mt-6">
-            <ShieldCheck size={10}/> Military_Grade_Encryption
+            <ShieldCheck size={10}/> SaaS_Ready_Environment
           </div>
         </div>
       </div>
 
       {/* Footer Info */}
       <div className="absolute bottom-4 left-0 right-0 flex justify-center text-[6px] md:text-[8px] font-mono text-gray-800 uppercase tracking-[0.3em]">
-        LOC_ID // 2026 &copy; IMPERIAL_DIGITAL_PROTOCOL
+        GLOBAL_NET // {new Date().getFullYear()} &copy; IMPERIAL_DIGITAL_PROTOCOL
       </div>
     </div>
   );

@@ -1,14 +1,42 @@
-// File ini yang boleh di-import ke KasirHome.tsx
+import { supabase } from "./supabase"; // Pastikan path ini benar untuk file supabase.ts Anda
 
 export const executePrint = async (receiptData: any) => {
-  // 1. BACA SETTINGAN DARI ADMIN
-  const printerType = localStorage.getItem("disba_printer_type") || "browser";
-  const paperSize = localStorage.getItem("disba_printer_size") || "58mm";
-  const lanIp = localStorage.getItem("disba_printer_lan_ip") || "";
+  // 1. BACA SETTINGAN PRINTER DARI MEMORI KASIR/ADMIN
+  const tenantId = localStorage.getItem("tenant_id") || "UNKNOWN_TENANT";
+  const printerType = localStorage.getItem(`disba_printer_type_${tenantId}`) || "browser";
+  const paperSize = localStorage.getItem(`disba_printer_size_${tenantId}`) || "58mm";
+  const lanIp = localStorage.getItem(`disba_printer_lan_ip_${tenantId}`) || "";
 
-  console.log(`Memulai cetak via: ${printerType.toUpperCase()}`);
+  console.log(`Memulai cetak via: ${printerType.toUpperCase()} untuk Outlet: ${tenantId}`);
 
-  // 2. LOGIKA PERCABANGAN PRINTER
+  // 2. MENGAMBIL PROFIL OUTLET DARI DATABASE (Dinamis)
+  let outletProfile = {
+    name: tenantId.replace(/_/g, " "),
+    address: "Alamat belum diatur",
+    phone: "Telp belum diatur",
+    email: "Email belum diatur"
+  };
+
+  try {
+    const { data } = await supabase
+      .from("outlet_profile")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (data) {
+      outletProfile = {
+        name: data.name || outletProfile.name,
+        address: data.address || outletProfile.address,
+        phone: data.phone || outletProfile.phone,
+        email: data.email || outletProfile.email
+      };
+    }
+  } catch (err) {
+    console.error("Gagal mengambil profil outlet untuk struk:", err);
+  }
+
+  // 3. LOGIKA PERCABANGAN PRINTER
   if (printerType === "lan") {
     if (!lanIp) {
       alert("Alamat IP Printer LAN belum disetting di Admin!");
@@ -22,12 +50,13 @@ export const executePrint = async (receiptData: any) => {
         body: JSON.stringify({
           target_ip: lanIp, 
           
-          header_title: "NES HOUSE COLD BREW",
-          header_address: "Jl. Sudirman No 61 AB, Pematang Siantar",
-          header_contact: "IG: @nes bar | Telp: 0821-6418-7865",
+          // 🔥 DATA HEADER DINAMIS DARI DATABASE
+          header_title: outletProfile.name.toUpperCase(),
+          header_address: outletProfile.address,
+          header_contact: `Telp: ${outletProfile.phone} | Email: ${outletProfile.email}`,
           footer_thanks: "--- TERIMA KASIH ---",
           footer_message: "Silakan berkunjung kembali",
-          footer_wifi: "WiFi: NES_GUEST / Pass: neshouse2026",
+          footer_wifi: "Powered by DISBA POS", // Diganti menjadi promosi sistem Anda
           
           payment_method: receiptData.paymentMethod, 
           table_name: receiptData.tableName || "Takeaway",
@@ -54,12 +83,12 @@ export const executePrint = async (receiptData: any) => {
 
   } else {
     // KONDISI B: BROWSER PRINT (Default / Fallback)
-    printViaBrowser(receiptData, paperSize);
+    printViaBrowser(receiptData, paperSize, outletProfile);
   }
 };
 
-// Fungsi Print Browser Biasa 
-const printViaBrowser = (data: any, size: string) => {
+// Fungsi Print Browser Biasa (Dinamis)
+const printViaBrowser = (data: any, size: string, profile: any) => {
   const width = size === "58mm" ? "58mm" : "80mm";
   const iframe = document.createElement("iframe");
   iframe.style.position = "absolute";
@@ -84,21 +113,22 @@ const printViaBrowser = (data: any, size: string) => {
           .center { text-align: center; }
           .bold { font-weight: bold; }
           .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
-          .header-title { font-size: 16px; font-weight: 900; margin-bottom: 2px; }
+          .header-title { font-size: 16px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
           .header-sub { font-size: 10px; margin-bottom: 2px; }
           .footer-text { font-size: 10px; margin-top: 4px; }
         </style>
       </head>
       <body>
-        <div class="center header-title">NES HOUSE COLD BREW</div>
-        <div class="center header-sub">Jl. Sudirman No 61 AB, Pematang Siantar</div>
-        <div class="center header-sub">IG: @nes bar | Telp: 0821-6418-7865</div>
+        <div class="center header-title">${profile.name}</div>
+        <div class="center header-sub">${profile.address}</div>
+        <div class="center header-sub">Telp: ${profile.phone}</div>
         <div class="divider"></div>
         
         <div style="font-size: 10px; margin-bottom: 5px;">
           <div>Waktu: ${new Date().toLocaleString('id-ID')}</div>
           <div>Meja : ${data.tableName || "Takeaway"}</div>
-          <div>Kasir: ${data.cashierName || "Kasir"}</div>
+          <div>Kasir: ${data.cashierName || localStorage.getItem("username") || "Kasir"}</div>
+          <div>No   : ${data.receipt_no || "AUTO-GEN"}</div>
         </div>
         <div class="divider"></div>
 
@@ -119,7 +149,7 @@ const printViaBrowser = (data: any, size: string) => {
         
         ${data.serviceCharge > 0 ? `
         <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
-          <span>Service (5%)</span>
+          <span>Service</span>
           <span>Rp ${data.serviceCharge.toLocaleString("id-ID")}</span>
         </div>` : ''}
         
@@ -146,16 +176,15 @@ const printViaBrowser = (data: any, size: string) => {
         ` : `
           <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 4px;">
             <span>Metode Bayar</span>
-            <span>${data.paymentMethod}</span>
+            <span>${data.paymentMethod || "NON-TUNAI"}</span>
           </div>
         `}
 
         <div class="divider" style="margin-top: 15px;"></div>
         <div class="center bold footer-text">--- TERIMA KASIH ---</div>
         <div class="center footer-text">Silakan berkunjung kembali</div>
-        <div class="center footer-text" style="margin-top: 8px;">WiFi: NES_GUEST</div>
-        <div class="center footer-text">Pass: neshouse2026</div>
-      </body>
+        <div class="center footer-text" style="margin-top: 8px;">Powered by DISBA POS</div>
+        <div style="height: 40px;"></div> </body>
     </html>
   `;
 

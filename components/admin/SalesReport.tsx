@@ -5,7 +5,6 @@ import autoTable from "jspdf-autotable";
 import { Calendar, FileText, TrendingUp, Award, Zap, Clock } from "lucide-react";
 
 export default function SalesReport() {
-  // Poin 4: Bisa tarik data berdasarkan rentang tanggal
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   
@@ -15,14 +14,19 @@ export default function SalesReport() {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState({ subtotal: 0, service: 0, tax: 0, total: 0, discount: 0 });
 
-  // 1. Fungsi Ambil Data Shift (Realtime Monitor)
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
+  // 1. Fungsi Ambil Data Shift (Realtime Monitor) - DIKUNCI
   const fetchActiveShifts = async () => {
-    const { data } = await supabase.from("shifts").select("*").eq("status", "open");
+    if(!tenantId) return;
+    const { data } = await supabase.from("shifts").select("*").eq("status", "open").eq("tenant_id", tenantId);
     if (data) setActiveShifts(data);
   };
 
-  // 2. Fungsi Utama Ambil Data Laporan (Poin 2 & 4)
+  // 2. Fungsi Utama Ambil Data Laporan - DIKUNCI
   const fetchReportData = useCallback(async () => {
+    if(!tenantId) return;
     setLoading(true);
     const start = `${startDate}T00:00:00`;
     const end = `${endDate}T23:59:59`;
@@ -30,6 +34,7 @@ export default function SalesReport() {
     const { data: trx, error } = await supabase
       .from("transactions")
       .select("*")
+      .eq("tenant_id", tenantId) // 🔥 FILTER OUTLET
       .gte("created_at", start)
       .lte("created_at", end)
       .order("created_at", { ascending: false });
@@ -43,7 +48,6 @@ export default function SalesReport() {
     if (trx) {
       setTransactions(trx);
       
-      // Kalkulasi Ringkasan Finansial
       const totals = trx.reduce((acc, curr) => ({
         subtotal: acc.subtotal + Number(curr.subtotal || 0),
         service: acc.service + Number(curr.service_charge || 0),
@@ -53,7 +57,6 @@ export default function SalesReport() {
       }), { subtotal: 0, service: 0, tax: 0, total: 0, discount: 0 });
       setSummary(totals);
 
-      // Poin 2: Analisis Item Terjual
       const itemMap: any = {};
       trx.forEach(t => {
         const items = typeof t.items === 'string' ? JSON.parse(t.items) : t.items;
@@ -79,7 +82,7 @@ export default function SalesReport() {
       setTopItems(sortedItems);
     }
     setLoading(false);
-  }, [startDate, endDate]);
+  }, [startDate, endDate, tenantId]);
 
   useEffect(() => {
     fetchReportData();
@@ -94,11 +97,10 @@ export default function SalesReport() {
     const pageWidth = doc.internal.pageSize.getWidth();
 
     doc.setFontSize(16);
-    doc.text("NES RESTOBAR AND PREMIUM POOL", pageWidth / 2, 15, { align: "center" });
+    doc.text(`${tenantId || "STORE"} REPORT`, pageWidth / 2, 15, { align: "center" });
     doc.setFontSize(10);
     doc.text(`Sales Intelligence Report: ${startDate} to ${endDate}`, pageWidth / 2, 22, { align: "center" });
     
-    // Financial Table
     autoTable(doc, {
       startY: 30,
       head: [["Financial Summary", "Value (IDR)"]],
@@ -111,30 +113,15 @@ export default function SalesReport() {
       ],
     });
 
-   // 1. Tabel pertama
-autoTable(doc, {
-  startY: 30,
-  head: [["Financial Summary", "Value (IDR)"]],
-  body: [
-    ["Gross Sales", summary.subtotal.toLocaleString()],
-    ["Service Charge", summary.service.toLocaleString()],
-    ["PB1 (Tax)", summary.tax.toLocaleString()],
-    ["Discounts", `(${summary.discount.toLocaleString()})`],
-    ["NET REVENUE", { content: summary.total.toLocaleString(), styles: { fontStyle: 'bold', textColor: [0, 102, 204] } }],
-  ],
-});
+    const finalY = (doc as any).lastAutoTable.finalY;
 
-// 2. Ambil posisi Y terakhir dari tabel sebelumnya
-const finalY = (doc as any).lastAutoTable.finalY;
+    autoTable(doc, {
+      startY: finalY + 10,
+      head: [["Product Name", "Qty Sold", "Total Revenue"]],
+      body: topItems.slice(0, 15).map(i => [i.name, i.qty, i.revenue.toLocaleString()]),
+    });
 
-// 3. Gunakan variabel tersebut untuk tabel kedua
-autoTable(doc, {
-  startY: finalY + 10,
-  head: [["Product Name", "Qty Sold", "Total Revenue"]],
-  body: topItems.slice(0, 15).map(i => [i.name, i.qty, i.revenue.toLocaleString()]),
-});
-
-    doc.save(`NES_Report_${startDate}_${endDate}.pdf`);
+    doc.save(`${tenantId}_Report_${startDate}_${endDate}.pdf`);
   };
 
   return (
@@ -146,7 +133,7 @@ autoTable(doc, {
             <Zap className="text-blue-500" fill="currentColor" />
             Disba <span className="text-blue-500">Intelligence</span>
           </h2>
-          <p className="text-[9px] font-black text-gray-500 tracking-[0.4em] uppercase mt-1">Advanced Sales Analytics & Backoffice</p>
+          <p className="text-[9px] font-black text-gray-500 tracking-[0.4em] uppercase mt-1">Advanced Sales Analytics & Backoffice | {tenantId}</p>
         </div>
         
         <div className="flex flex-wrap gap-4 items-center">
@@ -244,7 +231,7 @@ autoTable(doc, {
           </div>
         </div>
 
-        {/* Poin 2: Top Products Performance */}
+        {/* Top Products Performance */}
         <div className="lg:col-span-4 bg-blue-600/5 border border-blue-500/10 p-10 rounded-[3rem]">
           <h3 className="text-[12px] font-black italic mb-10 tracking-[0.3em] uppercase text-blue-500">Product Performance</h3>
           <div className="space-y-6">
@@ -266,11 +253,6 @@ autoTable(doc, {
           </div>
         </div>
       </div>
-      
-      <footer className="pt-10 border-t border-white/5 flex justify-between items-center opacity-30">
-        <p className="text-[9px] font-black uppercase tracking-[0.5em]">Data Encryption Enabled</p>
-        <p className="text-[9px] font-black uppercase tracking-[0.5em]">NES Backoffice v2.0</p>
-      </footer>
     </div>
   );
 }

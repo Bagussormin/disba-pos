@@ -13,21 +13,24 @@ export default function AdminHome() {
 
   const COLORS = ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
   useEffect(() => {
-    fetchAllDashboardData();
-  }, []);
+    if (tenantId) fetchAllDashboardData();
+  }, [tenantId]);
 
   const fetchAllDashboardData = async () => {
     setLoading(true);
     try {
-      // FIX: Kita ganti dari 'bills' ke 'transactions' sesuai database kita
+      // 1. Data Transaksi (🔥 DIKUNCI PER OUTLET)
       const { data: transactions } = await supabase
         .from("transactions")
         .select("*")
+        .eq("tenant_id", tenantId) // <--- KUNCI KEAMANAN
         .order('created_at', { ascending: true });
       
       if (transactions && transactions.length > 0) {
-        // FIX: Kolom di transaksi kita adalah 'total', bukan 'total_amount'
         const total = transactions.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
         setStats({
           totalSales: total,
@@ -44,8 +47,12 @@ export default function AdminHome() {
         setTrendData(Object.keys(dailyData).map(date => ({ date, total: dailyData[date] })));
       }
 
-      // 2. Data Kategori (Tetap dari menus)
-      const { data: menuData } = await supabase.from("menus").select("category");
+      // 2. Data Kategori (🔥 DIKUNCI PER OUTLET)
+      const { data: menuData } = await supabase
+        .from("menus")
+        .select("category")
+        .eq("tenant_id", tenantId); // <--- KUNCI KEAMANAN
+
       if (menuData) {
         const counts = menuData.reduce((acc: any, curr: any) => {
           acc[curr.category] = (acc[curr.category] || 0) + 1;

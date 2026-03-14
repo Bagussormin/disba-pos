@@ -8,11 +8,11 @@ export default function TableQRManager() {
   const [loading, setLoading] = useState(true);
   const [areas, setAreas] = useState<string[]>([]);
 
-  // 🔒 KUNCI MULTI-OUTLET (DIPERBAIKI: Harus sama persis dengan yang ada di Database)
-  const tenantId = "NES_HOUSE_001";
+  // 🔥 KUNCI MASTER MULTI-OUTLET (Dibuat Dinamis)
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   useEffect(() => {
-    fetchTables();
+    if (tenantId) fetchTables();
   }, [tenantId]);
 
   const fetchTables = async () => {
@@ -20,40 +20,34 @@ export default function TableQRManager() {
     const { data } = await supabase
       .from("tables")
       .select("*")
-      .eq("tenant_id", tenantId) // 🔒 Tarik meja milik NES_HOUSE_001
+      .eq("tenant_id", tenantId) // 🔥 Tarik meja milik outlet ini saja
       .order("name", { ascending: true });
     
     if (data) {
       setTables(data);
-      // Ekstrak nama area unik
       const uniqueAreas = Array.from(new Set(data.map((t) => (t.area || "UNASSIGNED").toUpperCase())));
       setAreas(uniqueAreas as string[]);
     }
     setLoading(false);
   };
 
-  // Grouping meja berdasarkan area dinamis
   const groupedTables = areas.reduce((acc: any, area) => {
     acc[area] = tables.filter(t => (t.area || "UNASSIGNED").toUpperCase() === area);
     return acc;
   }, {});
 
-  // FUNGSI PRINT UNIVERSAL
   const printQR = async (tableId: string, tableName: string) => {
-    // 🌐 URL otomatis mendeteksi domain saat ini (Localhost / Vercel)
     const baseUrl = window.location.origin;
     const qrUrl = `${baseUrl}/menu?tenant=${tenantId}&table=${tableId}`;
 
     try {
-      // Generate QR Code
       const qrImageData = await QRCode.toDataURL(qrUrl, {
         width: 300,
         margin: 2,
         color: { dark: "#000000", light: "#ffffff" }
       });
 
-      // Format nama outlet agar lebih rapi
-      const displayTenantName = tenantId.replace(/_/g, " ");
+      const displayTenantName = tenantId ? tenantId.replace(/_/g, " ") : "STORE";
 
       const printWindow = window.open('', '_blank');
       if (printWindow) {
@@ -84,7 +78,7 @@ export default function TableQRManager() {
     <div className="min-h-screen bg-[#020617] p-6 text-white">
       <div className="mb-8 border-b border-white/10 pb-4">
         <h2 className="text-2xl font-black uppercase italic text-blue-500">QR Manager</h2>
-        <p className="text-xs text-gray-400 font-mono">Outlet: {tenantId} | Server: {window.location.host}</p>
+        <p className="text-xs text-gray-400 font-mono">Outlet: {tenantId || "UNKNOWN"} | Server: {window.location.host}</p>
       </div>
 
       {loading ? (
@@ -92,7 +86,6 @@ export default function TableQRManager() {
            MENGAMBIL DATA MEJA...
         </div>
       ) : tables.length === 0 ? (
-        // Menambahkan pesan jika meja masih kosong
         <div className="text-center p-10 bg-white/5 rounded-2xl border border-white/10">
           <p className="text-gray-400 font-mono text-sm">Tidak ada meja yang ditemukan untuk outlet {tenantId}.</p>
         </div>

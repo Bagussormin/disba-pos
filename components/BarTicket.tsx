@@ -8,6 +8,9 @@ export default function BarTicket({
     (i: any) => i.category === "minuman"
   ) || [];
 
+  // 🔥 MENGAMBIL NAMA OUTLET SECARA DINAMIS
+  const tenantName = typeof window !== "undefined" ? localStorage.getItem("tenant_name") || "STORE" : "STORE";
+
   if (drinkItems.length === 0) return null;
 
   return (
@@ -53,8 +56,8 @@ export default function BarTicket({
       ))}
       
       <div style={{ borderTop: "1px dashed #000", marginTop: "5px" }}></div>
-      <center style={{ fontSize: "10px", marginTop: "5px" }}>
-        DISBA POS - Cabang Terpusat
+      <center style={{ fontSize: "10px", marginTop: "5px", fontWeight: "bold" }}>
+        {tenantName.toUpperCase()}
       </center>
     </div>
   );

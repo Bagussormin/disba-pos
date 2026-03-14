@@ -8,55 +8,86 @@ export default function TableLayout() {
   const [newTableName, setNewTableName] = useState("");
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+
   useEffect(() => {
-    fetchTables();
-  }, []);
+    // Cegah eksekusi jika tidak ada tenant_id (misal: memori terhapus)
+    if (tenantId) {
+      fetchTables();
+    } else {
+      console.error("Akses Ditolak: Tenant ID tidak ditemukan. Harap login ulang.");
+    }
+  }, [tenantId]);
 
   const fetchTables = async () => {
     setLoading(true);
-    const { data } = await supabase.from("tables").select("*").order("name");
+    // 🔥 FILTER 1: Hanya ambil meja milik toko ini
+    const { data } = await supabase
+      .from("tables")
+      .select("*")
+      .eq("tenant_id", tenantId) 
+      .order("name");
+    
     setTables(data || []);
     setLoading(false);
   };
 
   const addTable = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTableName) return;
+    if (!newTableName || !tenantId) return;
     
-    // Meja baru akan diletakkan di posisi 0,0 secara default
+    // 🔥 FILTER 2: Stempel meja baru dengan identitas toko ini
     const { error } = await supabase.from("tables").insert([
-      { name: newTableName.toUpperCase(), status: "available", x_pos: 20, y_pos: 20 }
+      { 
+        name: newTableName.toUpperCase(), 
+        status: "available", 
+        x_pos: 20, 
+        y_pos: 20,
+        tenant_id: tenantId // Wajib diisi!
+      }
     ]);
     
     if (!error) {
       setNewTableName("");
       fetchTables();
+    } else {
+      alert("Gagal menambahkan meja: " + error.message);
     }
   };
 
   const handleDragEnd = async (e: React.DragEvent, id: string) => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !tenantId) return;
 
     const canvasRect = canvasRef.current.getBoundingClientRect();
     
-    // Menghitung koordinat baru (dikurangi setengah lebar meja agar kursor di tengah)
     let newX = e.clientX - canvasRect.left - 48; 
     let newY = e.clientY - canvasRect.top - 48;
 
-    // Batasi agar tidak keluar dari area kanvas
     newX = Math.max(0, Math.min(newX, canvasRect.width - 96));
     newY = Math.max(0, Math.min(newY, canvasRect.height - 96));
 
-    // Update state lokal agar instan di layar
     setTables(prev => prev.map(t => t.id === id ? { ...t, x_pos: newX, y_pos: newY } : t));
 
-    // Simpan permanen ke database
-    await supabase.from("tables").update({ x_pos: newX, y_pos: newY }).eq("id", id);
+    // 🔥 FILTER 3: Amankan proses update posisi
+    await supabase
+      .from("tables")
+      .update({ x_pos: newX, y_pos: newY })
+      .eq("id", id)
+      .eq("tenant_id", tenantId); 
   };
 
   const deleteTable = async (id: string) => {
+    if (!tenantId) return;
+    
     if (confirm("Hapus meja ini?")) {
-      await supabase.from("tables").delete().eq("id", id);
+      // 🔥 FILTER 4: Amankan proses penghapusan
+      await supabase
+        .from("tables")
+        .delete()
+        .eq("id", id)
+        .eq("tenant_id", tenantId); 
+        
       fetchTables();
     }
   };
@@ -78,8 +109,12 @@ export default function TableLayout() {
             className="bg-white/5 border border-white/10 p-3 rounded-xl text-[10px] font-bold text-white uppercase outline-none focus:border-blue-500"
             value={newTableName}
             onChange={(e) => setNewTableName(e.target.value)}
+            disabled={!tenantId} // Matikan input jika tidak ada sesi
           />
-          <button className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-xl font-black text-[9px] transition-all">
+          <button 
+            disabled={!tenantId}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 px-6 py-3 rounded-xl font-black text-[9px] transition-all"
+          >
             TAMBAH
           </button>
         </form>

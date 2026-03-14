@@ -7,17 +7,21 @@ interface Props {
 export const ReceiptThermal = React.forwardRef<HTMLDivElement, Props>(({ data }, ref) => {
   if (!data) return null;
 
+  // Mengambil nama outlet secara dinamis
+  const tenantName = typeof window !== "undefined" ? localStorage.getItem("tenant_name") || "STORE" : "STORE";
+
   const now = new Date();
   const subtotal = data.items?.reduce((sum: number, item: any) => sum + item.qty * item.price, 0) || 0;
   const pb1 = Math.round(subtotal * 0.1);
-  const service = Math.round(subtotal * 0.07); // Service charge 7% sesuai standar restobar
+  const service = Math.round(subtotal * 0.07); // Service charge 7%
   const grandTotal = subtotal + pb1 + service - (data.discount || 0);
 
   return (
     <div ref={ref} className="bg-white text-black p-[2mm] w-[58mm] font-mono text-[10px] leading-tight">
       <div className="text-center mb-2">
-        <b className="text-[12px]">NES RESTOBAR</b>
-        <p className="text-[8px]">PREMIUM POOL & LOUNGE</p>
+        {/* NAMA OUTLET DINAMIS */}
+        <b className="text-[12px]">{tenantName.toUpperCase()}</b>
+        <p className="text-[8px]">Powered by DISBA POS</p>
         <p className="text-[8px]">--------------------------------</p>
       </div>
 
@@ -71,7 +75,7 @@ export const ReceiptThermal = React.forwardRef<HTMLDivElement, Props>(({ data },
 
       <div className="text-center mt-6 uppercase text-[8px]">
         <p>Terima Kasih</p>
-        <p>Follow IG: @nes.restobar</p>
+        <p>Atas Kunjungan Anda</p>
         <div className="h-10"></div> {/* Spasi sobekan kertas */}
       </div>
     </div>

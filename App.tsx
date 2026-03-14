@@ -22,6 +22,7 @@ import TableQRManager from "./components/admin/TableQRManager";
 import SalesReport from "./components/admin/SalesReport"; 
 import TransactionHistory from "./components/admin/TransactionHistory";
 import RecipeManagement from "./components/RecipeManagement"; 
+import HPPCalculator from "./components/admin/HPPCalculator"; // 🔥 IMPORT KALKULATOR HPP BARU
 
 import UserManagement from "./components/admin/UserManagement"; 
 import TableLayout from "./components/admin/TableLayout";       
@@ -30,7 +31,7 @@ import MerchantBank from "./components/admin/MerchantBank";
 import PrinterSettings from "./components/admin/PrinterSettings";
 
 // --- IMPORT KOMPONEN KONTROL FOUNDER ---
-import FounderDashboard from "./components/FounderDashboard";
+import FounderHQ from "./components/admin/FounderHQ"; 
 import ProtocolLock from "./components/ProtocolLock";
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
 
   // --- SAKLAR UTAMA (DIBACA LANGSUNG DARI STORAGE) ---
   const isSystemReady = localStorage.getItem("system_ready") === "true";
+  const activeTenantId = localStorage.getItem("tenant_id") || "UNKNOWN_TENANT";
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -57,12 +59,12 @@ export default function App() {
     setIsLicenseActive(licenseStatus);
 
     if (isAdminAuth) {
-      setUser({ username: "Supreme Admin", role: "admin" });
+      setUser({ username: savedUser || "Supreme Admin", role: "admin" });
     } else if (savedRole && savedUser) {
       setUser({ username: savedUser, role: savedRole });
     }
 
-    // Auto-lock expired
+    // Auto-lock expired 
     const expiryDate = new Date("2027-03-03");
     if (new Date() > expiryDate) {
       setIsLicenseActive(false);
@@ -81,9 +83,8 @@ export default function App() {
 
   const handleLoginSuccess = (role: string) => {
     const savedUsername = localStorage.getItem("username") || "User";
-    localStorage.setItem("tenant_id", "NES_HOUSE_001");
-    localStorage.setItem("tenant_name", "NES House Cold Brew");
-
+    
+    // Tenant ID sudah diset di Login.tsx / AdminLogin.tsx, jadi kita tidak hardcode lagi di sini.
     setUser({ username: savedUsername, role: role });
     
     // Arahkan Admin ke jalurnya sendiri
@@ -100,7 +101,8 @@ export default function App() {
     localStorage.removeItem("role");
     localStorage.removeItem("username");
     localStorage.removeItem("is_admin");
-    localStorage.removeItem("tenant_id");
+    localStorage.removeItem("tenant_id"); // Hancurkan KTP Digital saat keluar
+    localStorage.removeItem("tenant_name");
 
     setUser(null);
     window.location.href = "/login"; 
@@ -113,7 +115,7 @@ export default function App() {
     : currentPath;
 
   // 1. Prioritas Tertinggi: Kontrol Founder & Lisensi
-  if (normalizedPath === "/founder-console") return <FounderDashboard />;
+  if (normalizedPath === "/founder-hq" || normalizedPath === "/founder-console") return <FounderHQ />;
   if (!isLicenseActive) return <ProtocolLock />;
 
   // -------------------------------------------------------------
@@ -121,8 +123,6 @@ export default function App() {
   // Supaya HP tamu yang memori (localStorage)-nya kosong tidak diblokir
   // -------------------------------------------------------------
   if (normalizedPath.startsWith("/menu")) {
-    // Biarkan kosong tanpa parameter tableId="unknown".
-    // Komponen CustomerMenu sudah cukup pintar membaca ?table=26 dari URL
     return <CustomerMenu />;
   }
 
@@ -143,6 +143,7 @@ export default function App() {
         {normalizedPath === "/admin/qr" && <TableQRManager />}
         {normalizedPath === "/admin/menu" && <MenuMaster />}
         {normalizedPath === "/admin/recipes" && <RecipeManagement />}
+        {normalizedPath === "/admin/hpp-calculator" && <HPPCalculator />} {/* 🔥 JALUR FITUR HPP BARU */}
         {normalizedPath === "/admin/inventory" && <InventoryApp />}
         {normalizedPath === "/admin/reports" && <SalesReport />} 
         {normalizedPath === "/admin/history" && <TransactionHistory />} 
@@ -165,11 +166,11 @@ export default function App() {
   // 6. DASHBOARD UTAMA (Untuk Kasir & Waiter)
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans italic">
-      <div className="p-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex justify-between items-center shadow-xl not-italic">
+      <div className="p-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex justify-between items-center shadow-xl not-italic relative z-50">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
           <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80 text-cyan-400">
-              {localStorage.getItem("tenant_name") || "NES HOUSE COLD BREW"}
+              TENANT_ID: {activeTenantId}
           </span>
           <span className="text-[10px] font-medium text-gray-500">|</span>
           <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80">
@@ -184,7 +185,7 @@ export default function App() {
         </button>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 relative z-10">
         {user.role === "kasir" && <KasirHome />}
         {user.role === "waiter" && <WaiterApp />}
       </div>

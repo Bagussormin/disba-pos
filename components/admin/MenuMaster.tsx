@@ -8,7 +8,7 @@ interface MenuItem {
   price: number | string;
   category: string;
   image_url: string;
-  tenant_id?: string; // Menandakan milik outlet mana
+  tenant_id?: string; 
 }
 
 interface Category {
@@ -24,9 +24,8 @@ export default function MenuMaster() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
 
-  // --- KUNCI MULTI-OUTLET ---
-  // Mengambil ID Outlet dari user yang sedang login
-  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE"; 
+  // 🔥 KUNCI MASTER MULTI-OUTLET (Aman dari Next.js Error)
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   const [formData, setFormData] = useState<MenuItem>({
     id: null,
@@ -41,8 +40,10 @@ export default function MenuMaster() {
   const [newCatName, setNewCatName] = useState("");
 
   useEffect(() => {
-    fetchMenus();
-    fetchCategories();
+    if (tenantId) {
+      fetchMenus();
+      fetchCategories();
+    }
   }, [tenantId]);
 
   // --- DATA FETCHING DENGAN FILTER TENANT ---
@@ -76,7 +77,7 @@ export default function MenuMaster() {
 
   // --- HANDLERS DENGAN INJEKSI TENANT ---
   const handleAddCategory = async () => {
-    if (!newCatName) return;
+    if (!newCatName || !tenantId) return;
     const { error } = await supabase
       .from("categories")
       .insert([{ 
@@ -91,6 +92,7 @@ export default function MenuMaster() {
   };
 
   const deleteCategory = async (id: number) => {
+    if (!tenantId) return;
     if (confirm("Hapus kategori ini?")) {
       await supabase
         .from("categories")
@@ -113,6 +115,7 @@ export default function MenuMaster() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!tenantId) return alert("Sesi tidak valid. Harap login ulang.");
     setLoading(true);
 
     let finalImageUrl = formData.image_url;
@@ -141,6 +144,7 @@ export default function MenuMaster() {
   };
 
   const handleDeleteMenu = async (id: number) => {
+    if (!tenantId) return;
     if (confirm("Hapus menu ini?")) {
       await supabase.from("products").delete().eq("id", id).eq("tenant_id", tenantId);
       fetchMenus();
@@ -160,7 +164,7 @@ export default function MenuMaster() {
     setPreviewUrl(null);
   };
 
-  // --- UI RENDER TAMPILAN (Sama persis dengan sebelumnya) ---
+  // --- UI RENDER TAMPILAN ---
   return (
     <div className="p-6 space-y-6 animate-in fade-in duration-500 text-white bg-[#020617] min-h-screen italic uppercase font-sans">
       
@@ -168,13 +172,13 @@ export default function MenuMaster() {
       <div className="flex justify-between items-center bg-black/40 p-4 rounded-2xl border border-white/5 shadow-lg">
         <div>
           <h1 className="text-2xl font-black text-blue-500 tracking-tighter">MENU_MASTER</h1>
-          <p className="text-[10px] text-gray-500 font-bold tracking-widest">Outlet: {tenantId}</p>
+          <p className="text-[10px] text-gray-500 font-bold tracking-widest">Outlet: {tenantId || "MEMUAT..."}</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setIsCatModalOpen(true)} className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all border border-white/10">
+          <button onClick={() => setIsCatModalOpen(true)} disabled={!tenantId} className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all border border-white/10">
             <Tag size={14} /> Kategori
           </button>
-          <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20">
+          <button onClick={() => setIsModalOpen(true)} disabled={!tenantId} className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20">
             <Plus size={14} /> Tambah Menu
           </button>
         </div>
@@ -220,6 +224,11 @@ export default function MenuMaster() {
               </div>
             </div>
           ))}
+          {menus.length === 0 && (
+            <div className="col-span-full py-10 text-center text-gray-500 text-sm">
+              Belum ada menu di outlet ini.
+            </div>
+          )}
         </div>
       )}
 
@@ -276,7 +285,7 @@ export default function MenuMaster() {
               </div>
 
               {/* SUBMIT */}
-              <button disabled={loading} type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl text-xs flex justify-center items-center gap-2 mt-4 transition-all">
+              <button disabled={loading} type="submit" className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white font-black py-4 rounded-xl text-xs flex justify-center items-center gap-2 mt-4 transition-all">
                 {loading ? <Loader2 className="animate-spin" size={16} /> : "SIMPAN MENU"}
               </button>
             </form>

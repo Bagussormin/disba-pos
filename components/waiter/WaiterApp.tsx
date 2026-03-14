@@ -9,12 +9,18 @@ export default function WaiterApp() {
   const handleLogOut = () => {
     if (window.confirm("KELUAR DARI SESI WAITER?")) {
       // Menghapus sesi spesifik tanpa merusak 'system_ready'
-      localStorage.removeItem("role");
-      localStorage.removeItem("username");
-      localStorage.removeItem("is_admin");
-      
-      // Paksa ke halaman login staff
-      window.location.href = "/login";
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("role");
+        localStorage.removeItem("username");
+        localStorage.removeItem("is_admin");
+        
+        // 🔥 TAMBAHAN: Hapus Identitas Toko agar bersih saat dipakai orang lain
+        localStorage.removeItem("tenant_id");
+        localStorage.removeItem("printer_ip"); 
+        
+        // Paksa ke halaman login staff
+        window.location.href = "/login";
+      }
     }
   };
 

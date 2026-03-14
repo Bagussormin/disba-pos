@@ -1,11 +1,17 @@
+import React from "react";
+
 export default function ReceiptPreview({ isOpen, data, onClose, onPrint }: any) {
   if (!isOpen || !data) return null;
+
+  // Mengambil nama outlet secara dinamis dari localStorage
+  const tenantName = typeof window !== "undefined" ? localStorage.getItem("tenant_name") || "STORE" : "STORE";
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
       <div className="bg-white text-black p-6 rounded-lg shadow-2xl w-full max-w-sm font-mono text-[11px]">
         <div className="text-center mb-4">
-          <h2 className="font-bold text-sm uppercase">NES CAFE & RESTO</h2>
+          {/* NAMA OUTLET DINAMIS */}
+          <h2 className="font-bold text-sm uppercase">{tenantName}</h2>
           <p>SISTEM KASIR DISBA POS</p>
           <p>--------------------------------</p>
         </div>

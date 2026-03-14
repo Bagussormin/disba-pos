@@ -14,8 +14,8 @@ export default function WaiterOrder({ billId, onBack }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tableName, setTableName] = useState("");
 
-  // 🔒 KUNCI MULTI-OUTLET
-  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
+  // 🔒 KUNCI MULTI-OUTLET (Aman dari Next.js Error)
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "NES_HOUSE_001" : "NES_HOUSE_001";
 
   useEffect(() => {
     const initializeData = async () => {
@@ -96,9 +96,12 @@ export default function WaiterOrder({ billId, onBack }: Props) {
     });
   };
 
+  // 🔥 PERBAIKAN PRINTER DINAMIS
   const sendToPrinter = async (newItems: CartItem[]) => {
     try {
-      await fetch(`http://192.168.1.24:4000/print-order`, {
+      const targetIp = typeof window !== "undefined" ? localStorage.getItem("printer_ip") || "127.0.0.1" : "127.0.0.1";
+      
+      await fetch(`http://${targetIp}:4000/print-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

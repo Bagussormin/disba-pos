@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase"; // Sesuaikan path config supabase Anda
+import { supabase } from "../../lib/supabase"; 
 import { UserPlus, Trash2, ShieldCheck, User, Lock, Loader2 } from "lucide-react";
 
 export default function UserManagement() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // 🔥 KUNCI MASTER MULTI-OUTLET
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   // Form State
   const [formData, setFormData] = useState({
@@ -16,21 +19,35 @@ export default function UserManagement() {
   });
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (tenantId) fetchUsers();
+  }, [tenantId]);
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+    // 🔥 FILTER: Hanya ambil staff milik toko ini
+    const { data } = await supabase
+      .from("profiles") // PASTIKAN NAMA TABEL BENAR (apakah profiles atau users?)
+      .select("*")
+      .eq("tenant_id", tenantId) 
+      .order("created_at", { ascending: false });
+      
     setUsers(data || []);
     setLoading(false);
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!tenantId) return alert("Sesi tidak valid. Harap login ulang.");
+    
     setSaving(true);
     
-    const { error } = await supabase.from("profiles").insert([formData]);
+    // 🔥 INJEKSI: Paksa user baru menjadi milik toko ini
+    const payload = {
+      ...formData,
+      tenant_id: tenantId 
+    };
+    
+    const { error } = await supabase.from("profiles").insert([payload]);
 
     if (error) {
       alert("Gagal menambah user: " + error.message);
@@ -43,7 +60,12 @@ export default function UserManagement() {
 
   const deleteUser = async (id: string) => {
     if (confirm("Hapus user ini?")) {
-      await supabase.from("profiles").delete().eq("id", id);
+      // 🔥 FILTER: Amankan penghapusan
+      await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", id)
+        .eq("tenant_id", tenantId); 
       fetchUsers();
     }
   };
@@ -68,7 +90,7 @@ export default function UserManagement() {
                     required
                     type="text" 
                     placeholder="Contoh: Budi Santoso"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm font-bold focus:border-blue-500 outline-none transition-all"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm font-bold focus:border-blue-500 outline-none transition-all text-white"
                     value={formData.full_name}
                     onChange={(e) => setFormData({...formData, full_name: e.target.value})}
                   />
@@ -82,7 +104,7 @@ export default function UserManagement() {
                     required
                     type="text" 
                     placeholder="budi_pos"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm font-bold focus:border-blue-500 outline-none"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm font-bold focus:border-blue-500 outline-none text-white"
                     value={formData.username}
                     onChange={(e) => setFormData({...formData, username: e.target.value.toLowerCase()})}
                   />
@@ -90,7 +112,7 @@ export default function UserManagement() {
                 <div>
                   <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block">Role</label>
                   <select 
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm font-bold focus:border-blue-500 outline-none appearance-none"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm font-bold focus:border-blue-500 outline-none appearance-none text-white"
                     value={formData.role}
                     onChange={(e) => setFormData({...formData, role: e.target.value})}
                   >
@@ -109,7 +131,7 @@ export default function UserManagement() {
                     required
                     type="password" 
                     placeholder="••••••"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm font-bold focus:border-blue-500 outline-none"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm font-bold focus:border-blue-500 outline-none text-white"
                     value={formData.password}
                     onChange={(e) => setFormData({...formData, password: e.target.value})}
                   />
@@ -117,8 +139,8 @@ export default function UserManagement() {
               </div>
 
               <button 
-                disabled={saving}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-900/20 transition-all uppercase text-xs mt-4 flex justify-center items-center gap-2"
+                disabled={saving || !tenantId}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-900/20 transition-all uppercase text-xs mt-4 flex justify-center items-center gap-2"
               >
                 {saving ? <Loader2 className="animate-spin" size={18} /> : "Simpan User Baru"}
               </button>
@@ -130,7 +152,7 @@ export default function UserManagement() {
         <div className="lg:col-span-2">
           <div className="bg-white/[0.02] border border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
             <div className="p-6 border-b border-white/5 flex justify-between items-center">
-              <h2 className="text-sm font-black uppercase tracking-widest italic">Staff Terdaftar</h2>
+              <h2 className="text-sm font-black uppercase tracking-widest italic text-white">Staff Terdaftar</h2>
               <span className="text-[10px] bg-blue-500/10 text-blue-500 px-3 py-1 rounded-full font-black uppercase">{users.length} Total</span>
             </div>
             
@@ -150,7 +172,7 @@ export default function UserManagement() {
                   ) : users.map((user) => (
                     <tr key={user.id} className="hover:bg-white/[0.02] transition-colors group">
                       <td className="p-6">
-                        <p className="font-black text-sm uppercase">{user.full_name}</p>
+                        <p className="font-black text-sm uppercase text-white">{user.full_name}</p>
                         <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">@{user.username}</p>
                       </td>
                       <td className="p-6">
@@ -161,7 +183,7 @@ export default function UserManagement() {
                           {user.role}
                         </span>
                       </td>
-                      <td className="p-6 font-mono text-xs text-gray-500 group-hover:text-white">
+                      <td className="p-6 font-mono text-xs text-gray-500 group-hover:text-white transition-colors">
                         {user.password.replace(/./g, '*')}
                       </td>
                       <td className="p-6 text-center">
@@ -174,6 +196,9 @@ export default function UserManagement() {
                       </td>
                     </tr>
                   ))}
+                  {users.length === 0 && !loading && (
+                    <tr><td colSpan={4} className="p-10 text-center text-gray-500 italic text-xs">Belum ada data staff.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
