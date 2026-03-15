@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { Printer, MapPin } from "lucide-react";
+import { Printer, MapPin, Plus, Trash2, X, Loader2, QrCode } from "lucide-react";
 import QRCode from "qrcode";
 
 export default function TableQRManager() {
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [areas, setAreas] = useState<string[]>([]);
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET (Dibuat Dinamis)
+  // State untuk registrasi meja baru
+  const [newTableName, setNewTableName] = useState("");
+  const [newAreaName, setNewAreaName] = useState("");
+
+  // 🔥 KUNCI MASTER MULTI-OUTLET (Dinamis & Universal)
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   useEffect(() => {
@@ -17,18 +22,50 @@ export default function TableQRManager() {
 
   const fetchTables = async () => {
     setLoading(true);
+    // Mengambil meja, diurutkan berdasarkan Area lalu Nama Meja
     const { data } = await supabase
       .from("tables")
       .select("*")
-      .eq("tenant_id", tenantId) // 🔥 Tarik meja milik outlet ini saja
+      .eq("tenant_id", tenantId)
+      .order("area", { ascending: true })
       .order("name", { ascending: true });
     
     if (data) {
       setTables(data);
+      // Ambil daftar area unik untuk pengelompokan UI
       const uniqueAreas = Array.from(new Set(data.map((t) => (t.area || "UNASSIGNED").toUpperCase())));
       setAreas(uniqueAreas as string[]);
     }
     setLoading(false);
+  };
+
+  const handleAddTable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTableName || !tenantId) return;
+
+    setLoading(true);
+    const { error } = await supabase.from("tables").insert([{
+      name: newTableName.toUpperCase(),
+      area: newAreaName.toUpperCase() || "REGULER", // Default area jika kosong
+      tenant_id: tenantId
+    }]);
+
+    if (!error) {
+      setNewTableName("");
+      setNewAreaName("");
+      setIsModalOpen(false);
+      fetchTables();
+    } else {
+      alert("Gagal menambah meja. Pastikan struktur tabel 'tables' di Supabase sudah benar (ada kolom 'area').");
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteTable = async (id: string) => {
+    if (confirm("Hapus meja ini? QR Code yang sudah dicetak tidak akan berlaku lagi.")) {
+      await supabase.from("tables").delete().eq("id", id).eq("tenant_id", tenantId);
+      fetchTables();
+    }
   };
 
   const groupedTables = areas.reduce((acc: any, area) => {
@@ -36,31 +73,83 @@ export default function TableQRManager() {
     return acc;
   }, {});
 
+  // =========================================================================
+  // 🔥 FUNGSI PRINT QR SULTAN EDITION (FIX TAMPILAN TIDAK RAPI)
+  // =========================================================================
   const printQR = async (tableId: string, tableName: string) => {
+    // URL yang akan di-scan pelanggan (Dinonaktifkan rutenya di sistem nanti)
     const baseUrl = window.location.origin;
     const qrUrl = `${baseUrl}/menu?tenant=${tenantId}&table=${tableId}`;
 
     try {
+      // Generate QR dengan kualitas tinggi
       const qrImageData = await QRCode.toDataURL(qrUrl, {
-        width: 300,
+        width: 600, // Resolusi tinggi untuk cetakan tajam
         margin: 2,
         color: { dark: "#000000", light: "#ffffff" }
       });
 
-      const displayTenantName = tenantId ? tenantId.replace(/_/g, " ") : "STORE";
-
+      const displayTenantName = tenantId ? tenantId.replace(/_/g, " ") : "DISBA POS";
       const printWindow = window.open('', '_blank');
+      
       if (printWindow) {
         printWindow.document.write(`
           <html>
-            <body style="text-align:center;font-family:sans-serif;padding:30px;">
-              <div style="border:5px solid black;padding:20px;border-radius:20px;display:inline-block;min-width:300px;">
-                <h2 style="margin:0;font-size:24px;text-transform:uppercase;">${displayTenantName}</h2>
-                <p style="font-size:12px;color:#3b82f6;font-weight:bold;margin-top:5px;">SCAN TO ORDER</p>
-                <img src="${qrImageData}" style="margin:15px 0;" />
-                <div style="background:black;color:white;padding:10px;border-radius:10px;">
-                  <h1 style="font-size:32px;margin:0;">${tableName}</h1>
+            <head>
+              <title>Print QR - ${tableName}</title>
+              <style>
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap');
+                @page { size: auto; margin: 0mm; }
+                body { 
+                  font-family: 'Inter', sans-serif; display: flex; justify-content: center; 
+                  align-items: center; min-height: 100vh; background: #f0f0f0; margin: 0; 
+                  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                }
+                .card { 
+                  width: 350px; background: white; border: 12px solid #000; border-radius: 40px; 
+                  padding: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); text-align: center;
+                  position: relative; overflow: hidden;
+                }
+                .card::before {
+                  content: ''; position: absolute; top: -50px; left: -50px; width: 100px; height: 100px;
+                  background: #000; border-radius: 50%; opacity: 0.05;
+                }
+                .logo { font-size: 22px; font-weight: 900; letter-spacing: -1.5px; margin-bottom: 5px; color: #000; text-transform: uppercase; font-style: italic;}
+                .tagline { font-size: 10px; font-weight: 700; color: #3b82f6; letter-spacing: 3px; margin-bottom: 35px; text-transform: uppercase; }
+                .qr-box { 
+                  border: 3px solid #f0f0f0; padding: 15px; border-radius: 30px; 
+                  display: inline-block; margin-bottom: 35px; background: #fff;
+                  box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+                }
+                .qr-img { width: 220px; display: block; }
+                .table-box { background: #000; color: white; padding: 18px; border-radius: 20px; margin-bottom: 20px; }
+                .table-name { font-size: 36px; font-weight: 900; margin: 0; font-style: italic; letter-spacing: -1px; text-transform: uppercase;}
+                .steps { font-size: 11px; color: #555; margin-top: 25px; font-weight: 700; line-height: 1.6; text-align: left; background: #f9f9f9; padding: 15px; border-radius: 15px;}
+                .step-item { display: flex; gap: 8px; margin-bottom: 5px; }
+                .step-num { color: #3b82f6; font-weight: 900; }
+                .footer { font-size: 9px; font-weight: 700; color: #bbb; margin-top: 35px; text-transform: uppercase; letter-spacing: 1px; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="logo">${displayTenantName}</div>
+                <div class="tagline">Pesan Digital Lebih Cepat</div>
+                
+                <div class="qr-box">
+                  <img src="${qrImageData}" class="qr-img" />
                 </div>
+                
+                <div class="table-box">
+                  <h1 class="table-name">${tableName}</h1>
+                </div>
+                
+                <div class="steps">
+                  <div class="step-item"><span class="step-num">1.</span> <span>SCAN QR CODE MENGGUNAKAN KAMERA HP</span></div>
+                  <div class="step-item"><span class="step-num">2.</span> <span>PILIH MENU FAVORIT ANDA</span></div>
+                  <div class="step-item"><span class="step-num">3.</span> <span>KONFIRMASI PESANAN</span></div>
+                </div>
+                
+                <div class="footer">Powered by DISBA POS SYSTEM</div>
               </div>
               <script>window.onload = function() { window.print(); window.close(); }</script>
             </body>
@@ -69,50 +158,117 @@ export default function TableQRManager() {
         printWindow.document.close();
       }
     } catch (err) {
-      console.error("Gagal generate QR:", err);
       alert("Gagal membuat QR Code");
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] p-6 text-white">
-      <div className="mb-8 border-b border-white/10 pb-4">
-        <h2 className="text-2xl font-black uppercase italic text-blue-500">QR Manager</h2>
-        <p className="text-xs text-gray-400 font-mono">Outlet: {tenantId || "UNKNOWN"} | Server: {window.location.host}</p>
+    <div className="min-h-screen bg-[#020617] p-6 text-white italic font-sans uppercase">
+      
+      {/* HEADER SECTION (Gahar Edition) */}
+      <div className="mb-12 flex justify-between items-center bg-black/40 border border-white/5 p-5 rounded-[2rem] shadow-2xl">
+        <div>
+          <h2 className="text-3xl font-black text-blue-500 tracking-tighter flex items-center gap-3">
+             <QrCode size={30} className="text-white"/> QR_COMMANDER_
+          </h2>
+          <p className="text-[10px] text-gray-500 font-mono tracking-[0.3em] mt-1">OUTLET: {tenantId || "???"} | STATUS: ONLINE</p>
+        </div>
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="bg-blue-600 hover:bg-blue-500 text-white px-7 py-3.5 rounded-2xl text-xs font-black flex items-center gap-2.5 shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+        >
+          <Plus size={18} /> REGISTRASI_MEJA
+        </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-3 text-blue-500 font-bold animate-pulse text-xs">
-           MENGAMBIL DATA MEJA...
+        <div className="flex items-center gap-3 text-blue-500 font-black animate-pulse text-xs bg-white/5 p-4 rounded-xl border border-white/5 w-fit">
+          <Loader2 className="animate-spin" size={16} /> MENGAMBIL_DATA_MEJA...
         </div>
       ) : tables.length === 0 ? (
-        <div className="text-center p-10 bg-white/5 rounded-2xl border border-white/10">
-          <p className="text-gray-400 font-mono text-sm">Tidak ada meja yang ditemukan untuk outlet {tenantId}.</p>
+        <div className="text-center py-24 bg-white/5 rounded-[2.5rem] border-2 border-dashed border-white/10 flex flex-col items-center gap-4">
+           <MapPin size={40} className="opacity-20 text-gray-500" />
+          <p className="text-gray-500 text-xs font-bold tracking-widest">BELUM ADA MEJA YANG TERDAFTAR DI OUTLET INI</p>
         </div>
       ) : (
-        areas.map((area) => groupedTables[area] && groupedTables[area].length > 0 && (
-          <div key={area} className="mb-10 animate-in fade-in duration-500">
-            <div className="flex items-center gap-3 mb-4">
-              <MapPin size={16} className="text-blue-500" />
-              <h3 className="text-sm font-black tracking-[0.3em] uppercase">{area}</h3>
-              <div className="h-[1px] flex-1 bg-white/5"></div>
+        areas.map((area) => (
+          <div key={area} className="mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* AREA TITLE */}
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-10 h-10 bg-blue-600/10 rounded-full flex items-center justify-center border border-blue-500/20 text-blue-500">
+                  <MapPin size={18} />
+              </div>
+              <h3 className="text-sm font-black tracking-[0.5em]">{area}</h3>
+              <div className="h-[1px] flex-1 bg-gradient-to-r from-white/10 to-transparent"></div>
             </div>
             
-            <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-3">
+            {/* MEJA GRID */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-5">
               {groupedTables[area].map((table: any) => (
-                <div key={table.id} className="bg-white/5 border border-white/5 p-3 rounded-2xl group hover:border-blue-500/50 transition-all">
-                  <div className="text-[10px] font-black mb-2 truncate opacity-70" title={table.name}>{table.name}</div>
-                  <button
-                    onClick={() => printQR(table.id, table.name)}
-                    className="w-full bg-white text-black py-2 rounded-lg font-black text-[9px] uppercase flex items-center justify-center gap-1 hover:bg-blue-600 hover:text-white transition-all"
+                <div key={table.id} className="bg-white/5 border border-white/5 p-5 rounded-[2.5rem] group hover:border-blue-500/50 transition-all relative flex flex-col items-center">
+                  {/* DELETE BUTTON (Hover Only) */}
+                  <button 
+                    onClick={() => handleDeleteTable(table.id)}
+                    className="absolute -top-2 -right-2 bg-red-600 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-xl z-10 hover:bg-red-500 active:scale-90"
                   >
-                    <Printer size={12} /> PRINT
+                    <X size={12} />
                   </button>
+                  
+                  {/* TABLE INFO */}
+                  <div className="flex-1 flex flex-col items-center w-full">
+                    <div className="w-14 h-14 bg-black/60 rounded-full flex justify-center items-center mb-4 border-2 border-dashed border-white/10 group-hover:border-blue-500/30 group-hover:bg-blue-600/10 transition-all">
+                        <span className="text-xl font-black text-white group-hover:text-blue-400 font-mono tracking-tighter">
+                            {table.name.substring(0,3)}
+                        </span>
+                    </div>
+                    <div className="text-[10px] font-black mb-5 truncate text-gray-400 w-full text-center tracking-tighter group-hover:text-white transition-colors">
+                      {table.name}
+                    </div>
+                    {/* PRINT BUTTON */}
+                    <button
+                      onClick={() => printQR(table.id, table.name)}
+                      className="w-full bg-white text-black py-3 rounded-xl font-black text-[9px] flex items-center justify-center gap-2 hover:bg-blue-600 hover:text-white transition-all shadow-md active:scale-95"
+                    >
+                      <Printer size={15} /> PRINT_QR
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         ))
+      )}
+
+      {/* MODAL: REGISTRASI MEJA BARU (Sultan Style) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-lg flex justify-center items-center z-[5000] p-4">
+          <div className="bg-[#0b1120] p-10 rounded-[3rem] w-full max-w-md border border-white/10 shadow-2xl relative animate-in zoom-in duration-300">
+            <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-gray-600 hover:text-white transition-colors"><X size={28}/></button>
+            
+            <div className="flex items-center gap-3 mb-10">
+                <QrCode size={24} className="text-blue-500"/>
+                <h2 className="text-2xl font-black text-white tracking-tighter">REGISTRASI_MEJA_BARU_</h2>
+            </div>
+            
+            <form onSubmit={handleAddTable} className="space-y-6">
+              <div>
+                <label className="text-[9px] font-black text-gray-600 mb-2 block tracking-[0.2em]">NAMA / NO MEJA (CONTOH: MEJA 01)</label>
+                <input required autoFocus className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-blue-500 text-sm font-bold uppercase placeholder:text-gray-800" placeholder="INPUT NAMA MEJA..." value={newTableName} onChange={e => setNewTableName(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-gray-600 mb-2 block tracking-[0.2em]">AREA LOKASI (CONTOH: VIP / OUTDOOR)</label>
+                <input className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-blue-500 text-sm font-bold uppercase placeholder:text-gray-800" placeholder="INPUT NAMA AREA..." value={newAreaName} onChange={e => setNewAreaName(e.target.value)} />
+              </div>
+              
+              <div className="pt-4 flex gap-3">
+                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-white/5 py-5 rounded-2xl font-black text-xs uppercase text-gray-400 hover:bg-white/10">BATAL</button>
+                 <button disabled={loading} type="submit" className="flex-[2] bg-blue-600 py-5 rounded-2xl font-black text-xs uppercase shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+                   {loading ? <Loader2 className="animate-spin mx-auto"/> : "KONFIRMASI_MEJA"}
+                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { ChevronLeft, Plus, Minus, Send, ShoppingCart, Coffee, Utensils, Grid } from "lucide-react";
+import { ChevronLeft, Plus, Minus, Send, ShoppingCart, Coffee, Utensils, Grid, Loader2, User } from "lucide-react";
 
 type Product = { id: number; name: string; price: number; category: string };
-type CartItem = { product: Product; quantity: number; isLocked: boolean };
-type Props = { billId: number; onBack: () => void };
+type CartItem = { 
+  product: Product; 
+  quantity: number; 
+  isLocked: boolean; 
+  source?: 'customer' | 'waiter';
+  status?: string;
+};
+type Props = { orderId: string; onBack: () => void }; // Diubah dari billId ke orderId
 
-export default function WaiterOrder({ billId, onBack }: Props) {
+export default function WaiterOrder({ orderId, onBack }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [category, setCategory] = useState("ALL");
@@ -14,61 +20,72 @@ export default function WaiterOrder({ billId, onBack }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tableName, setTableName] = useState("");
 
-  // 🔒 KUNCI MULTI-OUTLET (Aman dari Next.js Error)
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "NES_HOUSE_001" : "NES_HOUSE_001";
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "DISBA_OUTLET_001" : "DISBA_OUTLET_001";
 
   useEffect(() => {
+    if (!orderId) return;
+
     const initializeData = async () => {
       await fetchProducts();
       await fetchExistingOrder();
-      await fetchTableName();
+      await fetchOrderDetails();
     };
     initializeData();
-  }, [billId]);
 
-  const fetchTableName = async () => {
+    // 🔥 REAL-TIME LISTENER: Pantau jika ada tambahan dari HP Tamu
+    const channel = supabase.channel(`sync-order-${orderId}`)
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'order_items', filter: `order_id=eq.${orderId}` }, 
+        () => fetchExistingOrder()
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [orderId]);
+
+  const fetchOrderDetails = async () => {
+    // Ambil info meja melalui tabel orders
     const { data } = await supabase
-      .from("open_bills")
-      .select("tables(name)")
-      .eq("id", billId)
-      .eq("tenant_id", tenantId) // 🔥 Keamanan ekstra
+      .from("orders")
+      .select(`tables(name)`)
+      .eq("id", orderId)
       .single();
-    if (data) setTableName((data as any).tables.name);
+    if (data) setTableName((data as any).tables?.name || "??");
   };
 
   const fetchProducts = async () => {
-    // 🔥 UBAH DARI "products" KE "menus" DAN TAMBAH FILTER TENANT
     const { data } = await supabase
-      .from("menus")
+      .from("menus") 
       .select("*")
       .eq("tenant_id", tenantId)
-      .eq("is_available", true) // 🔥 Sembunyikan menu kosong
+      .eq("is_available", true)
       .order("name");
 
     if (data) {
       setProducts(data);
-      const uniqueCategories = ["ALL", ...new Set(data.map((p: Product) => p.category))];
-      setCategories(uniqueCategories);
+      const uniqueCategories = ["ALL", ...new Set(data.map((p: any) => p.category))];
+      setCategories(uniqueCategories as string[]);
     }
   };
 
   const fetchExistingOrder = async () => {
-    // 🔥 SINKRONKAN JUGA PENGAMBILAN DATA EXISTING KE TABEL "menus"
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("order_items")
-      .select(`quantity, menus (id, name, price, category)`) // 🔥 Ubah products jadi menus
-      .eq("bill_id", billId)
-      .eq("tenant_id", tenantId); // 🔥 Keamanan ekstra
+      .select(`quantity, notes, menus (id, name, price, category)`)
+      .eq("order_id", orderId);
 
-    if (error) return;
-
-    if (data && data.length > 0) {
-      const existingCart = data.map((item: any) => ({
-        product: item.menus, // 🔥 Ubah item.products jadi item.menus
+    if (data) {
+      const existingItems = data.map((item: any) => ({
+        product: item.menus, 
         quantity: item.quantity,
-        isLocked: true 
+        isLocked: true,
+        source: item.notes === "QR_ORDER" ? 'customer' : 'waiter'
       }));
-      setCart(existingCart);
+      setCart(prev => {
+        // Gabungkan item yang baru di-input waiter (isLocked: false) dengan data DB
+        const unsentItems = prev.filter(i => !i.isLocked);
+        return [...existingItems.filter(i => i.product != null), ...unsentItems];
+      });
     }
   };
 
@@ -80,7 +97,7 @@ export default function WaiterOrder({ billId, onBack }: Props) {
         newCart[existingIdx].quantity += 1;
         return newCart;
       }
-      return [...prev, { product, quantity: 1, isLocked: false }];
+      return [...prev, { product, quantity: 1, isLocked: false, source: 'waiter' }];
     });
   };
 
@@ -96,61 +113,28 @@ export default function WaiterOrder({ billId, onBack }: Props) {
     });
   };
 
-  // 🔥 PERBAIKAN PRINTER DINAMIS
-  const sendToPrinter = async (newItems: CartItem[]) => {
-    try {
-      const targetIp = typeof window !== "undefined" ? localStorage.getItem("printer_ip") || "127.0.0.1" : "127.0.0.1";
-      
-      await fetch(`http://${targetIp}:4000/print-order`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          table_name: tableName || billId.toString(),
-          items: newItems.map(item => ({
-            name: item.product.name,
-            qty: item.quantity,
-            category: item.product.category
-          }))
-        })
-      });
-    } catch (err) {
-      console.warn("Printer offline");
-    }
-  };
-
   const handleSubmitOrder = async () => {
     const newItems = cart.filter(item => !item.isLocked);
     if (newItems.length === 0) return;
 
     setIsSubmitting(true);
     try {
-      const orderData = newItems.map((item) => ({
-        bill_id: billId,
-        tenant_id: tenantId, // 🔥 Wajib ikut dikirim agar tidak ditolak Supabase
-        product_id: item.product.id,
+      const orderItemsData = newItems.map((item) => ({
+        order_id: orderId,
+        tenant_id: tenantId,
+        menu_id: item.product.id,
         quantity: item.quantity,
-        price_at_order: item.product.price,
-        status: "pending"
+        price_at_time: item.product.price,
+        notes: "WAITER_ORDER"
       }));
 
-      const { error } = await supabase
-        .from("order_items")
-        .insert(orderData)
-        .select();
-      
+      const { error } = await supabase.from("order_items").insert(orderItemsData);
       if (error) throw error;
-
-      // Jalankan printer
-      sendToPrinter(newItems).catch(e => console.log(e));
       
-      // LOGIKA UTAMA: Ubah semua item di keranjang menjadi 'locked' (sudah diproses)
-      // Ini akan membuat tampilan keranjang langsung terupdate tanpa pindah halaman
-      setCart(prev => prev.map(item => ({ ...item, isLocked: true })));
-      
-      alert("Pesanan Berhasil Dikirim!");
-
+      alert("Order Berhasil Ditambahkan!");
+      await fetchExistingOrder();
     } catch (err: any) {
-      alert("Gagal mengirim: " + err.message);
+      alert("Gagal: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -159,126 +143,115 @@ export default function WaiterOrder({ billId, onBack }: Props) {
   const filteredProducts = category === "ALL" ? products : products.filter(p => p.category === category);
   const totalLocked = cart.filter(i => i.isLocked).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const totalNew = cart.filter(i => !i.isLocked).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-  const grandTotal = totalLocked + totalNew;
 
   return (
     <div className="fixed inset-0 z-[9999] bg-[#020617] flex flex-col font-sans italic text-white overflow-hidden uppercase">
-      <header className="h-12 border-b border-white/5 flex items-center justify-between px-4 bg-black/20 backdrop-blur-md">
-        <button onClick={onBack} className="flex items-center gap-1 text-blue-500 font-black text-[9px] tracking-tighter hover:bg-white/5 px-2 py-1 rounded-lg transition-all">
-          <ChevronLeft size={14} /> FLOOR
+      {/* HEADER */}
+      <header className="h-14 border-b border-white/5 flex items-center justify-between px-4 bg-black/40 backdrop-blur-xl">
+        <button onClick={onBack} className="flex items-center gap-2 text-blue-500 font-black text-xs tracking-tighter active:scale-90 transition-all">
+          <ChevronLeft size={20} /> FLOOR_MAP
         </button>
         <div className="text-right">
-          <p className="text-[9px] font-black text-white leading-none tracking-widest">MEJA_{tableName || "..."}</p>
+          <p className="text-[10px] font-black text-blue-500 leading-none tracking-[0.2em]">TABLE_{tableName}</p>
+          <p className="text-[7px] text-gray-500 font-mono mt-1">ID: {orderId.substring(0,8)}</p>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <nav className="w-20 border-r border-white/5 flex flex-col py-2 gap-1 px-1 overflow-y-auto no-scrollbar bg-black/40">
+        {/* SIDEBAR KATEGORI */}
+        <nav className="w-20 border-r border-white/5 flex flex-col py-3 gap-2 px-2 overflow-y-auto no-scrollbar bg-black/20">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setCategory(cat)}
-              className={`py-3 rounded-xl text-[8px] font-black transition-all flex flex-col items-center gap-1 border ${
-                category === cat ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/[0.02] border-white/5 text-gray-500 opacity-60"
+              className={`py-4 rounded-2xl text-[8px] font-black transition-all flex flex-col items-center gap-2 border ${
+                category === cat ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/[0.03] border-white/5 text-gray-500"
               }`}
             >
-              {cat === 'ALL' ? <Grid size={12}/> : cat === 'FOOD' || cat === 'NUSANTARA' ? <Utensils size={12}/> : <Coffee size={12}/>}
-              <span className="truncate w-full text-center px-1 uppercase">{cat}</span>
+              {cat === 'ALL' ? <Grid size={16}/> : <Coffee size={16}/>}
+              <span className="truncate w-full text-center px-1">{cat}</span>
             </button>
           ))}
         </nav>
 
-        <main className="flex-1 p-2 overflow-y-auto no-scrollbar bg-gradient-to-b from-transparent to-black/20">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 pb-16">
+        {/* MAIN AREA MENU */}
+        <main className="flex-1 p-3 overflow-y-auto no-scrollbar">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pb-20">
             {filteredProducts.map((product) => (
               <button
                 key={product.id}
                 onClick={() => addToCart(product)}
-                className="group relative bg-white/[0.03] border border-white/5 rounded-2xl p-2 flex flex-col items-center justify-center gap-1 hover:bg-blue-600/10 hover:border-blue-500/50 transition-all active:scale-95 h-20 shadow-lg overflow-hidden"
+                className="bg-white/[0.03] border border-white/5 rounded-[2rem] p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-500 transition-all active:scale-95 shadow-xl h-28"
               >
-                <span className="text-[8px] font-black text-center leading-tight tracking-tight text-white group-hover:text-blue-400 px-1 line-clamp-2 uppercase">
-                  {product.name}
-                </span>
-                <span className="text-blue-500 text-[8px] font-black mt-1 bg-blue-500/10 px-1.5 py-0.5 rounded-md">
-                  {(product.price/1000).toFixed(0)}K
+                <span className="text-[9px] font-black text-center leading-tight line-clamp-2">{product.name}</span>
+                <span className="text-blue-500 text-[10px] font-black font-mono">
+                  {(product.price).toLocaleString()}
                 </span>
               </button>
             ))}
           </div>
         </main>
 
-        <aside className="w-64 bg-black/60 border-l border-white/10 flex flex-col shadow-2xl backdrop-blur-xl">
-          <div className="p-3 border-b border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-gray-500">
-                <ShoppingCart size={14} />
-                <h3 className="text-[8px] font-black tracking-widest uppercase">ORDER_LIST</h3>
-            </div>
-            <span className="bg-blue-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded">
-              {cart.filter(i => !i.isLocked).length} NEW
+        {/* ASIDE ORDER LIST */}
+        <aside className="w-72 bg-black/60 border-l border-white/5 flex flex-col backdrop-blur-2xl">
+          <div className="p-4 border-b border-white/5 flex justify-between items-center">
+            <h3 className="text-[10px] font-black tracking-widest text-gray-500">CURRENT_BILL</h3>
+            <span className="bg-blue-600/20 text-blue-400 text-[8px] font-black px-2 py-1 rounded-full border border-blue-500/20">
+              {cart.length} ITEMS
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar">
             {cart.map((item, idx) => (
-              <div key={idx} className={`p-2.5 rounded-2xl border transition-all ${
-                item.isLocked ? "bg-black/40 border-white/5 opacity-40 italic" : "bg-white/[0.05] border-blue-500/20 shadow-lg shadow-blue-500/5"
+              <div key={idx} className={`p-3 rounded-3xl border transition-all ${
+                item.isLocked ? "bg-white/[0.02] border-white/5 opacity-60" : "bg-blue-600/10 border-blue-500/30 shadow-lg"
               }`}>
-                <div className="flex justify-between items-start mb-1.5">
-                  <div className="flex-1 pr-2">
-                    <p className="text-[8px] font-black text-white leading-tight truncate uppercase">{item.product.name}</p>
-                    <p className={`text-[7px] font-bold mt-1 uppercase tracking-tighter ${item.isLocked ? "text-gray-500" : "text-blue-400"}`}>
-                      {item.isLocked ? "SUDAH_DIPROSES" : "SIAP_KIRIM"}
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5 mb-1">
+                        {item.source === 'customer' && <User size={10} className="text-orange-500" />}
+                        <p className="text-[9px] font-black truncate uppercase">{item.product.name}</p>
+                    </div>
+                    <p className={`text-[7px] font-black ${item.isLocked ? "text-gray-600" : "text-blue-500"}`}>
+                      {item.isLocked ? "PRINTED / ON PROCESS" : "WAITING TO SEND"}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {!item.isLocked ? (
-                      <>
-                        <button onClick={() => removeFromCart(idx)} className="w-6 h-6 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">
-                          <Minus size={12} />
-                        </button>
-                        <span className="text-[10px] font-black w-3 text-center">{item.quantity}</span>
-                        <button onClick={() => addToCart(item.product)} className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center hover:bg-blue-500 hover:text-white transition-all">
-                          <Plus size={12} />
-                        </button>
-                      </>
-                    ) : (
-                      <span className="text-[10px] font-black opacity-60">x{item.quantity}</span>
+                  <div className="flex items-center gap-2">
+                    {!item.isLocked && (
+                      <button onClick={() => removeFromCart(idx)} className="w-7 h-7 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center"><Minus size={14}/></button>
+                    )}
+                    <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
+                    {!item.isLocked && (
+                      <button onClick={() => addToCart(item.product)} className="w-7 h-7 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center"><Plus size={14}/></button>
                     )}
                   </div>
-                </div>
-                <div className="flex justify-between items-center border-t border-white/5 pt-1.5">
-                  <span className="text-[7px] text-gray-600 font-black">PRICE_TOTAL</span>
-                  <span className="text-[8px] font-black text-blue-400 italic font-mono">
-                    RP {(item.product.price * item.quantity).toLocaleString()}
-                  </span>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="p-4 bg-black/40 border-t border-white/10 space-y-1.5">
-            <div className="flex justify-between items-center opacity-40">
-              <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Terkirim</span>
-              <span className="text-[9px] font-bold text-white font-mono uppercase">RP {totalLocked.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">Tambahan</span>
-              <span className="text-[9px] font-bold text-blue-400 font-mono uppercase">+ RP {totalNew.toLocaleString()}</span>
-            </div>
-            <div className="border-t border-white/5 my-1"></div>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[8px] font-black text-white tracking-widest uppercase">Grand_Total</span>
-              <span className="text-sm font-black text-green-400 italic font-mono">
-                RP {grandTotal.toLocaleString()}
-              </span>
+          <div className="p-5 bg-black/40 border-t border-white/10 space-y-4">
+            <div className="space-y-2">
+                <div className="flex justify-between text-[8px] font-black text-gray-600">
+                    <span>SUBTOTAL_EXISTING</span>
+                    <span>RP {totalLocked.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-[8px] font-black text-blue-500">
+                    <span>NEW_ADDITIONS</span>
+                    <span>+ RP {totalNew.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-base font-black italic text-white border-t border-white/5 pt-2">
+                    <span>TOTAL</span>
+                    <span className="text-blue-500">RP {(totalLocked + totalNew).toLocaleString()}</span>
+                </div>
             </div>
             
             <button 
               onClick={handleSubmitOrder}
               disabled={cart.filter(i => !i.isLocked).length === 0 || isSubmitting}
-              className="w-full bg-blue-600 disabled:bg-gray-800 disabled:text-gray-600 text-white font-black py-4 rounded-2xl text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 text-white font-black py-4 rounded-2xl text-[10px] tracking-[0.2em] shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2"
             >
-              {isSubmitting ? "SENDING..." : <>SEND_ORDER <Send size={12} /></>}
+              {isSubmitting ? <Loader2 className="animate-spin" size={16}/> : "SEND_TO_KITCHEN"}
             </button>
           </div>
         </aside>

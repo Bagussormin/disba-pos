@@ -17,12 +17,13 @@ export default function InventoryApp() {
   const [selectedMenu, setSelectedMenu] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
 
-  const [newMaterial, setNewMaterial] = useState({ name: "", unit: "PCS", stock: "0", min: "10" });
+  // 🔥 UPGRADE: Menambahkan `stock` (stok awal) dan `price` (harga modal) ke state
+  const [newMaterial, setNewMaterial] = useState({ name: "", unit: "GRAM", stock: "0", min: "10", price: "0" });
+  
   const [recipeUsage, setRecipeUsage] = useState("");
   const [selectedInvId, setSelectedInvId] = useState("");
   const [stockAmount, setStockAmount] = useState("");
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   useEffect(() => { 
@@ -32,7 +33,6 @@ export default function InventoryApp() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 🔥 FILTER PER OUTLET
       const { data: menus } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category");
       const { data: inv } = await supabase.from("inventory").select("*").eq("tenant_id", tenantId).order("item_name");
       const { data: rec } = await supabase.from("recipes").select(`*, inventory:inventory_id (item_name, unit)`).eq("tenant_id", tenantId);
@@ -51,17 +51,26 @@ export default function InventoryApp() {
   };
 
   const handleAddMaterial = async () => {
-    if (!newMaterial.name || !newMaterial.unit || !tenantId) return alert("LENGKAPI DATA!");
+    if (!newMaterial.name || !newMaterial.unit || !tenantId) return alert("LENGKAPI DATA NAMA DAN SATUAN!");
     
-    // 🔥 INJEKSI IDENTITAS OUTLET
+    // 🔥 UPGRADE: Memasukkan current_stock dan cost_price ke database saat membuat material baru
     const { error } = await supabase.from("inventory").insert([{ 
       item_name: newMaterial.name.toUpperCase(), 
       unit: newMaterial.unit.toUpperCase(), 
       current_stock: parseFloat(newMaterial.stock) || 0,
       min_stock: parseFloat(newMaterial.min) || 10,
+      cost_price: parseFloat(newMaterial.price) || 0, // Harga modal dimasukkan ke database
       tenant_id: tenantId
     }]);
-    if (!error) { setModalType(null); loadData(); }
+    
+    if (!error) { 
+      setModalType(null); 
+      // Reset form
+      setNewMaterial({ name: "", unit: "GRAM", stock: "0", min: "10", price: "0" });
+      loadData(); 
+    } else {
+      alert("Gagal menambahkan material: " + error.message);
+    }
   };
 
   const handleStockIn = async () => {
@@ -69,7 +78,6 @@ export default function InventoryApp() {
     const amount = parseFloat(stockAmount);
     if (isNaN(amount) || amount <= 0) return;
     
-    // 🔥 AMANKAN PROSES UPDATE
     const { error } = await supabase.from("inventory")
       .update({ current_stock: (selectedItem.current_stock || 0) + amount })
       .eq("id", selectedItem.id)
@@ -81,7 +89,6 @@ export default function InventoryApp() {
   const saveRecipe = async () => {
     if (!selectedInvId || !recipeUsage || !tenantId) return;
     
-    // 🔥 INJEKSI IDENTITAS OUTLET KE RESEP
     const { error } = await supabase.from("recipes").insert([{ 
       menu_id: selectedMenu.id, 
       inventory_id: selectedInvId, 
@@ -130,7 +137,7 @@ export default function InventoryApp() {
         </div>
       </header>
 
-      {/* QUICK STATS (Detail Tambahan) */}
+      {/* QUICK STATS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white/5 border border-white/5 p-4 rounded-2xl">
           <p className="text-[8px] font-black text-slate-500 uppercase mb-1">Total Resource</p>
@@ -145,7 +152,7 @@ export default function InventoryApp() {
           <p className="text-xl font-mono font-bold text-blue-500">{recipes.length}</p>
         </div>
         <div className="bg-white/5 border border-white/5 p-4 rounded-2xl flex flex-col justify-end">
-           <button onClick={() => setModalType("ADD_MATERIAL")} disabled={!tenantId} className="w-full py-2 bg-white/10 hover:bg-blue-600 disabled:opacity-50 text-[10px] font-black rounded-lg transition-all flex items-center justify-center gap-2">
+           <button onClick={() => setModalType("ADD_MATERIAL")} disabled={!tenantId} className="w-full py-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600 disabled:opacity-50 text-[10px] font-black rounded-lg transition-all flex items-center justify-center gap-2 border border-blue-500/30">
              <Plus size={14}/> NEW_ITEM
            </button>
         </div>
@@ -159,7 +166,7 @@ export default function InventoryApp() {
       ) : (
         <div className="space-y-6">
           
-          {/* VIEW: DETAIL PRODUK (Grid with Recipes) */}
+          {/* VIEW: DETAIL PRODUK */}
           {activeSubMenu === "DETAIL PRODUK" && (
             <div className="grid gap-10">
               {Object.keys(groupedMenu).map((category) => (
@@ -197,7 +204,7 @@ export default function InventoryApp() {
             </div>
           )}
 
-          {/* VIEW: STOK (The clean cards) */}
+          {/* VIEW: STOK */}
           {activeSubMenu === "STOK" && (
             <div className="space-y-6">
               <div className="relative max-w-md">
@@ -210,10 +217,15 @@ export default function InventoryApp() {
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
                 {filteredItems.map((item) => (
-                  <div key={item.id} className={`p-5 rounded-[2rem] border transition-all flex flex-col items-center text-center ${
+                  <div key={item.id} className={`p-5 rounded-[2rem] border transition-all flex flex-col items-center text-center relative ${
                       item.current_stock <= (item.min_stock || 10) ? 'bg-red-500/5 border-red-500/20' : 'bg-white/[0.03] border-white/10'
                   }`}>
-                    <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
+                    {/* Tampilan Harga Modal di pojok kanan atas */}
+                    <div className="absolute top-3 right-3 text-[7px] text-blue-400 font-mono font-bold bg-blue-500/10 px-1 rounded">
+                      Rp {item.cost_price || 0}
+                    </div>
+
+                    <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center mb-4 mt-2">
                       <Package className={item.current_stock <= (item.min_stock || 10) ? 'text-red-500' : 'text-blue-500'} size={20}/>
                     </div>
                     <span className="text-[7px] font-black text-slate-500 italic mb-1 tracking-widest">{item.unit}</span>
@@ -234,7 +246,7 @@ export default function InventoryApp() {
             </div>
           )}
 
-          {/* VIEW: PERGERAKAN (The Detail Table) */}
+          {/* VIEW: PERGERAKAN */}
           {activeSubMenu === "PERGERAKAN" && (
             <div className="bg-white/5 border border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
               <table className="w-full text-left">
@@ -242,7 +254,7 @@ export default function InventoryApp() {
                   <tr className="bg-white/5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
                     <th className="px-8 py-5">Resource_Detail</th>
                     <th className="px-8 py-5">Volume</th>
-                    <th className="px-8 py-5">Status_Protocol</th>
+                    <th className="px-8 py-5">Cost Price</th>
                     <th className="px-8 py-5 text-right">Action</th>
                   </tr>
                 </thead>
@@ -265,11 +277,7 @@ export default function InventoryApp() {
                         </div>
                       </td>
                       <td className="px-8 py-4">
-                        <span className={`px-3 py-1 rounded-full text-[8px] font-black tracking-widest ${
-                          item.current_stock <= (item.min_stock || 10) ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'
-                        }`}>
-                          {item.current_stock <= (item.min_stock || 10) ? 'CRITICAL_LOW' : 'OPTIMAL'}
-                        </span>
+                         <span className="font-mono text-[10px] text-blue-400">Rp {(item.cost_price || 0).toLocaleString('id-ID')}</span>
                       </td>
                       <td className="px-8 py-4 text-right">
                          <button onClick={() => deleteInventory(item.id)} className="p-2 text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
@@ -295,12 +303,28 @@ export default function InventoryApp() {
             </div>
 
             <div className="space-y-4">
+              {/* 🔥 FORM ADD MATERIAL YANG SUDAH DI-UPGRADE */}
               {modalType === "ADD_MATERIAL" && (
                 <>
-                  <input type="text" placeholder="MATERIAL_NAME" onChange={(e) => setNewMaterial({...newMaterial, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono text-white outline-none focus:border-blue-500" />
+                  <div>
+                    <label className="text-[8px] font-bold text-gray-500 tracking-widest uppercase ml-1">Nama Barang</label>
+                    <input type="text" placeholder="Misal: Biji Kopi / Susu" onChange={(e) => setNewMaterial({...newMaterial, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono text-white outline-none focus:border-blue-500" />
+                  </div>
+                  
                   <div className="grid grid-cols-2 gap-3">
-                    <input type="text" placeholder="UNIT (PCS)" onChange={(e) => setNewMaterial({...newMaterial, unit: e.target.value})} className="bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono" />
-                    <input type="number" placeholder="MIN_STOCK" onChange={(e) => setNewMaterial({...newMaterial, min: e.target.value})} className="bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono" />
+                    <div>
+                      <label className="text-[8px] font-bold text-gray-500 tracking-widest uppercase ml-1">Satuan</label>
+                      <input type="text" placeholder="GRAM / ML" onChange={(e) => setNewMaterial({...newMaterial, unit: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono outline-none focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] font-bold text-gray-500 tracking-widest uppercase ml-1">Stok Awal</label>
+                      <input type="number" placeholder="Misal: 1000" onChange={(e) => setNewMaterial({...newMaterial, stock: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono outline-none focus:border-blue-500" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[8px] font-bold text-gray-500 tracking-widest uppercase ml-1">Total Harga Beli (Rp)</label>
+                    <input type="number" placeholder="Misal: 150000" onChange={(e) => setNewMaterial({...newMaterial, price: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono outline-none focus:border-blue-500" />
                   </div>
                 </>
               )}
@@ -324,7 +348,7 @@ export default function InventoryApp() {
               )}
 
               <button onClick={modalType === "ADD_MATERIAL" ? handleAddMaterial : modalType === "STOCK_IN" ? handleStockIn : saveRecipe}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-2xl font-black text-[11px] text-white tracking-[0.2em] shadow-xl shadow-blue-600/20 transition-all uppercase">
+                className="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-2xl font-black text-[11px] text-white tracking-[0.2em] shadow-xl shadow-blue-600/20 transition-all uppercase mt-2">
                 Confirm_Update
               </button>
             </div>

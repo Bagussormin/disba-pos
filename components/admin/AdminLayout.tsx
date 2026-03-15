@@ -1,5 +1,5 @@
 import React from "react";
-import { LogOut } from "lucide-react"; // Pastikan Lucide icon diimport
+import { LogOut } from "lucide-react"; 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const activePath = window.location.pathname;
@@ -14,6 +14,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "QR TABLES", path: "/admin/qr", icon: "📱" },
     { name: "INVENTORY", path: "/admin/inventory", icon: "📦" },
     { name: "RESEP & PAKET", path: "/admin/recipes", icon: "⚖️" },
+    
+    // 🔥 INI DIA TOMBOL KALKULATOR HPP-NYA
+    { name: "KALKULATOR HPP", path: "/admin/hpp-calculator", icon: "🧮" }, 
+    
     { name: "HISTORY", path: "/admin/history", icon: "📜" },
     { name: "SHIFT", path: "/admin/shifts", icon: "⏰" },
   ];
@@ -25,6 +29,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "PROFIL OUTLET", path: "/admin/settings/profile", icon: "🏪" },
     { name: "MERCHANT BANK", path: "/admin/settings/payments", icon: "💳" },
     { name: "PRINTER", path: "/admin/settings/printer", icon: "🖨️" },
+    { name: "RECEIPT BUILDER", path: "/admin/settings/receipt", icon: "🧾" }, 
   ];
 
   // 🔥 FUNGSI LOGOUT AMAN

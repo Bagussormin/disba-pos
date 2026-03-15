@@ -1,4 +1,4 @@
-import { supabase } from "./supabase"; // Pastikan path ini benar untuk file supabase.ts Anda
+import { supabase } from "./supabase"; 
 
 export const executePrint = async (receiptData: any) => {
   // 1. BACA SETTINGAN PRINTER DARI MEMORI KASIR/ADMIN
@@ -9,32 +9,16 @@ export const executePrint = async (receiptData: any) => {
 
   console.log(`Memulai cetak via: ${printerType.toUpperCase()} untuk Outlet: ${tenantId}`);
 
-  // 2. MENGAMBIL PROFIL OUTLET DARI DATABASE (Dinamis)
-  let outletProfile = {
-    name: tenantId.replace(/_/g, " "),
-    address: "Alamat belum diatur",
-    phone: "Telp belum diatur",
-    email: "Email belum diatur"
+  // 2. MENGGUNAKAN DATA DINAMIS DARI KASIR (Receipt Builder)
+  // Jika karena suatu alasan data dari Kasir kosong, kita berikan fallback default.
+  const profile = {
+    name: receiptData.storeName || tenantId.replace(/_/g, " "),
+    address: receiptData.address || "Alamat Outlet Anda",
+    contact: receiptData.contact || "Telp: -",
+    social: receiptData.socialMedia || "",
+    wifi: receiptData.wifiInfo || "",
+    footer: receiptData.footerText || "Terima Kasih atas kunjungannya!"
   };
-
-  try {
-    const { data } = await supabase
-      .from("outlet_profile")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    if (data) {
-      outletProfile = {
-        name: data.name || outletProfile.name,
-        address: data.address || outletProfile.address,
-        phone: data.phone || outletProfile.phone,
-        email: data.email || outletProfile.email
-      };
-    }
-  } catch (err) {
-    console.error("Gagal mengambil profil outlet untuk struk:", err);
-  }
 
   // 3. LOGIKA PERCABANGAN PRINTER
   if (printerType === "lan") {
@@ -50,17 +34,17 @@ export const executePrint = async (receiptData: any) => {
         body: JSON.stringify({
           target_ip: lanIp, 
           
-          // 🔥 DATA HEADER DINAMIS DARI DATABASE
-          header_title: outletProfile.name.toUpperCase(),
-          header_address: outletProfile.address,
-          header_contact: `Telp: ${outletProfile.phone} | Email: ${outletProfile.email}`,
-          footer_thanks: "--- TERIMA KASIH ---",
-          footer_message: "Silakan berkunjung kembali",
-          footer_wifi: "Powered by DISBA POS", // Diganti menjadi promosi sistem Anda
+          // 🔥 DATA HEADER DINAMIS 
+          header_title: profile.name.toUpperCase(),
+          header_address: profile.address,
+          header_contact: profile.contact,
+          footer_thanks: profile.footer,
+          footer_message: profile.social,
+          footer_wifi: profile.wifi, 
           
           payment_method: receiptData.paymentMethod, 
           table_name: receiptData.tableName || "Takeaway",
-          cashier: receiptData.cashierName || localStorage.getItem("username"),
+          cashier: receiptData.cashierName || localStorage.getItem("username") || "KASIR",
           items_list: receiptData.items,
           subtotal: receiptData.subtotal,
           discount_total: receiptData.discount || 0,
@@ -68,7 +52,8 @@ export const executePrint = async (receiptData: any) => {
           tax_total: receiptData.tax || 0,
           total: receiptData.total,
           paid: receiptData.paid || 0,
-          change: receiptData.change || 0
+          change: receiptData.change || 0,
+          receipt_no: receiptData.orderId // 🔥 Mengirimkan Nomor Transaksi Keren
         })
       });
       
@@ -83,11 +68,11 @@ export const executePrint = async (receiptData: any) => {
 
   } else {
     // KONDISI B: BROWSER PRINT (Default / Fallback)
-    printViaBrowser(receiptData, paperSize, outletProfile);
+    printViaBrowser(receiptData, paperSize, profile);
   }
 };
 
-// Fungsi Print Browser Biasa (Dinamis)
+// Fungsi Print Browser Biasa (Dinamis dengan Receipt Builder)
 const printViaBrowser = (data: any, size: string, profile: any) => {
   const width = size === "58mm" ? "58mm" : "80mm";
   const iframe = document.createElement("iframe");
@@ -121,14 +106,14 @@ const printViaBrowser = (data: any, size: string, profile: any) => {
       <body>
         <div class="center header-title">${profile.name}</div>
         <div class="center header-sub">${profile.address}</div>
-        <div class="center header-sub">Telp: ${profile.phone}</div>
+        <div class="center header-sub">${profile.contact}</div>
         <div class="divider"></div>
         
         <div style="font-size: 10px; margin-bottom: 5px;">
           <div>Waktu: ${new Date().toLocaleString('id-ID')}</div>
           <div>Meja : ${data.tableName || "Takeaway"}</div>
-          <div>Kasir: ${data.cashierName || localStorage.getItem("username") || "Kasir"}</div>
-          <div>No   : ${data.receipt_no || "AUTO-GEN"}</div>
+          <div>Kasir: ${data.cashier || localStorage.getItem("username") || "Kasir"}</div>
+          <div>No   : ${data.orderId || "AUTO-GEN"}</div> 
         </div>
         <div class="divider"></div>
 
@@ -181,10 +166,14 @@ const printViaBrowser = (data: any, size: string, profile: any) => {
         `}
 
         <div class="divider" style="margin-top: 15px;"></div>
-        <div class="center bold footer-text">--- TERIMA KASIH ---</div>
-        <div class="center footer-text">Silakan berkunjung kembali</div>
+        
+        ${profile.wifi ? `<div class="center bold footer-text bg-gray-100" style="padding: 2px;">${profile.wifi}</div>` : ''}
+        ${profile.social ? `<div class="center footer-text">${profile.social}</div>` : ''}
+        
+        <div class="center bold footer-text" style="margin-top: 8px;">${profile.footer}</div>
         <div class="center footer-text" style="margin-top: 8px;">Powered by DISBA POS</div>
-        <div style="height: 40px;"></div> </body>
+        <div style="height: 40px;"></div> 
+      </body>
     </html>
   `;
 

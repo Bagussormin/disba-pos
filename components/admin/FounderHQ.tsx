@@ -15,9 +15,12 @@ export default function FounderHQ() {
   const [formData, setFormData] = useState({
     tenant_id: "",
     business_name: "",
-    subscription_end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0], // Default +1 Bulan
+    subscription_end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
     is_active: true
   });
+
+  // State untuk melacak apakah sedang Edit atau Tambah Baru
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     fetchTenants();
@@ -43,17 +46,16 @@ export default function FounderHQ() {
       business_name: formData.business_name,
       subscription_end: formData.subscription_end,
       is_active: formData.is_active,
-      features: { pos: true, inventory: true, hr: true } // Default Full Features
+      features: { pos: true, inventory: true, hr: true }
     };
 
-    // Upsert (Insert jika baru, Update jika tenant_id sudah ada)
     const { error } = await supabase.from("tenants").upsert(payload);
 
     if (error) {
       alert("Gagal menyimpan klien: " + error.message);
     } else {
       setIsModalOpen(false);
-      setFormData({ tenant_id: "", business_name: "", subscription_end: "", is_active: true });
+      resetForm();
       fetchTenants();
       alert("Operasi Klien Berhasil!");
     }
@@ -67,15 +69,39 @@ export default function FounderHQ() {
     }
   };
 
-  // 🔥 FITUR DEWA: MASUK SEBAGAI KLIEN TANPA PASSWORD
   const impersonateTenant = (tenantId: string) => {
     if (confirm(`Masuk ke Backoffice sebagai ${tenantId}?`)) {
       localStorage.setItem("is_admin", "true");
       localStorage.setItem("role", "admin");
       localStorage.setItem("username", "FOUNDER_OVERRIDE");
       localStorage.setItem("tenant_id", tenantId);
-      window.location.href = "/admin/dashboard"; // Arahkan ke Backoffice klien
+      
+      // 🔥 INI OBATNYA: Beri tahu App.tsx bahwa sistem sudah diizinkan lewat
+      localStorage.setItem("system_ready", "true"); 
+      
+      window.location.href = "/admin/dashboard"; 
     }
+  };
+
+  const resetForm = () => {
+    setFormData({ 
+      tenant_id: "", 
+      business_name: "", 
+      subscription_end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0], 
+      is_active: true 
+    });
+    setIsEditMode(false);
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (tenant: any) => {
+    setFormData({ ...tenant });
+    setIsEditMode(true);
+    setIsModalOpen(true);
   };
 
   const filteredTenants = tenants.filter(t => 
@@ -116,10 +142,7 @@ export default function FounderHQ() {
               />
             </div>
             <button 
-              onClick={() => {
-                setFormData({ tenant_id: "", business_name: "", subscription_end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0], is_active: true });
-                setIsModalOpen(true);
-              }}
+              onClick={openAddModal}
               className="bg-blue-600 hover:bg-blue-500 text-white px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-[0_0_20px_rgba(37,99,235,0.4)] flex items-center gap-2 transition-all active:scale-95"
             >
               <Plus size={16} /> Deploy Klien Baru
@@ -158,7 +181,7 @@ export default function FounderHQ() {
             const isExpired = new Date(tenant.subscription_end) < new Date();
             
             return (
-              <div key={tenant.tenant_id} className={`bg-white/[0.02] border p-6 rounded-[2.5rem] transition-all relative group ${
+              <div key={tenant.tenant_id} className={`bg-white/[0.02] border p-6 rounded-[2.5rem] transition-all relative group flex flex-col justify-between ${
                 !tenant.is_active ? 'border-red-500/20 grayscale opacity-70' : isExpired ? 'border-orange-500/30' : 'border-white/5 hover:border-blue-500/30'
               }`}>
                 
@@ -171,20 +194,22 @@ export default function FounderHQ() {
                   </span>
                 </div>
 
-                <div className="mb-6">
-                  <h3 className="text-xl font-black uppercase italic tracking-tighter w-3/4 truncate">{tenant.business_name}</h3>
-                  <p className="text-[10px] text-blue-400 font-mono mt-1 font-bold">{tenant.tenant_id}</p>
-                </div>
-
-                <div className="space-y-3 mb-8">
-                  <div className="flex items-center gap-3 text-xs font-black text-gray-400">
-                    <CalendarClock size={14} className={isExpired ? "text-orange-500" : ""} /> 
-                    <span className="uppercase">Exp: {new Date(tenant.subscription_end).toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'})}</span>
+                <div>
+                  <div className="mb-6 pr-20">
+                    <h3 className="text-xl font-black uppercase italic tracking-tighter truncate">{tenant.business_name}</h3>
+                    <p className="text-[10px] text-blue-400 font-mono mt-1 font-bold">{tenant.tenant_id}</p>
                   </div>
-                  <div className="flex gap-2">
-                     <span className="text-[8px] px-2 py-1 bg-white/5 rounded text-gray-500 font-bold uppercase">POS</span>
-                     <span className="text-[8px] px-2 py-1 bg-white/5 rounded text-gray-500 font-bold uppercase">INV</span>
-                     <span className="text-[8px] px-2 py-1 bg-white/5 rounded text-gray-500 font-bold uppercase">QR</span>
+
+                  <div className="space-y-3 mb-8">
+                    <div className="flex items-center gap-3 text-xs font-black text-gray-400">
+                      <CalendarClock size={14} className={isExpired ? "text-orange-500" : ""} /> 
+                      <span className="uppercase">Exp: {new Date(tenant.subscription_end).toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'})}</span>
+                    </div>
+                    <div className="flex gap-2">
+                       <span className="text-[8px] px-2 py-1 bg-white/5 rounded text-gray-500 font-bold uppercase">POS</span>
+                       <span className="text-[8px] px-2 py-1 bg-white/5 rounded text-gray-500 font-bold uppercase">INV</span>
+                       <span className="text-[8px] px-2 py-1 bg-white/5 rounded text-gray-500 font-bold uppercase">QR</span>
+                    </div>
                   </div>
                 </div>
 
@@ -197,17 +222,14 @@ export default function FounderHQ() {
                     <LogIn size={14} /> Kunjungi Backoffice
                   </button>
                   <button 
-                    onClick={() => {
-                      setFormData({ ...tenant });
-                      setIsModalOpen(true);
-                    }}
-                    className="w-12 bg-white/5 hover:bg-white/10 flex justify-center items-center rounded-xl text-gray-400 hover:text-white transition-all"
+                    onClick={() => openEditModal(tenant)}
+                    className="w-12 h-auto bg-white/5 hover:bg-white/10 flex justify-center items-center rounded-xl text-gray-400 hover:text-white transition-all"
                   >
                     <MoreVertical size={16} />
                   </button>
                   <button 
                     onClick={() => toggleStatus(tenant.tenant_id, tenant.is_active)}
-                    className={`w-12 flex justify-center items-center rounded-xl transition-all ${
+                    className={`w-12 h-auto flex justify-center items-center rounded-xl transition-all ${
                       tenant.is_active ? 'bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white' : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white'
                     }`}
                   >
@@ -218,7 +240,6 @@ export default function FounderHQ() {
             );
           })}
         </div>
-
       </div>
 
       {/* MODAL TAMBAH/EDIT KLIEN */}
@@ -228,7 +249,7 @@ export default function FounderHQ() {
             <button onClick={() => setIsModalOpen(false)} className="absolute top-6 right-6 text-gray-500 hover:text-white"><X size={20}/></button>
             
             <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-8 text-blue-500">
-              {formData.tenant_id ? "Edit_Klien" : "Deploy_Klien_Baru"}
+              {isEditMode ? "Edit_Klien" : "Deploy_Klien_Baru"}
             </h2>
 
             <form onSubmit={handleSaveTenant} className="space-y-5">
@@ -236,8 +257,8 @@ export default function FounderHQ() {
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Tenant ID (Kunci Database)</label>
                 <input 
                   type="text" required placeholder="E.G. ALPHA_001"
-                  disabled={!!formData.tenant_id} // Tidak boleh diedit jika sudah ada
-                  className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-sm font-bold text-white uppercase outline-none focus:border-blue-500 disabled:opacity-50"
+                  disabled={isEditMode} 
+                  className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-sm font-bold text-white uppercase outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   value={formData.tenant_id}
                   onChange={e => setFormData({...formData, tenant_id: e.target.value})}
                 />

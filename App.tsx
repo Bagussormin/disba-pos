@@ -22,13 +22,16 @@ import TableQRManager from "./components/admin/TableQRManager";
 import SalesReport from "./components/admin/SalesReport"; 
 import TransactionHistory from "./components/admin/TransactionHistory";
 import RecipeManagement from "./components/RecipeManagement"; 
-import HPPCalculator from "./components/admin/HPPCalculator"; // 🔥 IMPORT KALKULATOR HPP BARU
+import HPPCalculator from "./components/admin/HPPCalculator"; 
 
 import UserManagement from "./components/admin/UserManagement"; 
 import TableLayout from "./components/admin/TableLayout";       
 import OutletProfile from "./components/admin/OutletProfile";   
 import MerchantBank from "./components/admin/MerchantBank"; 
 import PrinterSettings from "./components/admin/PrinterSettings";
+
+// 🔥 IMPORT RECEIPT BUILDER BARU KITA
+import ReceiptSettings from "./components/admin/ReceiptSettings"; 
 
 // --- IMPORT KOMPONEN KONTROL FOUNDER ---
 import FounderHQ from "./components/admin/FounderHQ"; 
@@ -143,7 +146,7 @@ export default function App() {
         {normalizedPath === "/admin/qr" && <TableQRManager />}
         {normalizedPath === "/admin/menu" && <MenuMaster />}
         {normalizedPath === "/admin/recipes" && <RecipeManagement />}
-        {normalizedPath === "/admin/hpp-calculator" && <HPPCalculator />} {/* 🔥 JALUR FITUR HPP BARU */}
+        {normalizedPath === "/admin/hpp-calculator" && <HPPCalculator />} 
         {normalizedPath === "/admin/inventory" && <InventoryApp />}
         {normalizedPath === "/admin/reports" && <SalesReport />} 
         {normalizedPath === "/admin/history" && <TransactionHistory />} 
@@ -154,6 +157,9 @@ export default function App() {
         {normalizedPath === "/admin/settings/profile" && <OutletProfile />}
         {normalizedPath === "/admin/settings/payments" && <MerchantBank />}
         {normalizedPath === "/admin/settings/printer" && <PrinterSettings />}
+        
+        {/* 🔥 JALUR ROUTING RECEIPT BUILDER */}
+        {normalizedPath === "/admin/settings/receipt" && <ReceiptSettings />}
       </AdminLayout>
     );
   }

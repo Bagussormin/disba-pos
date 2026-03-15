@@ -33,12 +33,14 @@ export default function AdminLogin() {
       localStorage.setItem("username", data.username);
       localStorage.setItem("tenant_id", data.tenant_id); // 🔥 KUNCI MASTER OUTLET MEREKA
 
-      alert(`Selamat Datang di Backoffice, Admin ${data.tenant_id}!`);
-      window.location.href = "/admin/dashboard"; 
+      // 🔥 PERBAIKAN: Beri waktu 100ms agar browser selesai menulis ke localStorage sebelum pindah halaman
+      setTimeout(() => {
+        alert(`Selamat Datang di Backoffice, Admin ${data.tenant_id}!`);
+        window.location.href = "/admin/dashboard"; 
+      }, 100);
 
     } catch (err: any) {
       alert("Terjadi kesalahan sistem: " + err.message);
-    } finally {
       setLoading(false);
     }
   };
