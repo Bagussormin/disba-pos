@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Printer, MapPin, Plus, Trash2, X, Loader2, QrCode } from "lucide-react";
-import QRCode from "qrcode";
 
 export default function TableQRManager() {
   const [tables, setTables] = useState<any[]>([]);
@@ -9,11 +8,9 @@ export default function TableQRManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [areas, setAreas] = useState<string[]>([]);
 
-  // State untuk registrasi meja baru
   const [newTableName, setNewTableName] = useState("");
   const [newAreaName, setNewAreaName] = useState("");
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET (Dinamis & Universal)
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   useEffect(() => {
@@ -22,7 +19,6 @@ export default function TableQRManager() {
 
   const fetchTables = async () => {
     setLoading(true);
-    // Mengambil meja, diurutkan berdasarkan Area lalu Nama Meja
     const { data } = await supabase
       .from("tables")
       .select("*")
@@ -32,7 +28,6 @@ export default function TableQRManager() {
     
     if (data) {
       setTables(data);
-      // Ambil daftar area unik untuk pengelompokan UI
       const uniqueAreas = Array.from(new Set(data.map((t) => (t.area || "UNASSIGNED").toUpperCase())));
       setAreas(uniqueAreas as string[]);
     }
@@ -46,7 +41,7 @@ export default function TableQRManager() {
     setLoading(true);
     const { error } = await supabase.from("tables").insert([{
       name: newTableName.toUpperCase(),
-      area: newAreaName.toUpperCase() || "REGULER", // Default area jika kosong
+      area: newAreaName.toUpperCase() || "REGULER",
       tenant_id: tenantId
     }]);
 
@@ -56,7 +51,7 @@ export default function TableQRManager() {
       setIsModalOpen(false);
       fetchTables();
     } else {
-      alert("Gagal menambah meja. Pastikan struktur tabel 'tables' di Supabase sudah benar (ada kolom 'area').");
+      alert("Gagal menambah meja.");
     }
     setLoading(false);
   };
@@ -74,91 +69,93 @@ export default function TableQRManager() {
   }, {});
 
   // =========================================================================
-  // 🔥 FUNGSI PRINT QR SULTAN EDITION (FIX TAMPILAN TIDAK RAPI)
+  // 🔥 FUNGSI PRINT QR INSTAN (FIX BUG 30 KERTAS KOSONG)
   // =========================================================================
-  const printQR = async (tableId: string, tableName: string) => {
-    // URL yang akan di-scan pelanggan (Dinonaktifkan rutenya di sistem nanti)
+  const printQR = (tableId: string, tableName: string) => {
     const baseUrl = window.location.origin;
     const qrUrl = `${baseUrl}/menu?tenant=${tenantId}&table=${tableId}`;
-
-    try {
-      // Generate QR dengan kualitas tinggi
-      const qrImageData = await QRCode.toDataURL(qrUrl, {
-        width: 600, // Resolusi tinggi untuk cetakan tajam
-        margin: 2,
-        color: { dark: "#000000", light: "#ffffff" }
-      });
-
-      const displayTenantName = tenantId ? tenantId.replace(/_/g, " ") : "DISBA POS";
-      const printWindow = window.open('', '_blank');
-      
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Print QR - ${tableName}</title>
-              <style>
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap');
-                @page { size: auto; margin: 0mm; }
-                body { 
-                  font-family: 'Inter', sans-serif; display: flex; justify-content: center; 
-                  align-items: center; min-height: 100vh; background: #f0f0f0; margin: 0; 
-                  -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                }
-                .card { 
-                  width: 350px; background: white; border: 12px solid #000; border-radius: 40px; 
-                  padding: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); text-align: center;
-                  position: relative; overflow: hidden;
-                }
-                .card::before {
-                  content: ''; position: absolute; top: -50px; left: -50px; width: 100px; height: 100px;
-                  background: #000; border-radius: 50%; opacity: 0.05;
-                }
-                .logo { font-size: 22px; font-weight: 900; letter-spacing: -1.5px; margin-bottom: 5px; color: #000; text-transform: uppercase; font-style: italic;}
-                .tagline { font-size: 10px; font-weight: 700; color: #3b82f6; letter-spacing: 3px; margin-bottom: 35px; text-transform: uppercase; }
-                .qr-box { 
-                  border: 3px solid #f0f0f0; padding: 15px; border-radius: 30px; 
-                  display: inline-block; margin-bottom: 35px; background: #fff;
-                  box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
-                }
-                .qr-img { width: 220px; display: block; }
-                .table-box { background: #000; color: white; padding: 18px; border-radius: 20px; margin-bottom: 20px; }
-                .table-name { font-size: 36px; font-weight: 900; margin: 0; font-style: italic; letter-spacing: -1px; text-transform: uppercase;}
-                .steps { font-size: 11px; color: #555; margin-top: 25px; font-weight: 700; line-height: 1.6; text-align: left; background: #f9f9f9; padding: 15px; border-radius: 15px;}
-                .step-item { display: flex; gap: 8px; margin-bottom: 5px; }
-                .step-num { color: #3b82f6; font-weight: 900; }
-                .footer { font-size: 9px; font-weight: 700; color: #bbb; margin-top: 35px; text-transform: uppercase; letter-spacing: 1px; }
-              </style>
-            </head>
-            <body>
-              <div class="card">
-                <div class="logo">${displayTenantName}</div>
-                <div class="tagline">Pesan Digital Lebih Cepat</div>
-                
-                <div class="qr-box">
-                  <img src="${qrImageData}" class="qr-img" />
-                </div>
-                
-                <div class="table-box">
-                  <h1 class="table-name">${tableName}</h1>
-                </div>
-                
-                <div class="steps">
-                  <div class="step-item"><span class="step-num">1.</span> <span>SCAN QR CODE MENGGUNAKAN KAMERA HP</span></div>
-                  <div class="step-item"><span class="step-num">2.</span> <span>PILIH MENU FAVORIT ANDA</span></div>
-                  <div class="step-item"><span class="step-num">3.</span> <span>KONFIRMASI PESANAN</span></div>
-                </div>
-                
-                <div class="footer">Powered by DISBA POS SYSTEM</div>
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(qrUrl)}`;
+    const displayTenantName = tenantId ? tenantId.replace(/_/g, " ") : "DISBA POS";
+    
+    const printWindow = window.open('', '_blank');
+    
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Print QR - ${tableName}</title>
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap');
+              * { box-sizing: border-box; }
+              body { 
+                font-family: 'Inter', sans-serif; background: #fff; margin: 0; padding: 20px; 
+                text-align: center; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+              }
+              .card { 
+                width: 320px; margin: 0 auto; background: white; border: 8px solid #000; 
+                border-radius: 24px; padding: 30px 20px; color: #000;
+              }
+              .logo { font-size: 24px; font-weight: 900; margin-bottom: 5px; text-transform: uppercase; font-style: italic;}
+              .tagline { font-size: 10px; font-weight: 700; color: #3b82f6; letter-spacing: 2px; margin-bottom: 25px; text-transform: uppercase; }
+              .qr-box { 
+                border: 2px solid #eee; padding: 10px; border-radius: 16px; 
+                display: inline-block; margin-bottom: 20px;
+              }
+              .qr-img { width: 200px; height: 200px; display: block; }
+              .table-box { background: #000; color: white; padding: 12px; border-radius: 12px; margin-bottom: 20px; }
+              .table-name { font-size: 28px; font-weight: 900; margin: 0; font-style: italic; text-transform: uppercase;}
+              .steps { font-size: 10px; color: #333; margin-top: 15px; font-weight: 700; text-align: left; background: #f9f9f9; padding: 12px; border-radius: 12px;}
+              .step-item { margin-bottom: 5px; }
+              .step-num { color: #3b82f6; font-weight: 900; }
+              .footer { font-size: 8px; font-weight: 700; color: #888; margin-top: 25px; text-transform: uppercase; }
+              
+              /* 🔥 FIX BUG 30 KERTAS KOSONG */
+              @media print {
+                body { padding: 0; }
+                .card { border: 4px solid #000; page-break-inside: avoid; margin-top: 0; box-shadow: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="logo">${displayTenantName}</div>
+              <div class="tagline">Pesan Digital Lebih Cepat</div>
+              
+              <div class="qr-box">
+                <img src="${qrImageUrl}" class="qr-img" id="qrImage" crossorigin="anonymous" alt="Loading QR..." />
               </div>
-              <script>window.onload = function() { window.print(); window.close(); }</script>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      }
-    } catch (err) {
-      alert("Gagal membuat QR Code");
+              
+              <div class="table-box">
+                <h1 class="table-name">${tableName}</h1>
+              </div>
+              
+              <div class="steps">
+                <div class="step-item"><span class="step-num">1.</span> SCAN QR CODE INI</div>
+                <div class="step-item"><span class="step-num">2.</span> PILIH MENU FAVORIT ANDA</div>
+                <div class="step-item"><span class="step-num">3.</span> KONFIRMASI PESANAN</div>
+              </div>
+              
+              <div class="footer">Powered by DISBA POS SYSTEM</div>
+            </div>
+            
+            <script>
+              var img = document.getElementById('qrImage');
+              img.onload = function() {
+                // Gambar sukses diload, jeda 0.3 detik agar layout rapi, lalu print
+                setTimeout(function() {
+                  window.print(); 
+                  window.close(); 
+                }, 300);
+              };
+              img.onerror = function() {
+                alert('Gagal memuat QR dari server internet. Periksa koneksi Kapten.');
+                window.close();
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
     }
   };
 
@@ -206,7 +203,6 @@ export default function TableQRManager() {
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-5">
               {groupedTables[area].map((table: any) => (
                 <div key={table.id} className="bg-white/5 border border-white/5 p-5 rounded-[2.5rem] group hover:border-blue-500/50 transition-all relative flex flex-col items-center">
-                  {/* DELETE BUTTON (Hover Only) */}
                   <button 
                     onClick={() => handleDeleteTable(table.id)}
                     className="absolute -top-2 -right-2 bg-red-600 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-xl z-10 hover:bg-red-500 active:scale-90"
@@ -214,7 +210,6 @@ export default function TableQRManager() {
                     <X size={12} />
                   </button>
                   
-                  {/* TABLE INFO */}
                   <div className="flex-1 flex flex-col items-center w-full">
                     <div className="w-14 h-14 bg-black/60 rounded-full flex justify-center items-center mb-4 border-2 border-dashed border-white/10 group-hover:border-blue-500/30 group-hover:bg-blue-600/10 transition-all">
                         <span className="text-xl font-black text-white group-hover:text-blue-400 font-mono tracking-tighter">
@@ -224,7 +219,6 @@ export default function TableQRManager() {
                     <div className="text-[10px] font-black mb-5 truncate text-gray-400 w-full text-center tracking-tighter group-hover:text-white transition-colors">
                       {table.name}
                     </div>
-                    {/* PRINT BUTTON */}
                     <button
                       onClick={() => printQR(table.id, table.name)}
                       className="w-full bg-white text-black py-3 rounded-xl font-black text-[9px] flex items-center justify-center gap-2 hover:bg-blue-600 hover:text-white transition-all shadow-md active:scale-95"
@@ -239,7 +233,7 @@ export default function TableQRManager() {
         ))
       )}
 
-      {/* MODAL: REGISTRASI MEJA BARU (Sultan Style) */}
+      {/* MODAL: REGISTRASI MEJA BARU */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-lg flex justify-center items-center z-[5000] p-4">
           <div className="bg-[#0b1120] p-10 rounded-[3rem] w-full max-w-md border border-white/10 shadow-2xl relative animate-in zoom-in duration-300">
