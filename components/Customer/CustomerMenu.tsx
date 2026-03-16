@@ -8,7 +8,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const urlTenantId = searchParams.get("tenant");
   const urlTableId = searchParams.get("table");
 
-  // Penentuan ID Meja & Outlet (Gunakan fallback jika tenant tidak ada di URL)
   const activeTableId = propsTableId || urlTableId;
   const tenantId = urlTenantId || "DISBA_OUTLET_001"; 
 
@@ -22,7 +21,10 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
   
-  // --- STATE PESANAN (DISINKRONKAN DENGAN TABEL 'ORDERS') ---
+  // 🔥 STATE BARU: Deteksi Pembayaran Selesai
+  const [paymentCompleted, setPaymentCompleted] = useState(false);
+  
+  // --- STATE PESANAN ---
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
@@ -36,7 +38,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     fetchMenuAndTable();
     fetchExistingOrder();
 
-    // Listener Realtime untuk Status Meja
     const tableChannel = supabase.channel(`table-${tenantId}-${activeTableId}`)
       .on('postgres_changes', 
         { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${activeTableId}` }, 
@@ -50,14 +51,24 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     return () => { supabase.removeChannel(tableChannel); };
   }, [activeTableId, tenantId]);
 
-  // 2. LISTENER REALTIME PESANAN
+  // 2. LISTENER REALTIME PESANAN & STATUS ORDER (FIX LAYAR TERTUTUP)
   useEffect(() => {
     if (activeOrderId) {
       fetchOrderedItems();
       const orderChannel = supabase.channel(`orders-items-${activeOrderId}`)
+        // Pantau penambahan item
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: 'order_items', filter: `order_id=eq.${activeOrderId}` }, 
           () => fetchOrderedItems()
+        )
+        // 🔥 RADAR BARU: Pantau jika Kasir menutup Bill (Status Order -> Completed)
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${activeOrderId}` },
+          (payload) => {
+            if (payload.new.status === 'completed') {
+              setPaymentCompleted(true); // Kunci Layar Tamu!
+            }
+          }
         )
         .subscribe();
 
@@ -68,7 +79,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   // --- FUNCTIONS DATA ---
   const fetchMenuAndTable = async () => {
     try {
-      // 1. MENCARI DATA MEJA
       const { data: table } = await supabase
         .from("tables")
         .select("name, status")
@@ -83,7 +93,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         setIsError(true);
       }
 
-      // 2. MENGAMBIL DAFTAR MENU
       const { data: menuData } = await supabase
         .from("menus") 
         .select("*")
@@ -102,7 +111,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .select("id")
       .eq("table_id", Number(activeTableId))
       .eq("tenant_id", tenantId)
-      .eq("status", "pending") // Cari pesanan yang masih aktif
+      .eq("status", "pending") 
       .maybeSingle();
     
     if (data) setActiveOrderId(data.id);
@@ -117,7 +126,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .order("created_at", { ascending: false });
     
     if (data) {
-        // Format ulang data agar nama menu muncul dengan benar
         const formatted = data.map(item => ({
             name: item.menus?.name || "Menu",
             quantity: item.quantity,
@@ -158,7 +166,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const numericTableId = Number(activeTableId);
       let currentOrderId = activeOrderId;
 
-      // 1. Buat Order baru jika belum ada pesanan aktif di meja ini
       if (!currentOrderId) {
         const { data: newOrder, error: orderErr } = await supabase
           .from("orders")
@@ -175,7 +182,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         setActiveOrderId(currentOrderId);
       }
 
-      // 2. Masukkan Item ke order_items
       const orderItemsData = cart.map((item) => ({
         order_id: currentOrderId,
         menu_id: item.id,
@@ -188,7 +194,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const { error: itemErr } = await supabase.from("order_items").insert(orderItemsData);
       if (itemErr) throw itemErr;
 
-      // 3. Update Status Meja menjadi occupied (sedang digunakan)
       await supabase.from("tables").update({ status: "occupied" }).eq("id", numericTableId);
 
       setIsSuccess(true);
@@ -202,7 +207,10 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     }
   };
 
-  // --- UI GATING ---
+  // =========================================================================
+  // 🔥 UI GATING (LAYAR KUNCI & PENUTUP)
+  // =========================================================================
+  
   if (isError) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center uppercase italic">
@@ -214,22 +222,44 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     );
   }
 
-  const isLocked = tableStatus === "payment" || tableStatus === "closed";
-
-  if (isLocked) {
+  // 🔥 LAYAR 1: KETIKA TRANSAKSI SUDAH SELESAI DIBAYAR OLEH KASIR
+  if (paymentCompleted) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center">
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center animate-in zoom-in duration-500">
         <div className="max-w-xs">
-          <div className="w-20 h-20 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Lock className="text-red-500" size={32} />
+          <div className="w-24 h-24 bg-emerald-500/10 border-2 border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+            <CheckCircle2 className="text-emerald-500" size={40} />
           </div>
-          <h2 className="text-xl font-black uppercase italic text-white mb-2">Meja_Terkunci</h2>
-          <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Meja sedang dalam proses pembayaran.</p>
+          <h2 className="text-2xl font-black uppercase italic text-white mb-3 tracking-tighter">Transaksi_<span className="text-emerald-500">Selesai</span></h2>
+          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] leading-loose">
+            Terima kasih atas kunjungan Anda.<br/>Pesanan telah berhasil dibayar.
+          </p>
         </div>
       </div>
     );
   }
 
+  // 🔥 LAYAR 2: KETIKA KASIR SEDANG MEMBUKA PREVIEW BILL (MEJA TERKUNCI SEMENTARA)
+  const isLocked = tableStatus === "payment" || tableStatus === "closed";
+  if (isLocked) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center animate-in fade-in">
+        <div className="max-w-xs">
+          <div className="w-20 h-20 bg-orange-500/10 border border-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+            <Lock className="text-orange-500" size={32} />
+          </div>
+          <h2 className="text-xl font-black uppercase italic text-white mb-2 tracking-tighter">Sesi_Terkunci_</h2>
+          <p className="text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em] leading-relaxed">
+            Meja Anda sedang dalam proses pembayaran di Kasir.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // RENDER MENU UTAMA
+  // =========================================================================
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-sans pb-40 uppercase italic">
       
@@ -285,7 +315,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
             const itemInCart = cart.find((c) => c.id === item.id);
             return (
               <div key={item.id} className="bg-white/[0.03] border border-white/5 p-3 rounded-[2rem] flex gap-4 items-center">
-                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-black/50 flex-shrink-0 flex items-center justify-center">
+                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-black/50 flex-shrink-0 flex items-center justify-center border border-white/5">
                   {item.image_url ? (
                     <img src={item.image_url} className="w-full h-full object-cover" alt={item.name} />
                   ) : (
@@ -294,14 +324,14 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-black text-[11px] truncate tracking-tight">{item.name}</h3>
-                  <p className="text-blue-500 text-sm font-black mt-1">RP {Number(item.price).toLocaleString()}</p>
+                  <p className="text-blue-500 text-sm font-black mt-1 font-mono">RP {Number(item.price).toLocaleString()}</p>
                 </div>
                 
                 <div className="flex items-center gap-2 bg-black/40 p-1 rounded-2xl border border-white/5">
                   {itemInCart && (
                     <>
-                      <button onClick={() => removeFromCart(item.id)} className="w-8 h-8 flex items-center justify-center text-gray-500"><Minus size={14}/></button>
-                      <span className="text-xs font-black w-4 text-center">{itemInCart.qty}</span>
+                      <button onClick={() => removeFromCart(item.id)} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white"><Minus size={14}/></button>
+                      <span className="text-xs font-black w-4 text-center font-mono">{itemInCart.qty}</span>
                     </>
                   )}
                   <button 
@@ -327,9 +357,9 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
                 <span className="font-mono">{(item.quantity * item.price_at_time).toLocaleString()}</span>
               </div>
             ))}
-            <div className="pt-4 flex justify-between items-end">
-                <span className="text-[9px] text-gray-500 font-black">TOTAL_TAGIHAN</span>
-                <span className="text-xl font-black text-blue-500">RP {calculateTotalOrdered().toLocaleString()}</span>
+            <div className="pt-4 flex justify-between items-end border-t border-white/10 mt-2">
+                <span className="text-[9px] text-gray-500 font-black tracking-widest">TOTAL_TAGIHAN</span>
+                <span className="text-xl font-black text-blue-500 font-mono tracking-tighter">RP {calculateTotalOrdered().toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -338,10 +368,10 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       {/* FLOAT BAR (KERANJANG) */}
       {cart.length > 0 && (
         <div className="fixed inset-x-0 bottom-6 px-4 z-50">
-          <div className="bg-blue-600 rounded-[2rem] p-4 flex justify-between items-center shadow-2xl animate-in slide-in-from-bottom duration-500">
+          <div className="bg-blue-600 rounded-[2rem] p-4 flex justify-between items-center shadow-[0_10px_40px_rgba(37,99,235,0.3)] animate-in slide-in-from-bottom duration-500">
             <div className="ml-4">
-              <p className="text-[8px] font-black opacity-60 tracking-widest">{cart.reduce((a, b) => a + b.qty, 0)} ITEMS_IN_BAG</p>
-              <p className="font-black text-xl tracking-tighter text-white">RP {cart.reduce((a, b) => a + b.qty * b.price, 0).toLocaleString()}</p>
+              <p className="text-[8px] font-black opacity-70 tracking-[0.2em] mb-0.5">{cart.reduce((a, b) => a + b.qty, 0)} ITEMS_IN_BAG</p>
+              <p className="font-black text-xl tracking-tighter text-white font-mono">RP {cart.reduce((a, b) => a + b.qty * b.price, 0).toLocaleString()}</p>
             </div>
             <button 
               onClick={submitOrder} 
