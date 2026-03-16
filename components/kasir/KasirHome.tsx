@@ -13,10 +13,10 @@ const TAX_RATE = 0.10;    // 10% PB1
 export default function KasirHome() {
   // --- STATE DASAR ---
   const [tables, setTables] = useState<any[]>([]);
-  const [bills, setBills] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]); // Ganti bills jadi orders
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [selectedTable, setSelectedTable] = useState<any | null>(null);
-  const [activeBill, setActiveBill] = useState<any | null>(null);
+  const [activeOrder, setActiveOrder] = useState<any | null>(null); // Ganti activeBill jadi activeOrder
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [banks, setBanks] = useState<any[]>([]);
 
@@ -57,11 +57,12 @@ export default function KasirHome() {
   // --- AUTO PRINT DAPUR/BAR ---
   const handleAutoPrintDapur = async (newOrderItem: any) => {
     try {
-      const { data: bill } = await supabase.from("open_bills").select("tables(name)").eq("id", newOrderItem.bill_id).single();
+      // 🔥 SINKRONISASI: Baca dari tabel 'orders' bukan 'open_bills'
+      const { data: order } = await supabase.from("orders").select("tables(name)").eq("id", newOrderItem.order_id).single();
       const { data: menu } = await supabase.from("menus").select("name, category").eq("id", newOrderItem.menu_id).single();
 
-      if (bill && menu) {
-        const tableName = (bill as any).tables?.name || "QR/WAITER";
+      if (order && menu) {
+        const tableName = (order as any).tables?.name || "QR/WAITER";
         const category = (menu.category || "FOOD").toUpperCase();
         
         const targetIp = typeof window !== "undefined" ? localStorage.getItem("printer_ip") || "127.0.0.1" : "127.0.0.1";
@@ -77,7 +78,7 @@ export default function KasirHome() {
               category: category
             }]
           })
-        }).catch(err => console.error(`❌ GAGAL Print:`, err));
+        }).catch(err => console.error(`❌ GAGAL Print Dapur:`, err));
       }
     } catch (error) {
       console.error("❌ Error Auto Print:", error);
@@ -92,7 +93,8 @@ export default function KasirHome() {
 
     const channel = supabase.channel(`pos-realtime-${tenantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
+      // 🔥 SINKRONISASI: Pantau tabel 'orders'
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` }, (payload) => {
         handleAutoPrintDapur(payload.new);
         setLastIncomingOrder(Date.now());
@@ -107,13 +109,13 @@ export default function KasirHome() {
   }, [tenantId]);
 
   useEffect(() => {
-    if (activeBill) fetchOrderItems(activeBill.id);
+    if (activeOrder) fetchOrderItems(activeOrder.id);
   }, [lastIncomingOrder]);
 
   useEffect(() => {
     if (selectedTable) {
-      const b = bills.find(bill => bill.table_id === selectedTable.id);
-      setActiveBill(b || null);
+      const o = orders.find(order => order.table_id === selectedTable.id);
+      setActiveOrder(o || null);
       
       if (prevTableIdRef.current !== selectedTable.id) {
         setDiscount(0);
@@ -123,14 +125,14 @@ export default function KasirHome() {
         prevTableIdRef.current = selectedTable.id;
         setTimeout(() => cashInputRef.current?.focus(), 100);
       }
-      if (b) fetchOrderItems(b.id);
+      if (o) fetchOrderItems(o.id);
       else setOrderItems([]);
     } else {
       prevTableIdRef.current = null;
-      setActiveBill(null);
+      setActiveOrder(null);
       setOrderItems([]);
     }
-  }, [tables, bills, selectedTable]);
+  }, [tables, orders, selectedTable]);
 
   // --- FETCHERS ---
   const fetchBanks = async () => {
@@ -139,19 +141,20 @@ export default function KasirHome() {
   };
 
   const fetchData = async () => {
-    const [tRes, bRes] = await Promise.all([
+    // 🔥 SINKRONISASI: Ambil dari 'orders' dengan status 'pending'
+    const [tRes, oRes] = await Promise.all([
       supabase.from("tables").select("*").eq("tenant_id", tenantId).order("name", { ascending: true }),
-      supabase.from("open_bills").select("*").eq("tenant_id", tenantId).eq("status", "open")
+      supabase.from("orders").select("*").eq("tenant_id", tenantId).eq("status", "pending")
     ]);
     if (tRes.data) setTables(tRes.data);
-    if (bRes.data) setBills(bRes.data);
+    if (oRes.data) setOrders(oRes.data);
   };
 
-  const fetchOrderItems = async (billId: number) => {
+  const fetchOrderItems = async (orderId: string) => {
     const { data: orderData, error } = await supabase
       .from("order_items")
       .select(`*, menus(name)`) 
-      .eq("bill_id", billId)
+      .eq("order_id", orderId) // 🔥 SINKRONISASI: Pakai order_id
       .eq("tenant_id", tenantId);
 
     if (error) console.error("Error fetching items:", error);
@@ -161,7 +164,7 @@ export default function KasirHome() {
         id: item.menu_id, 
         name: item.menus?.name || item.name || `MENU ID: ${item.menu_id}`, 
         qty: item.quantity || 1,
-        price: item.price_at_order || 0
+        price: item.price_at_time || 0 // 🔥 SINKRONISASI: CustomerMenu menyimpan harga sebagai price_at_time
       })));
     } else {
       setOrderItems([]);
@@ -180,18 +183,18 @@ export default function KasirHome() {
   // --- PAYMENT HANDLERS ---
   const handleOpenSettlePreview = async () => {
     if (!selectedTable) return;
-    await supabase.from("tables").update({ status: "closed", last_status_change: new Date().toISOString() }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
+    await supabase.from("tables").update({ status: "payment", last_status_change: new Date().toISOString() }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
     setShowPreviewModal(true);
   };
 
   const handleCancelSettle = async () => {
     if (!selectedTable) return;
-    await supabase.from("tables").update({ status: "open" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
+    await supabase.from("tables").update({ status: "occupied" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
     setShowPreviewModal(false);
   };
 
   const processPayment = async () => {
-    if (!activeBill || !currentShift || loading) return;
+    if (!activeOrder || !currentShift || loading) return;
     if (paymentMethod === "CASH" && paidAmount < getGrandTotal()) return;
     if (paymentMethod === "TRANSFER" && !selectedBank) return alert("Harap Pilih Bank!");
 
@@ -233,7 +236,8 @@ export default function KasirHome() {
 
       if (trxError) throw trxError;
 
-      await supabase.from("open_bills").update({ status: "closed" }).eq("id", activeBill.id).eq("tenant_id", tenantId);
+      // 🔥 SINKRONISASI: Tutup order dan bersihkan meja
+      await supabase.from("orders").update({ status: "completed" }).eq("id", activeOrder.id).eq("tenant_id", tenantId);
       await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
 
       const receiptData = {
@@ -384,7 +388,7 @@ export default function KasirHome() {
   };
 
   // =========================================================================
-  // 🔥 RENDER UI SAJA YANG DIUBAH MENJADI 3 KOLOM SIDEBAR (TIDAK ADA LOGIKA YANG DIHAPUS)
+  // 🔥 RENDER UI SAJA (SULTAN SIDEBAR EDITION)
   // =========================================================================
   return (
     <div className="fixed inset-0 bg-[#020617] text-white p-1 uppercase italic font-sans flex flex-col overflow-hidden">
@@ -408,16 +412,17 @@ export default function KasirHome() {
               <p className="text-[7px] font-black text-gray-700 mb-2 tracking-[0.2em] text-center border-b border-white/5 pb-1 uppercase"><MapPin size={8} className="inline mr-1"/> {area}</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {tables.filter(t => (t.area || "AREA LAINNYA").toUpperCase() === area).map(t => {
-                   const hasOrder = bills.some(b => b.table_id === t.id); // Validasi dari open_bills
+                   // 🔥 SINKRONISASI: Validasi meja berkedip berdasarkan 'orders'
+                   const hasOrder = orders.some(o => o.table_id === t.id); 
                    return (
                     <button key={t.id} onClick={() => setSelectedTable(t)}
                       className={`h-12 rounded-lg border-2 transition-all text-[10px] font-black flex flex-col items-center justify-center ${
                         selectedTable?.id === t.id ? 'border-blue-500 bg-blue-600/20 shadow-lg' : 
                         hasOrder ? 'border-orange-500 bg-orange-500/10 animate-pulse text-orange-400' : 
-                        t.status === 'closed' ? 'border-red-500 bg-red-500/10 text-red-500' : 'border-white/5 bg-white/[0.02] opacity-40'
+                        t.status === 'payment' || t.status === 'closed' ? 'border-red-500 bg-red-500/10 text-red-500' : 'border-white/5 bg-white/[0.02] opacity-40'
                       }`}
                     >
-                      {t.status === 'closed' && <Lock size={8} className="mb-1" />}
+                      {(t.status === 'payment' || t.status === 'closed') && <Lock size={8} className="mb-1" />}
                       {t.name}
                     </button>
                    );
@@ -429,7 +434,7 @@ export default function KasirHome() {
 
         {/* KOLOM 2: ORDER LIST (FULL VERTICAL - FLEX 1) */}
         <div className="flex-1 bg-black/40 rounded-xl border border-white/5 flex flex-col overflow-hidden">
-          {activeBill ? (
+          {activeOrder ? (
             <div className="flex flex-col h-full">
               <div className="p-3 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
                 <div className="flex items-center gap-3">
@@ -439,7 +444,7 @@ export default function KasirHome() {
                 <button onClick={() => setSelectedTable(null)} className="text-gray-600 hover:text-white transition-all"><X size={18}/></button>
               </div>
 
-              {/* AREA LIST PESANAN - SEKARANG SANGAT LUAS DARI ATAS KE BAWAH */}
+              {/* AREA LIST PESANAN */}
               <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
                 <table className="w-full text-left">
                   <thead className="text-[9px] font-black text-gray-600 border-b border-white/5 sticky top-0 bg-[#020617] z-10 uppercase italic">
@@ -477,7 +482,7 @@ export default function KasirHome() {
 
         {/* KOLOM 3: PAYMENT SIDEBAR (SCROLLABLE & ANTI-CUTOFF) */}
         <div className="w-[320px] bg-black/60 rounded-xl border border-white/5 flex flex-col overflow-y-auto no-scrollbar p-4 shadow-2xl backdrop-blur-3xl">
-          {activeBill ? (
+          {activeOrder ? (
             <div className="flex flex-col min-h-full">
               <h3 className="text-[9px] font-black text-gray-600 tracking-[0.3em] mb-4 border-b border-white/10 pb-2 flex items-center gap-2 uppercase italic"><CreditCard size={12}/> Checkout_Panel</h3>
               
