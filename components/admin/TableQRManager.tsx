@@ -69,50 +69,75 @@ export default function TableQRManager() {
   }, {});
 
   // =========================================================================
-  // 🔥 FUNGSI PRINT QR INSTAN (FIX BUG 30 KERTAS KOSONG)
+  // 🔥 FUNGSI PRINT QR INSTAN (FIX UKURAN LONCAT & PERBESAR QR CODE)
   // =========================================================================
   const printQR = (tableId: string, tableName: string) => {
     const baseUrl = window.location.origin;
     const qrUrl = `${baseUrl}/menu?tenant=${tenantId}&table=${tableId}`;
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(qrUrl)}`;
+    // Minta gambar ukuran 400x400 dari server agar pas
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qrUrl)}`;
     const displayTenantName = tenantId ? tenantId.replace(/_/g, " ") : "DISBA POS";
     
     const printWindow = window.open('', '_blank');
     
     if (printWindow) {
       printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
           <head>
             <title>Print QR - ${tableName}</title>
             <style>
-              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap');
-              * { box-sizing: border-box; }
+              /* Font standar bawaan OS agar langsung muncul tanpa loading internet */
               body { 
-                font-family: 'Inter', sans-serif; background: #fff; margin: 0; padding: 20px; 
-                text-align: center; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+                font-family: Arial, Helvetica, sans-serif; 
+                background: #fff; 
+                margin: 0; 
+                padding: 30px 20px; 
+                text-align: center;
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important;
               }
-              .card { 
-                width: 320px; margin: 0 auto; background: white; border: 8px solid #000; 
-                border-radius: 24px; padding: 30px 20px; color: #000;
-              }
-              .logo { font-size: 24px; font-weight: 900; margin-bottom: 5px; text-transform: uppercase; font-style: italic;}
-              .tagline { font-size: 10px; font-weight: 700; color: #3b82f6; letter-spacing: 2px; margin-bottom: 25px; text-transform: uppercase; }
-              .qr-box { 
-                border: 2px solid #eee; padding: 10px; border-radius: 16px; 
-                display: inline-block; margin-bottom: 20px;
-              }
-              .qr-img { width: 200px; height: 200px; display: block; }
-              .table-box { background: #000; color: white; padding: 12px; border-radius: 12px; margin-bottom: 20px; }
-              .table-name { font-size: 28px; font-weight: 900; margin: 0; font-style: italic; text-transform: uppercase;}
-              .steps { font-size: 10px; color: #333; margin-top: 15px; font-weight: 700; text-align: left; background: #f9f9f9; padding: 12px; border-radius: 12px;}
-              .step-item { margin-bottom: 5px; }
-              .step-num { color: #3b82f6; font-weight: 900; }
-              .footer { font-size: 8px; font-weight: 700; color: #888; margin-top: 25px; text-transform: uppercase; }
               
-              /* 🔥 FIX BUG 30 KERTAS KOSONG */
+              /* Ukuran Card diperbesar sedikit agar proporsional dengan QR yang membesar */
+              .card { 
+                width: 380px; 
+                display: inline-block; 
+                margin: 0 auto; 
+                background: white; 
+                border: 6px solid #000; 
+                border-radius: 20px; 
+                padding: 30px; 
+                color: #000;
+                text-align: center;
+              }
+              
+              .logo { font-size: 28px; font-weight: 900; margin-bottom: 5px; text-transform: uppercase; font-style: italic;}
+              .tagline { font-size: 11px; font-weight: bold; color: #3b82f6; letter-spacing: 2px; margin-bottom: 25px; text-transform: uppercase; }
+              
+              .qr-box { 
+                border: 2px solid #ddd; 
+                padding: 15px; 
+                border-radius: 16px; 
+                display: inline-block; 
+                margin-bottom: 25px;
+              }
+              
+              /* Kunci ukuran menggunakan !important agar tidak loncat */
+              .qr-img { width: 300px !important; height: 300px !important; display: block; margin: 0 auto; }
+              
+              .table-box { background: #000; color: white; padding: 15px; border-radius: 12px; margin-bottom: 25px; }
+              .table-name { font-size: 32px; font-weight: 900; margin: 0; font-style: italic; text-transform: uppercase;}
+              
+              .steps { font-size: 11px; color: #333; font-weight: bold; text-align: left; background: #f5f5f5; padding: 15px; border-radius: 12px;}
+              .step-item { margin-bottom: 8px; }
+              .step-num { color: #3b82f6; font-weight: 900; }
+              
+              .footer { font-size: 10px; font-weight: bold; color: #999; margin-top: 30px; text-transform: uppercase; }
+              
               @media print {
-                body { padding: 0; }
-                .card { border: 4px solid #000; page-break-inside: avoid; margin-top: 0; box-shadow: none; }
+                @page { margin: 10mm auto; size: auto; }
+                body { padding: 0; margin: 0; text-align: center; }
+                .card { border: 4px solid #000; box-shadow: none; margin: 0 auto; display: inline-block; page-break-inside: avoid; }
               }
             </style>
           </head>
@@ -122,7 +147,7 @@ export default function TableQRManager() {
               <div class="tagline">Pesan Digital Lebih Cepat</div>
               
               <div class="qr-box">
-                <img src="${qrImageUrl}" class="qr-img" id="qrImage" crossorigin="anonymous" alt="Loading QR..." />
+                <img src="${qrImageUrl}" width="300" height="300" class="qr-img" alt="QR Code" />
               </div>
               
               <div class="table-box">
@@ -139,23 +164,17 @@ export default function TableQRManager() {
             </div>
             
             <script>
-              var img = document.getElementById('qrImage');
-              img.onload = function() {
-                // Gambar sukses diload, jeda 0.3 detik agar layout rapi, lalu print
-                setTimeout(function() {
-                  window.print(); 
-                  window.close(); 
-                }, 300);
-              };
-              img.onerror = function() {
-                alert('Gagal memuat QR dari server internet. Periksa koneksi Kapten.');
+              setTimeout(function() {
+                window.print();
                 window.close();
-              };
+              }, 800);
             </script>
           </body>
         </html>
       `);
       printWindow.document.close();
+    } else {
+      alert("Popup diblokir oleh browser. Izinkan pop-ups untuk mencetak QR.");
     }
   };
 
