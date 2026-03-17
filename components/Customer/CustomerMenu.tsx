@@ -3,7 +3,6 @@ import { supabase } from "../../lib/supabase";
 import { Image as ImageIcon, Loader2, Plus, Minus, CheckCircle2, ShoppingBag } from "lucide-react";
 
 export default function CustomerMenu({ tableId: propsTableId }: { tableId?: string }) {
-  // --- TANGKAP URL ---
   const searchParams = new URLSearchParams(window.location.search);
   const urlTenantId = searchParams.get("tenant");
   const urlTableId = searchParams.get("table");
@@ -11,7 +10,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const activeTableId = propsTableId || urlTableId;
   const tenantId = urlTenantId || "DISBA_OUTLET_001"; 
 
-  // --- STATE UTAMA ---
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
   const [tableName, setTableName] = useState("");
@@ -20,18 +18,19 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
   
-  // --- STATE PESANAN ---
+  // 🔥 STATE DIAGNOSTIK ERROR SUPABASE
+  const [debugError, setDebugError] = useState<string>("");
+  
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
   // =========================================================================
-  // 🛡️ RADAR SINKRONISASI (CEK TIAP 3 DETIK)
+  // 🛡️ RADAR SINKRONISASI (CEK TIAP 3 DETIK + PENDETEKSI ERROR)
   // =========================================================================
   const syncOrder = async () => {
     if (!activeTableId) return;
 
     try {
-      // 1. Cari Order Pending di database
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('id, status')
@@ -41,36 +40,43 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         .order('created_at', { ascending: false })
         .limit(1);
 
+      if (ordersError) setDebugError("Orders Error: " + ordersError.message);
+
       const currentOrder = ordersData?.[0]; 
 
       if (currentOrder) {
-        // Ada pesanan! Tarik itemnya (Pastikan RLS order_items sudah dimatikan!)
         setActiveOrderId(currentOrder.id.toString());
         
-        const { data: items } = await supabase
+        // 🔥 INI YANG BIASANYA DIBLOKIR SUPABASE (RLS)
+        const { data: items, error: itemsError } = await supabase
           .from('order_items')
           .select('*, menus(name)')
           .eq('order_id', currentOrder.id)
           .order('created_at', { ascending: true });
 
-        if (items) {
-          setOrderedItems(items.map(i => ({
-            name: i.menus?.name || 'Menu',
-            quantity: i.quantity,
-            price_at_time: i.price_at_time
-          })));
+        if (itemsError) {
+          setDebugError("Order Items Error (Cek RLS): " + itemsError.message);
+        } else {
+          setDebugError(""); // Bersihkan error jika sukses
+          if (items) {
+            setOrderedItems(items.map(i => ({
+              name: i.menus?.name || 'Menu',
+              quantity: i.quantity,
+              price_at_time: i.price_at_time
+            })));
+          }
         }
       } else {
-        // 🔥 JIKA KASIR SUDAH TEKAN BAYAR (Settle): KOSONGKAN LAYAR!
+        // Kasir sudah Settle -> Reset Bersih
         setActiveOrderId(null);
         setOrderedItems([]);
+        setDebugError("");
       }
-    } catch (err) {
-      console.error("Gagal sinkronisasi data:", err);
+    } catch (err: any) {
+      setDebugError("Catch Error: " + err.message);
     }
   };
 
-  // --- INITIAL LOAD & POLLING ---
   useEffect(() => {
     if (!activeTableId) {
       setIsError(true);
@@ -81,9 +87,11 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .then(({data}) => { if (data) setTableName(data.name); else setIsError(true); });
 
     supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category", { ascending: true })
-      .then(({data}) => { if (data) setMenuItems(data); });
+      .then(({data, error}) => { 
+        if (error) setDebugError("Menus Error (Cek RLS): " + error.message);
+        if (data) setMenuItems(data); 
+      });
 
-    // Mulai Radar Cek Pesanan Otomatis
     syncOrder();
     const interval = setInterval(syncOrder, 3000); 
     return () => clearInterval(interval);
@@ -91,7 +99,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
 
   const calculateTotalOrdered = () => orderedItems.reduce((acc, curr) => acc + (curr.quantity * curr.price_at_time), 0);
 
-  // --- LOGIKA KERANJANG ---
   const addToCart = (item: any) => {
     const existing = cart.find((c) => c.id === item.id);
     if (existing) setCart(cart.map((c) => (c.id === item.id ? { ...c, qty: c.qty + 1 } : c)));
@@ -123,21 +130,19 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         order_id: orderIdToUse, menu_id: item.id, tenant_id: tenantId, quantity: item.qty, price_at_time: item.price, notes: ""
       }));
       
-      await supabase.from("order_items").insert(orderItemsData);
+      const { error: insertError } = await supabase.from("order_items").insert(orderItemsData);
+      if (insertError) setDebugError("Insert Error: " + insertError.message);
+
       await supabase.from("tables").update({ status: "occupied" }).eq("id", numericTableId);
 
       setIsSuccess(true);
       setCart([]); 
       
-      await syncOrder(); // Tarik data pesanan yang baru ditambahkan
+      await syncOrder(); 
       setTimeout(() => setIsSuccess(false), 4000);
-    } catch (e: any) { alert("Gagal mengirim pesanan"); } finally { setLoading(false); }
+    } catch (e: any) { alert("Gagal mengirim pesanan: " + e.message); } finally { setLoading(false); }
   };
 
-
-  // =========================================================================
-  // 🔥 RENDER UI
-  // =========================================================================
   if (isError) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center uppercase italic">
@@ -149,10 +154,16 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     );
   }
 
-  // LAYAR MENU UTAMA
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-sans uppercase italic relative pb-32">
       
+      {/* 🔥 PITA MERAH DIAGNOSTIK ERROR (Hanya muncul kalau Supabase memblokir) */}
+      {debugError && (
+        <div className="bg-red-600/20 border border-red-500 text-red-400 p-3 rounded-xl mb-4 text-[9px] font-mono tracking-widest break-words animate-pulse">
+          ⚠️ {debugError}
+        </div>
+      )}
+
       <header className="mb-8 pt-4 text-left">
         <h1 className="text-3xl font-black italic tracking-tighter">{tenantId.split('_')[0]} <span className="text-blue-500">MENU_</span></h1>
         <div className="flex items-center gap-2 mt-2">
@@ -168,7 +179,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         </div>
       )}
 
-      {/* KATEGORI */}
       <div className="flex gap-2 overflow-x-auto pb-6 no-scrollbar sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-40 py-2">
         <button onClick={() => setSelectedCategory("SEMUA")} className={`px-6 py-2 rounded-full text-[10px] font-black border transition-all ${selectedCategory === "SEMUA" ? "bg-blue-600 border-blue-600" : "bg-white/5 border-white/10 text-gray-500"}`}>SEMUA</button>
         {Array.from(new Set(menuItems.map((i) => i.category))).map((cat) => (
@@ -176,7 +186,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         ))}
       </div>
 
-      {/* DAFTAR MENU */}
       <div className="grid gap-4">
         {menuItems.filter((item) => selectedCategory === "SEMUA" || item.category === selectedCategory).map((item) => {
             const itemInCart = cart.find((c) => c.id === item.id);
@@ -204,11 +213,10 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       </div>
 
       {/* ========================================================== */}
-      {/* 🔥 DESAIN LEGENDARIS DISBA: PESANAN ANDA */}
+      {/* 🔥 PESANAN ANDA */}
       {/* ========================================================== */}
       {orderedItems.length > 0 && (
         <div className="mt-12 p-6 bg-transparent border border-white/10 border-dashed rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4">
-          
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-[11px] font-black text-blue-400 italic tracking-[0.1em]">PESANAN_ANDA_</h3>
             <span className="bg-white/5 px-3 py-1.5 rounded-lg text-[9px] text-gray-500 font-black tracking-widest uppercase border border-white/5">
@@ -243,11 +251,9 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
               RP {calculateTotalOrdered().toLocaleString('id-ID')}
             </span>
           </div>
-          
         </div>
       )}
 
-      {/* KERANJANG BAWAH */}
       {cart.length > 0 && (
         <div className="fixed inset-x-0 bottom-6 px-4 z-40">
           <div className="bg-blue-600 rounded-[2rem] p-4 flex justify-between items-center shadow-[0_10px_40px_rgba(37,99,235,0.3)] animate-in slide-in-from-bottom duration-500">
@@ -261,7 +267,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           </div>
         </div>
       )}
-
     </div>
   );
 }
