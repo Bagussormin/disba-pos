@@ -18,31 +18,51 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
   
+  // 🔥 STATE LAYAR KUNCI "TERIMA KASIH"
+  const [paymentCompleted, setPaymentCompleted] = useState(false);
+  
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
   // =========================================================================
-  // 🛡️ RADAR SINKRONISASI 
+  // 🛡️ RADAR SINKRONISASI (CEK TIAP 3 DETIK)
   // =========================================================================
   const syncOrder = async () => {
     if (!activeTableId) return;
 
     try {
+      // 1. Cek apakah HP ini sedang melacak sebuah pesanan di memori
+      const trackedOrderId = activeOrderId || localStorage.getItem(`disba_order_${activeTableId}`);
+
+      if (trackedOrderId) {
+        // Cek status pesanan tersebut di Kasir
+        const { data: trackedOrder } = await supabase.from('orders').select('status').eq('id', trackedOrderId).single();
+        
+        if (trackedOrder && trackedOrder.status === 'completed') {
+          // 🔥 KASIR SUDAH SETTLE! Kunci layar tamu dengan ucapan Terima Kasih
+          setPaymentCompleted(true);
+          return; // Hentikan eksekusi kode di bawahnya
+        }
+      }
+
+      // 2. Jika tidak ada yang completed, cari apakah ada order pending di meja ini
       const { data: ordersData } = await supabase
         .from('orders')
         .select('id, status')
         .eq('table_id', Number(activeTableId))
         .eq('tenant_id', tenantId)
         .eq('status', 'pending')
-        .order('created_at', { ascending: false })
+        .order('id', { ascending: false }) // Ambil yang terbaru (Tanpa created_at)
         .limit(1);
 
       const currentOrder = ordersData?.[0]; 
 
       if (currentOrder) {
+        // Ada pesanan aktif, simpan di memori HP
         setActiveOrderId(currentOrder.id.toString());
+        localStorage.setItem(`disba_order_${activeTableId}`, currentOrder.id.toString());
         
-        // 🔥 FIX BUG BESAR: Hapus .order('created_at') karena kolomnya tidak ada di database Kapten!
+        // Tarik daftar makanannya (Tanpa created_at)
         const { data: items } = await supabase
           .from('order_items')
           .select('*, menus(name)')
@@ -56,7 +76,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           })));
         }
       } else {
-        // Kasir sudah Settle -> Reset Bersih
+        // Meja kosong, tidak ada pesanan aktif
         setActiveOrderId(null);
         setOrderedItems([]);
       }
@@ -109,6 +129,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         if (error) throw error;
         orderIdToUse = newOrder.id.toString();
         setActiveOrderId(orderIdToUse);
+        localStorage.setItem(`disba_order_${activeTableId}`, orderIdToUse);
       }
 
       const orderItemsData = cart.map((item) => ({
@@ -126,6 +147,10 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     } catch (e: any) { alert("Gagal mengirim pesanan: " + e.message); } finally { setLoading(false); }
   };
 
+  // =========================================================================
+  // 🔥 RENDER UI (GATING SYSTEM)
+  // =========================================================================
+
   if (isError) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center uppercase italic">
@@ -137,6 +162,36 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     );
   }
 
+  // 🌟 LAYAR "TERIMA KASIH" (MUNCUL OTOMATIS SAAT KASIR KLIK SETTLE)
+  if (paymentCompleted) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-8 text-center animate-in zoom-in duration-500">
+        <div className="max-w-xs w-full flex flex-col items-center">
+          <div className="w-24 h-24 bg-emerald-500/10 border-2 border-emerald-500/30 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+            <CheckCircle2 className="text-emerald-500" size={40} />
+          </div>
+          <h2 className="text-2xl font-black uppercase italic text-white mb-3 tracking-tighter">Transaksi_<span className="text-emerald-500">Selesai</span></h2>
+          <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] leading-loose mb-10">
+            Terimakasih atas kunjungan anda,<br/>silahkan datang lagi.
+          </p>
+          
+          <button 
+            onClick={() => {
+              localStorage.removeItem(`disba_order_${activeTableId}`);
+              setPaymentCompleted(false);
+              setActiveOrderId(null);
+              window.location.reload();
+            }} 
+            className="flex items-center justify-center text-[9px] font-black text-gray-600 hover:text-white transition-colors tracking-[0.2em] bg-white/5 px-8 py-3 rounded-xl border border-white/10"
+          >
+            TUTUP
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // LAYAR MENU UTAMA
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-sans uppercase italic relative pb-32">
 
@@ -189,7 +244,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       </div>
 
       {/* ========================================================== */}
-      {/* 🔥 PESANAN ANDA (DESAIN DISBA) */}
+      {/* 🔥 PESANAN ANDA */}
       {/* ========================================================== */}
       {orderedItems.length > 0 && (
         <div className="mt-12 p-6 bg-transparent border border-white/10 border-dashed rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4">
