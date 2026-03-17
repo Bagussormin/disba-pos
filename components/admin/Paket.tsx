@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import React, { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
 import { Package, Plus, Trash2, Save, Loader2, Image as ImageIcon, Search } from "lucide-react";
 
 export default function Paket() {
