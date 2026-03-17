@@ -18,20 +18,17 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
   
-  // 🔥 STATE DIAGNOSTIK ERROR SUPABASE
-  const [debugError, setDebugError] = useState<string>("");
-  
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
   // =========================================================================
-  // 🛡️ RADAR SINKRONISASI (CEK TIAP 3 DETIK + PENDETEKSI ERROR)
+  // 🛡️ RADAR SINKRONISASI 
   // =========================================================================
   const syncOrder = async () => {
     if (!activeTableId) return;
 
     try {
-      const { data: ordersData, error: ordersError } = await supabase
+      const { data: ordersData } = await supabase
         .from('orders')
         .select('id, status')
         .eq('table_id', Number(activeTableId))
@@ -40,40 +37,31 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         .order('created_at', { ascending: false })
         .limit(1);
 
-      if (ordersError) setDebugError("Orders Error: " + ordersError.message);
-
       const currentOrder = ordersData?.[0]; 
 
       if (currentOrder) {
         setActiveOrderId(currentOrder.id.toString());
         
-        // 🔥 INI YANG BIASANYA DIBLOKIR SUPABASE (RLS)
-        const { data: items, error: itemsError } = await supabase
+        // 🔥 FIX BUG BESAR: Hapus .order('created_at') karena kolomnya tidak ada di database Kapten!
+        const { data: items } = await supabase
           .from('order_items')
           .select('*, menus(name)')
-          .eq('order_id', currentOrder.id)
-          .order('created_at', { ascending: true });
+          .eq('order_id', currentOrder.id);
 
-        if (itemsError) {
-          setDebugError("Order Items Error (Cek RLS): " + itemsError.message);
-        } else {
-          setDebugError(""); // Bersihkan error jika sukses
-          if (items) {
-            setOrderedItems(items.map(i => ({
-              name: i.menus?.name || 'Menu',
-              quantity: i.quantity,
-              price_at_time: i.price_at_time
-            })));
-          }
+        if (items) {
+          setOrderedItems(items.map(i => ({
+            name: i.menus?.name || 'Menu',
+            quantity: i.quantity,
+            price_at_time: i.price_at_time
+          })));
         }
       } else {
         // Kasir sudah Settle -> Reset Bersih
         setActiveOrderId(null);
         setOrderedItems([]);
-        setDebugError("");
       }
     } catch (err: any) {
-      setDebugError("Catch Error: " + err.message);
+      console.error("Sync Error:", err);
     }
   };
 
@@ -87,10 +75,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       .then(({data}) => { if (data) setTableName(data.name); else setIsError(true); });
 
     supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category", { ascending: true })
-      .then(({data, error}) => { 
-        if (error) setDebugError("Menus Error (Cek RLS): " + error.message);
-        if (data) setMenuItems(data); 
-      });
+      .then(({data}) => { if (data) setMenuItems(data); });
 
     syncOrder();
     const interval = setInterval(syncOrder, 3000); 
@@ -130,9 +115,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         order_id: orderIdToUse, menu_id: item.id, tenant_id: tenantId, quantity: item.qty, price_at_time: item.price, notes: ""
       }));
       
-      const { error: insertError } = await supabase.from("order_items").insert(orderItemsData);
-      if (insertError) setDebugError("Insert Error: " + insertError.message);
-
+      await supabase.from("order_items").insert(orderItemsData);
       await supabase.from("tables").update({ status: "occupied" }).eq("id", numericTableId);
 
       setIsSuccess(true);
@@ -156,13 +139,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
 
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-sans uppercase italic relative pb-32">
-      
-      {/* 🔥 PITA MERAH DIAGNOSTIK ERROR (Hanya muncul kalau Supabase memblokir) */}
-      {debugError && (
-        <div className="bg-red-600/20 border border-red-500 text-red-400 p-3 rounded-xl mb-4 text-[9px] font-mono tracking-widest break-words animate-pulse">
-          ⚠️ {debugError}
-        </div>
-      )}
 
       <header className="mb-8 pt-4 text-left">
         <h1 className="text-3xl font-black italic tracking-tighter">{tenantId.split('_')[0]} <span className="text-blue-500">MENU_</span></h1>
@@ -213,7 +189,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       </div>
 
       {/* ========================================================== */}
-      {/* 🔥 PESANAN ANDA */}
+      {/* 🔥 PESANAN ANDA (DESAIN DISBA) */}
       {/* ========================================================== */}
       {orderedItems.length > 0 && (
         <div className="mt-12 p-6 bg-transparent border border-white/10 border-dashed rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4">
