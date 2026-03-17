@@ -29,14 +29,21 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
-  // 1. SINKRONISASI AWAL
+  // 1. SINKRONISASI AWAL & KUNCI LOKAL
   useEffect(() => {
     if (!activeTableId) {
       setIsError(true);
       return;
     }
+    
+    // Cek di memori HP apakah meja ini baru saja ditutup kasir
+    const isLockedLocal = localStorage.getItem(`disba_completed_${activeTableId}`);
+    if (isLockedLocal === 'true') {
+      setPaymentCompleted(true);
+    }
+
     fetchMenuAndTable();
-    fetchExistingOrder(); // 🔥 Akan membaca dari memori HP
+    fetchExistingOrder(); 
 
     const tableChannel = supabase.channel(`table-${tenantId}-${activeTableId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${activeTableId}` }, 
@@ -52,11 +59,11 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     
     fetchOrderedItems();
 
-    // 🔥 SAPU RANJAU: Cek paksa ke database setiap 3 detik!
+    // 🔥 SAPU RANJAU: Cek paksa ke tabel 'orders' setiap 3 detik. Kalau kasir tutup, langsung kunci!
     const pollInterval = setInterval(async () => {
       const { data } = await supabase.from('orders').select('status').eq('id', activeOrderId).single();
       if (data?.status === 'completed') {
-        setPaymentCompleted(true);
+        handleOrderCompleted();
       }
     }, 3000);
 
@@ -67,7 +74,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${activeOrderId}` },
         (payload) => {
-          if (payload.new.status === 'completed') setPaymentCompleted(true);
+          if (payload.new.status === 'completed') handleOrderCompleted();
         }
       ).subscribe();
 
@@ -76,6 +83,26 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       supabase.removeChannel(orderChannel); 
     };
   }, [activeOrderId]);
+
+  // --- FUNGSI KUNCI LAYAR PERMANEN ---
+  const handleOrderCompleted = () => {
+    setPaymentCompleted(true); 
+    setShowBillModal(false); 
+    if (activeTableId) {
+      localStorage.setItem(`disba_completed_${activeTableId}`, 'true'); 
+    }
+  };
+
+  // FUNGSI PESAN MENU BARU
+  const handleStartNewOrder = () => {
+    if (activeTableId) {
+      localStorage.removeItem(`disba_completed_${activeTableId}`);
+      localStorage.removeItem(`disba_order_${activeTableId}`);
+    }
+    setPaymentCompleted(false);
+    setActiveOrderId(null);
+    window.location.reload();
+  };
 
   // --- FUNCTIONS DATA ---
   const fetchMenuAndTable = async () => {
@@ -91,28 +118,26 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     } catch (err) { setIsError(true); }
   };
 
-  // 🔥 INGATAN GAJAH: Baca memori HP tamu
+  // 🔥 BACA MEMORI HP
   const fetchExistingOrder = async () => {
     const localKey = `disba_order_${activeTableId}`;
     const savedOrderId = localStorage.getItem(localKey);
 
-    // Jika HP ini ingat pernah pesan
     if (savedOrderId) {
       const { data } = await supabase.from("orders").select("status").eq("id", savedOrderId).single();
       if (data) {
         setActiveOrderId(savedOrderId);
-        if (data.status === "completed") setPaymentCompleted(true);
-        return; // Jangan lanjut cari, pakai ingatan ini
+        if (data.status === "completed") handleOrderCompleted();
+        return; 
       } else {
-        localStorage.removeItem(localKey); // Order sudah dihapus dari database
+        localStorage.removeItem(localKey); 
       }
     }
 
-    // Jika memori kosong, cari order pending di meja ini
     const { data } = await supabase.from("orders").select("id").eq("table_id", Number(activeTableId)).eq("tenant_id", tenantId).eq("status", "pending").maybeSingle();
     if (data) {
       setActiveOrderId(data.id);
-      localStorage.setItem(localKey, data.id); // Tanam ke memori HP
+      localStorage.setItem(localKey, data.id); 
     }
   };
 
@@ -158,7 +183,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         if (error) throw error;
         currentOrderId = newOrder.id;
         setActiveOrderId(currentOrderId);
-        localStorage.setItem(`disba_order_${activeTableId}`, currentOrderId); // 🔥 TANAM INGATAN
+        localStorage.setItem(`disba_order_${activeTableId}`, currentOrderId); // Tanam memori
       }
 
       const orderItemsData = cart.map((item) => ({
@@ -175,12 +200,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
     } catch (e: any) { alert("Gagal mengirim pesanan"); } finally { setLoading(false); }
   };
 
-  const handleStartNewOrder = () => {
-    localStorage.removeItem(`disba_order_${activeTableId}`);
-    setPaymentCompleted(false);
-    setActiveOrderId(null);
-    window.location.reload();
-  };
 
   // =========================================================================
   // 🔥 RENDER MASTER (GATING SYSTEM)
@@ -219,7 +238,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         </div>
       ) : 
       
-      // 3. LAYAR KUNCI SEMENTARA (KASIR SEDANG BAYAR)
+      // 3. LAYAR KUNCI SEMENTARA (KASIR SEDANG PREVIEW)
       (tableStatus === "payment" || tableStatus === "closed") ? (
         <div className="flex h-[80vh] items-center justify-center text-center animate-in fade-in">
           <div className="max-w-xs">
@@ -234,9 +253,11 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         </div>
       ) : 
       
-      // 4. LAYAR MENU NORMAL
+      // 4. LAYAR MENU NORMAL (BISA PESAN)
       (
         <div className="pb-40">
+          
+          {/* TOMBOL FLOATING BILL DI POJOK KANAN ATAS */}
           {orderedItems.length > 0 && (
             <button onClick={() => setShowBillModal(true)} className="fixed top-4 right-4 z-50 bg-black/80 backdrop-blur-xl border border-white/10 p-3 rounded-2xl flex items-center gap-3 shadow-[0_10px_30px_rgba(0,0,0,0.5)] active:scale-95 transition-all animate-in slide-in-from-top">
               <div className="relative">
@@ -265,6 +286,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
             </div>
           )}
 
+          {/* KATEGORI SCROLLER */}
           <div className="flex gap-2 overflow-x-auto pb-6 no-scrollbar sticky top-0 bg-[#020617]/90 backdrop-blur-xl z-40 py-2">
             <button onClick={() => setSelectedCategory("SEMUA")} className={`px-6 py-2 rounded-full text-[10px] font-black border transition-all ${selectedCategory === "SEMUA" ? "bg-blue-600 border-blue-600" : "bg-white/5 border-white/10 text-gray-500"}`}>SEMUA</button>
             {Array.from(new Set(menuItems.map((i) => i.category))).map((cat) => (
@@ -272,6 +294,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
             ))}
           </div>
 
+          {/* DAFTAR MENU */}
           <div className="grid gap-4">
             {menuItems.filter((item) => selectedCategory === "SEMUA" || item.category === selectedCategory).map((item) => {
                 const itemInCart = cart.find((c) => c.id === item.id);
@@ -298,6 +321,28 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
               })}
           </div>
 
+          {/* 🔥 INI YANG KAPTEN MINTA: DAFTAR PESANAN DI BAWAH MENU */}
+          {orderedItems.length > 0 && (
+            <div className="mt-10 p-5 bg-white/[0.03] border border-dashed border-white/10 rounded-[2rem] animate-in fade-in slide-in-from-bottom-4">
+              <h3 className="text-[10px] font-black text-blue-500 tracking-[0.2em] mb-4 flex items-center gap-2">
+                <Receipt size={14} /> PESANAN_YANG_SUDAH_MASUK_
+              </h3>
+              <div className="space-y-3">
+                {orderedItems.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-[10px] font-bold border-b border-white/5 pb-3">
+                    <span className="text-gray-300">{item.quantity}X {item.name}</span>
+                    <span className="font-mono text-white">{(item.quantity * item.price_at_time).toLocaleString()}</span>
+                  </div>
+                ))}
+                <div className="pt-2 flex justify-between items-end border-t border-white/10 mt-2">
+                    <span className="text-[9px] text-gray-500 font-black tracking-widest">SUBTOTAL</span>
+                    <span className="text-lg font-black text-blue-500 font-mono tracking-tighter">RP {calculateTotalOrdered().toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TOMBOL KERANJANG MENGAPUNG BAWAH */}
           {cart.length > 0 && (
             <div className="fixed inset-x-0 bottom-6 px-4 z-40">
               <div className="bg-blue-600 rounded-[2rem] p-4 flex justify-between items-center shadow-[0_10px_40px_rgba(37,99,235,0.3)] animate-in slide-in-from-bottom duration-500">
