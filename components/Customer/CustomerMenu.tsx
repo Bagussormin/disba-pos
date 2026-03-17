@@ -29,129 +29,87 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
-  // 1. SINKRONISASI AWAL & KUNCI LOKAL
+  const localOrderKey = `disba_order_${activeTableId}`;
+
+  // =========================================================================
+  // 🛡️ RADAR SAPU RANJAU (CEK DATA TIAP 3 DETIK, ANTI HP TIDUR!)
+  // =========================================================================
+  const syncData = async () => {
+    if (!activeTableId) return;
+
+    // 1. Cek Status Meja
+    const { data: table } = await supabase.from("tables").select("name, status").eq("id", Number(activeTableId)).eq("tenant_id", tenantId).single();
+    if (table) {
+      setTableName(table.name);
+      setTableStatus(table.status.toLowerCase());
+    }
+
+    // 2. Cek Order Terakhir di Meja Ini
+    const { data: latestOrder } = await supabase
+      .from("orders")
+      .select("id, status")
+      .eq("table_id", Number(activeTableId))
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestOrder) {
+      if (latestOrder.status === 'pending') {
+        setActiveOrderId(latestOrder.id);
+        localStorage.setItem(localOrderKey, latestOrder.id.toString()); // Tanam ingatan!
+        setPaymentCompleted(false);
+
+        // Tarik detail pesanan
+        const { data: items } = await supabase.from("order_items").select("*, menus(name)").eq("order_id", latestOrder.id).order("created_at", { ascending: true });
+        if (items) {
+          setOrderedItems(items.map(item => ({
+            name: item.menus?.name || "Menu",
+            quantity: item.quantity,
+            price_at_time: item.price_at_time,
+          })));
+        }
+      } else if (latestOrder.status === 'completed') {
+        // Jika statusnya sudah selesai, pastikan apakah ini pesanan HP ini?
+        const savedId = localStorage.getItem(localOrderKey);
+        if (savedId === latestOrder.id.toString()) {
+          setPaymentCompleted(true); // KUNCI LAYAR MUTLAK!
+          setShowBillModal(false);
+        } else {
+          // Ini pesanan tamu sebelumnya, bersihkan layar
+          setActiveOrderId(null);
+          setOrderedItems([]);
+          setPaymentCompleted(false);
+        }
+      }
+    }
+  };
+
+  // --- INITIAL LOAD & POLLING ---
   useEffect(() => {
     if (!activeTableId) {
       setIsError(true);
       return;
     }
-    
-    // Cek di memori HP apakah meja ini baru saja ditutup kasir
-    const isLockedLocal = localStorage.getItem(`disba_completed_${activeTableId}`);
-    if (isLockedLocal === 'true') {
-      setPaymentCompleted(true);
-    }
 
-    fetchMenuAndTable();
-    fetchExistingOrder(); 
+    // Tarik daftar menu 1x saja
+    supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category", { ascending: true })
+      .then(({data}) => { if (data) setMenuItems(data); });
 
-    const tableChannel = supabase.channel(`table-${tenantId}-${activeTableId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${activeTableId}` }, 
-        (payload) => setTableStatus(payload.new.status.toLowerCase())
-      ).subscribe();
+    // Mulai Radar!
+    syncData();
+    const interval = setInterval(syncData, 3000); // Cek setiap 3 detik!
 
-    return () => { supabase.removeChannel(tableChannel); };
+    return () => clearInterval(interval);
   }, [activeTableId, tenantId]);
 
-  // 2. RADAR PENJAGA (POLLING 3 DETIK & REALTIME) - ANTI HP TIDUR
-  useEffect(() => {
-    if (!activeOrderId) return;
-    
-    fetchOrderedItems();
-
-    // 🔥 SAPU RANJAU: Cek paksa ke tabel 'orders' setiap 3 detik. Kalau kasir tutup, langsung kunci!
-    const pollInterval = setInterval(async () => {
-      const { data } = await supabase.from('orders').select('status').eq('id', activeOrderId).single();
-      if (data?.status === 'completed') {
-        handleOrderCompleted();
-      }
-    }, 3000);
-
-    // Realtime Listener
-    const orderChannel = supabase.channel(`orders-items-${activeOrderId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `order_id=eq.${activeOrderId}` }, 
-        () => fetchOrderedItems()
-      )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${activeOrderId}` },
-        (payload) => {
-          if (payload.new.status === 'completed') handleOrderCompleted();
-        }
-      ).subscribe();
-
-    return () => { 
-      clearInterval(pollInterval);
-      supabase.removeChannel(orderChannel); 
-    };
-  }, [activeOrderId]);
-
-  // --- FUNGSI KUNCI LAYAR PERMANEN ---
-  const handleOrderCompleted = () => {
-    setPaymentCompleted(true); 
-    setShowBillModal(false); 
-    if (activeTableId) {
-      localStorage.setItem(`disba_completed_${activeTableId}`, 'true'); 
-    }
-  };
-
-  // FUNGSI PESAN MENU BARU
+  // --- FUNGSI PESAN MENU BARU ---
   const handleStartNewOrder = () => {
-    if (activeTableId) {
-      localStorage.removeItem(`disba_completed_${activeTableId}`);
-      localStorage.removeItem(`disba_order_${activeTableId}`);
-    }
+    if (activeTableId) localStorage.removeItem(localOrderKey);
     setPaymentCompleted(false);
     setActiveOrderId(null);
+    setOrderedItems([]);
     window.location.reload();
-  };
-
-  // --- FUNCTIONS DATA ---
-  const fetchMenuAndTable = async () => {
-    try {
-      const { data: table } = await supabase.from("tables").select("name, status").eq("id", Number(activeTableId)).eq("tenant_id", tenantId).single();
-      if (table) {
-        setTableName(table.name); 
-        setTableStatus(table.status.toLowerCase());
-      } else setIsError(true);
-
-      const { data: menuData } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category", { ascending: true });
-      if (menuData) setMenuItems(menuData);
-    } catch (err) { setIsError(true); }
-  };
-
-  // 🔥 BACA MEMORI HP
-  const fetchExistingOrder = async () => {
-    const localKey = `disba_order_${activeTableId}`;
-    const savedOrderId = localStorage.getItem(localKey);
-
-    if (savedOrderId) {
-      const { data } = await supabase.from("orders").select("status").eq("id", savedOrderId).single();
-      if (data) {
-        setActiveOrderId(savedOrderId);
-        if (data.status === "completed") handleOrderCompleted();
-        return; 
-      } else {
-        localStorage.removeItem(localKey); 
-      }
-    }
-
-    const { data } = await supabase.from("orders").select("id").eq("table_id", Number(activeTableId)).eq("tenant_id", tenantId).eq("status", "pending").maybeSingle();
-    if (data) {
-      setActiveOrderId(data.id);
-      localStorage.setItem(localKey, data.id); 
-    }
-  };
-
-  const fetchOrderedItems = async () => {
-    if (!activeOrderId) return;
-    const { data } = await supabase.from("order_items").select("*, menus(name)").eq("order_id", activeOrderId).order("created_at", { ascending: true });
-    if (data) {
-        const formatted = data.map(item => ({
-            name: item.menus?.name || "Menu",
-            quantity: item.quantity,
-            price_at_time: item.price_at_time,
-        }));
-        setOrderedItems(formatted);
-    }
   };
 
   const calculateTotalOrdered = () => orderedItems.reduce((acc, curr) => acc + (curr.quantity * curr.price_at_time), 0);
@@ -183,7 +141,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         if (error) throw error;
         currentOrderId = newOrder.id;
         setActiveOrderId(currentOrderId);
-        localStorage.setItem(`disba_order_${activeTableId}`, currentOrderId); // Tanam memori
+        localStorage.setItem(localOrderKey, currentOrderId.toString());
       }
 
       const orderItemsData = cart.map((item) => ({
@@ -195,8 +153,11 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
 
       setIsSuccess(true);
       setCart([]);
-      await fetchOrderedItems(); 
-      setTimeout(() => setIsSuccess(false), 5000);
+      
+      // 🔥 Paksa Radar mengecek database DETIK ITU JUGA (Pesanan langsung muncul di bawah!)
+      await syncData(); 
+      
+      setTimeout(() => setIsSuccess(false), 4000);
     } catch (e: any) { alert("Gagal mengirim pesanan"); } finally { setLoading(false); }
   };
 
@@ -232,7 +193,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
               <Receipt size={16}/> Lihat_Struk_Digital
             </button>
             <button onClick={handleStartNewOrder} className="flex items-center justify-center gap-2 text-[9px] font-black text-gray-600 hover:text-white transition-colors tracking-[0.2em] bg-white/5 px-6 py-3 rounded-xl border border-white/10">
-              <RefreshCcw size={12}/> Pesan_Lagi
+              <RefreshCcw size={12}/> Pesan_Menu_Lagi
             </button>
           </div>
         </div>
@@ -321,7 +282,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
               })}
           </div>
 
-          {/* 🔥 INI YANG KAPTEN MINTA: DAFTAR PESANAN DI BAWAH MENU */}
+          {/* 🔥 DAFTAR PESANAN DI BAWAH MENU */}
           {orderedItems.length > 0 && (
             <div className="mt-10 p-5 bg-white/[0.03] border border-dashed border-white/10 rounded-[2rem] animate-in fade-in slide-in-from-bottom-4">
               <h3 className="text-[10px] font-black text-blue-500 tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -359,7 +320,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         </div>
       )}
 
-      {/* 5. MODAL DIGITAL BILL (Bisa dibuka di layar menu ATAU layar Selesai) */}
+      {/* 5. MODAL DIGITAL BILL (STRUK POPUP) */}
       {showBillModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[9999] p-4 flex flex-col justify-end">
           <div className="bg-[#0b1120] border border-white/10 rounded-[2.5rem] w-full max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
@@ -398,6 +359,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           </div>
         </div>
       )}
+
     </div>
   );
 }
