@@ -25,42 +25,50 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
   // =========================================================================
-  // 🛡️ RADAR SINKRONISASI (CEK STATUS PESANAN TIAP 3 DETIK)
+  // 🛡️ RADAR SINKRONISASI (ANTI-ERROR & CEK TIAP 3 DETIK)
   // =========================================================================
   const syncOrder = async () => {
     if (!activeTableId) return;
 
-    // 1. Cek Order Pending di database untuk meja ini
-    const { data: currentOrder } = await supabase
-      .from('orders')
-      .select('id, status')
-      .eq('table_id', Number(activeTableId))
-      .eq('tenant_id', tenantId)
-      .eq('status', 'pending')
-      .maybeSingle();
+    try {
+      // 1. 🔥 FIX RANJAU SUPABASE: Pakai limit(1) agar tidak error jika ada data ganda!
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('id, status')
+        .eq('table_id', Number(activeTableId))
+        .eq('tenant_id', tenantId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-    if (currentOrder) {
-      // Ada pesanan belum dibayar! Tarik item-nya untuk ditampilkan di bawah.
-      setActiveOrderId(currentOrder.id.toString());
-      const { data: items } = await supabase
-        .from('order_items')
-        .select('*, menus(name)')
-        .eq('order_id', currentOrder.id)
-        .order('created_at', { ascending: true });
+      const currentOrder = ordersData?.[0]; // Ambil data pertama yang valid
 
-      if (items) {
-        setOrderedItems(items.map(i => ({
-          name: i.menus?.name || 'Menu',
-          quantity: i.quantity,
-          price_at_time: i.price_at_time
-        })));
+      if (currentOrder) {
+        // Ada pesanan belum dibayar!
+        setActiveOrderId(currentOrder.id.toString());
+        
+        // Tarik item-itemnya untuk ditampilkan di bawah
+        const { data: items } = await supabase
+          .from('order_items')
+          .select('*, menus(name)')
+          .eq('order_id', currentOrder.id)
+          .order('created_at', { ascending: true });
+
+        if (items) {
+          setOrderedItems(items.map(i => ({
+            name: i.menus?.name || 'Menu',
+            quantity: i.quantity,
+            price_at_time: i.price_at_time
+          })));
+        }
+      } else {
+        // 🔥 JIKA KASIR SUDAH TEKAN BAYAR (Order 'pending' sudah tidak ada)
+        // KOSONGKAN LAYAR HP TAMU SEKARANG JUGA!
+        setActiveOrderId(null);
+        setOrderedItems([]);
       }
-    } else {
-      // 🔥 JIKA KASIR SUDAH TEKAN BAYAR (Order jadi completed)
-      // Maka order 'pending' tidak akan ditemukan.
-      // KOSONGKAN LAYAR HP TAMU SEKARANG JUGA!
-      setActiveOrderId(null);
-      setOrderedItems([]);
+    } catch (err) {
+      console.error("Gagal sinkronisasi data:", err);
     }
   };
 
@@ -71,14 +79,14 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       return;
     }
 
-    // Tarik daftar menu dan meja 1x saat pertama buka
+    // Tarik daftar menu dan nama meja
     supabase.from("tables").select("name").eq("id", Number(activeTableId)).single()
       .then(({data}) => { if (data) setTableName(data.name); else setIsError(true); });
 
     supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category", { ascending: true })
       .then(({data}) => { if (data) setMenuItems(data); });
 
-    // Mulai Radar: Cek pesanan setiap 3 detik
+    // Mulai Radar: Cek pesanan setiap 3 detik tanpa henti
     syncOrder();
     const interval = setInterval(syncOrder, 3000); 
     return () => clearInterval(interval);
@@ -111,7 +119,8 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           table_id: numericTableId, tenant_id: tenantId, status: "pending", total_price: cart.reduce((a, b) => a + b.qty * b.price, 0) 
         }).select().single();
         if (error) throw error;
-        orderIdToUse = newOrder.id;
+        orderIdToUse = newOrder.id.toString();
+        setActiveOrderId(orderIdToUse);
       }
 
       // Masukkan keranjang ke dalam Bill
@@ -124,9 +133,9 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       await supabase.from("tables").update({ status: "occupied" }).eq("id", numericTableId);
 
       setIsSuccess(true);
-      setCart([]); // Hilangkan keranjang
+      setCart([]); 
       
-      // Langsung tarik data dari database agar muncul di desain "PESANAN ANDA" bawah
+      // 🔥 LANGSUNG TARIK DATA: Supaya "PESANAN ANDA" langsung muncul di bawah!
       await syncOrder(); 
       
       setTimeout(() => setIsSuccess(false), 4000);
@@ -214,7 +223,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-[11px] font-black text-blue-400 italic tracking-[0.1em]">PESANAN_ANDA_</h3>
             <span className="bg-white/5 px-3 py-1.5 rounded-lg text-[9px] text-gray-500 font-black tracking-widest uppercase border border-white/5">
-              BILL #{activeOrderId || '00'}
+              BILL #{activeOrderId ? activeOrderId.substring(0, 4) : '00'}
             </span>
           </div>
 
