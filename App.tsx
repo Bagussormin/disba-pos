@@ -18,6 +18,9 @@ import InventoryApp from "./components/admin/InventoryApp";
 import CustomerMenu from "./components/Customer/CustomerMenu"; 
 import TableQRManager from "./components/admin/TableQRManager";
 
+// 🔥 IMPORT FITUR BARU: MANAJEMEN PAKET BUNDLING
+import Paket from "./components/admin/Paket";
+
 // IMPORT FITUR SETTINGS & LAPORAN
 import SalesReport from "./components/admin/SalesReport"; 
 import TransactionHistory from "./components/admin/TransactionHistory";
@@ -145,6 +148,10 @@ export default function App() {
         {(normalizedPath === "/admin/dashboard" || normalizedPath === "/admin") && <AdminHome />}
         {normalizedPath === "/admin/qr" && <TableQRManager />}
         {normalizedPath === "/admin/menu" && <MenuMaster />}
+        
+        {/* 🔥 JALUR ROUTING PAKET BUNDLING KITA */}
+        {normalizedPath === "/admin/paket" && <Paket />} 
+        
         {normalizedPath === "/admin/recipes" && <RecipeManagement />}
         {normalizedPath === "/admin/hpp-calculator" && <HPPCalculator />} 
         {normalizedPath === "/admin/inventory" && <InventoryApp />}
