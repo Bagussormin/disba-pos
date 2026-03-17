@@ -25,43 +25,33 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   const [orderedItems, setOrderedItems] = useState<any[]>([]);
 
   // =========================================================================
-  // 🛡️ SINKRONISASI DATA PESANAN (RADAR UTAMA)
+  // 🛡️ RADAR SINKRONISASI (CEK TIAP 3 DETIK)
   // =========================================================================
   const syncOrder = async () => {
     if (!activeTableId) return;
 
     try {
-      // 1. Cari Order Pending di database untuk meja ini
+      // 1. Cari Order Pending di database
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('id, status')
         .eq('table_id', Number(activeTableId))
         .eq('tenant_id', tenantId)
         .eq('status', 'pending')
-        .order('created_at', { ascending: false }) // Ambil yang terbaru jika ada ganda
+        .order('created_at', { ascending: false })
         .limit(1);
-
-      if (ordersError) {
-        console.error("Error fetching orders:", ordersError);
-        return;
-      }
 
       const currentOrder = ordersData?.[0]; 
 
       if (currentOrder) {
-        // Ada pesanan! Simpan ID-nya dan tarik detail itemnya
+        // Ada pesanan! Tarik itemnya (Pastikan RLS order_items sudah dimatikan!)
         setActiveOrderId(currentOrder.id.toString());
         
-        const { data: items, error: itemsError } = await supabase
+        const { data: items } = await supabase
           .from('order_items')
           .select('*, menus(name)')
           .eq('order_id', currentOrder.id)
           .order('created_at', { ascending: true });
-
-        if (itemsError) {
-             console.error("Error fetching order items:", itemsError);
-             return;
-        }
 
         if (items) {
           setOrderedItems(items.map(i => ({
@@ -71,7 +61,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           })));
         }
       } else {
-        // Jika Kasir sudah tekan bayar (Tidak ada order pending), BERSIHKAN LAYAR!
+        // 🔥 JIKA KASIR SUDAH TEKAN BAYAR (Settle): KOSONGKAN LAYAR!
         setActiveOrderId(null);
         setOrderedItems([]);
       }
@@ -87,17 +77,15 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       return;
     }
 
-    // Tarik daftar menu dan nama meja
     supabase.from("tables").select("name").eq("id", Number(activeTableId)).single()
       .then(({data}) => { if (data) setTableName(data.name); else setIsError(true); });
 
     supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category", { ascending: true })
       .then(({data}) => { if (data) setMenuItems(data); });
 
-    // Mulai Radar: Tarik data pesanan langsung saat web dibuka, lalu cek tiap 3 detik
+    // Mulai Radar Cek Pesanan Otomatis
     syncOrder();
     const interval = setInterval(syncOrder, 3000); 
-    
     return () => clearInterval(interval);
   }, [activeTableId, tenantId]);
 
@@ -122,46 +110,34 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       const numericTableId = Number(activeTableId);
       let orderIdToUse = activeOrderId;
 
-      // Jika meja ini kosong (belum ada bill pending), BUAT BILL BARU
       if (!orderIdToUse) {
         const { data: newOrder, error } = await supabase.from("orders").insert({ 
           table_id: numericTableId, tenant_id: tenantId, status: "pending", total_price: cart.reduce((a, b) => a + b.qty * b.price, 0) 
         }).select().single();
         if (error) throw error;
         orderIdToUse = newOrder.id.toString();
-        setActiveOrderId(orderIdToUse); // Set state agar tidak buat bill ganda
+        setActiveOrderId(orderIdToUse);
       }
 
-      // Masukkan item keranjang ke dalam Bill (yang baru atau yang sudah ada)
       const orderItemsData = cart.map((item) => ({
         order_id: orderIdToUse, menu_id: item.id, tenant_id: tenantId, quantity: item.qty, price_at_time: item.price, notes: ""
       }));
       
-      const { error: insertError } = await supabase.from("order_items").insert(orderItemsData);
-      if(insertError) throw insertError;
-      
-      // Update status meja
+      await supabase.from("order_items").insert(orderItemsData);
       await supabase.from("tables").update({ status: "occupied" }).eq("id", numericTableId);
 
       setIsSuccess(true);
       setCart([]); 
       
-      // 🔥 LANGSUNG TARIK DATA DARI DATABASE AGAR "PESANAN ANDA" MUNCUL!
-      await syncOrder(); 
-      
+      await syncOrder(); // Tarik data pesanan yang baru ditambahkan
       setTimeout(() => setIsSuccess(false), 4000);
-    } catch (e: any) { 
-        alert("Gagal mengirim pesanan: " + e.message); 
-    } finally { 
-        setLoading(false); 
-    }
+    } catch (e: any) { alert("Gagal mengirim pesanan"); } finally { setLoading(false); }
   };
 
 
   // =========================================================================
   // 🔥 RENDER UI
   // =========================================================================
-  
   if (isError) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-8 text-center uppercase italic">
@@ -177,7 +153,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
   return (
     <div className="min-h-screen bg-[#020617] text-white p-4 font-sans uppercase italic relative pb-32">
       
-      {/* HEADER */}
       <header className="mb-8 pt-4 text-left">
         <h1 className="text-3xl font-black italic tracking-tighter">{tenantId.split('_')[0]} <span className="text-blue-500">MENU_</span></h1>
         <div className="flex items-center gap-2 mt-2">
@@ -186,7 +161,6 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         </div>
       </header>
 
-      {/* SUCCESS NOTIF */}
       {isSuccess && (
         <div className="mb-6 bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3 animate-bounce">
           <CheckCircle2 className="text-emerald-500" size={20} />
@@ -230,7 +204,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
       </div>
 
       {/* ========================================================== */}
-      {/* 🔥 DESAIN LEGENDARIS DISBA: PESANAN ANDA (TAMPIL DI BAWAH) */}
+      {/* 🔥 DESAIN LEGENDARIS DISBA: PESANAN ANDA */}
       {/* ========================================================== */}
       {orderedItems.length > 0 && (
         <div className="mt-12 p-6 bg-transparent border border-white/10 border-dashed rounded-[2.5rem] animate-in fade-in slide-in-from-bottom-4">
@@ -238,7 +212,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-[11px] font-black text-blue-400 italic tracking-[0.1em]">PESANAN_ANDA_</h3>
             <span className="bg-white/5 px-3 py-1.5 rounded-lg text-[9px] text-gray-500 font-black tracking-widest uppercase border border-white/5">
-              BILL #{activeOrderId ? activeOrderId.substring(0, 4) : '00'}
+              BILL #{activeOrderId ? activeOrderId.substring(0, 4).toUpperCase() : '00'}
             </span>
           </div>
 
@@ -273,7 +247,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         </div>
       )}
 
-      {/* TOMBOL KERANJANG (DI BAWAH) */}
+      {/* KERANJANG BAWAH */}
       {cart.length > 0 && (
         <div className="fixed inset-x-0 bottom-6 px-4 z-40">
           <div className="bg-blue-600 rounded-[2rem] p-4 flex justify-between items-center shadow-[0_10px_40px_rgba(37,99,235,0.3)] animate-in slide-in-from-bottom duration-500">
