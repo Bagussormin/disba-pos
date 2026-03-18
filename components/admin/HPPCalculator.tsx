@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { Calculator, Trash2, Percent, ArrowRight, Save, PieChart, TrendingUp } from "lucide-react";
+import { Calculator, Trash2, Percent, Save, PieChart, TrendingUp } from "lucide-react";
 
 export default function HPPCalculator() {
   const [inventory, setInventory] = useState<any[]>([]);
@@ -12,7 +12,6 @@ export default function HPPCalculator() {
   const [markupPct, setMarkupPct] = useState<number>(50);
   
   const [menuName, setMenuName] = useState<string>("");
-  // 🔥 TAMBAHAN BARU: State untuk Kategori agar menu tidak sembunyi
   const [category, setCategory] = useState<string>("COFFEE"); 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -85,13 +84,15 @@ export default function HPPCalculator() {
 
     setIsSaving(true);
     try {
+      // 🔥 SUNTIKAN HPP KETIKA BIKIN MENU BARU DARI CALCULATOR
       const { data: newMenu, error: menuErr } = await supabase
         .from("menus")
         .insert([{
           tenant_id: tenantId,
           name: menuName.toUpperCase(),
           price: Math.round(hargaJual / 1000) * 1000, 
-          category: category.toUpperCase(), // 🔥 MENGGUNAKAN KATEGORI YANG DIKETIK
+          hpp: Math.round(totalModalMenu), // <--- KABEL PENGHUBUNG HPP!
+          category: category.toUpperCase(), 
           is_available: true
         }])
         .select().single();
@@ -133,7 +134,6 @@ export default function HPPCalculator() {
             </div>
           </div>
           
-          {/* 🔥 PANEL INPUT NAMA MENU & KATEGORI (DIPERBARUI) */}
           <div className="flex flex-col md:flex-row items-center gap-2 bg-white/[0.02] p-2 rounded-2xl border border-white/10 w-full md:w-auto">
             <input 
               type="text" 

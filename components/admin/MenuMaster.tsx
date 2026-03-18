@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { 
   Plus, Trash2, Edit2, Image as ImageIcon, X, Loader2, 
-  Upload, Tag, ChefHat, Save, Calculator, DollarSign, TrendingUp, RefreshCcw 
+  Tag, ChefHat, Save, Calculator, DollarSign, TrendingUp, RefreshCcw 
 } from "lucide-react";
 
 // --- KONFIGURASI FINANSIAL DINAMIS ---
@@ -56,7 +56,7 @@ export default function MenuMaster() {
   const [selectedMenuForRecipe, setSelectedMenuForRecipe] = useState<MenuItem | null>(null);
   const [currentRecipeItems, setCurrentRecipeItems] = useState<RecipeItem[]>([]);
   const [targetProfit, setTargetProfit] = useState(40);
-  const [manualPrice, setManualPrice] = useState<number>(0); // State harga manual
+  const [manualPrice, setManualPrice] = useState<number>(0); 
   const [loadingRecipe, setLoadingRecipe] = useState(false);
   const [savingRecipe, setSavingRecipe] = useState(false);
 
@@ -137,7 +137,7 @@ export default function MenuMaster() {
         return { inventory_id: r.inventory_id, name: r.inventory?.item_name || "??", qty_needed: r.qty_needed, unit_price: up, stock: r.inventory?.current_stock || 0 };
       });
       setCurrentRecipeItems(formatted);
-      setManualPrice(Number(menu.price)); // Inisialisasi harga manual
+      setManualPrice(Number(menu.price)); 
     }
     setLoadingRecipe(false);
   };
@@ -164,9 +164,12 @@ export default function MenuMaster() {
     setSavingRecipe(true);
     
     try {
-      // 1. Update Harga di Tabel MENUS
+      // 1. Update Harga DAN SUNTIKAN HPP di Tabel MENUS (🔥 INI KABELNYA!)
       await supabase.from("menus")
-        .update({ price: manualPrice })
+        .update({ 
+          price: manualPrice,
+          hpp: Math.round(hppFinal) // <--- SUNTIKAN HPP PERMANEN KE DATABASE
+        })
         .eq("id", selectedMenuForRecipe.id)
         .eq("tenant_id", tenantId);
 
