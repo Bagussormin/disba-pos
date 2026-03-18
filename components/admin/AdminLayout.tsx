@@ -13,11 +13,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "MENU MASTER", path: "/admin/menu", icon: "🍔" },
     { name: "QR TABLES", path: "/admin/qr", icon: "📱" },
     { name: "INVENTORY", path: "/admin/inventory", icon: "📦" },
-    { name: "RESEP & PAKET", path: "/admin/recipes", icon: "⚖️" },
     
-    // 🔥 INI DIA TOMBOL KALKULATOR HPP-NYA
+    // 🔥 INI DIA MENU PAKET BARU KITA
+    { name: "PAKET", path: "/admin/paket", icon: "🎁" }, 
+    
+    { name: "RESEP", path: "/admin/recipes", icon: "⚖️" },
     { name: "KALKULATOR HPP", path: "/admin/hpp-calculator", icon: "🧮" }, 
-    
     { name: "HISTORY", path: "/admin/history", icon: "📜" },
     { name: "SHIFT", path: "/admin/shifts", icon: "⏰" },
   ];
