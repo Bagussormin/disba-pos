@@ -21,7 +21,7 @@ export default function Paket() {
   }, []);
 
   const fetchData = async () => {
-    // 1. Ambil Menu Normal (Bukan Paket) beserta HPP dan Harga Jualnya
+    // 1. Ambil Menu Normal
     const { data: menus } = await supabase
       .from("menus")
       .select("*")
@@ -30,14 +30,16 @@ export default function Paket() {
       .order("name", { ascending: true });
     if (menus) setNormalMenus(menus);
 
-    // 2. Ambil Daftar Paket yang sudah ada
-    const { data: pkgs } = await supabase
+    // 2. Ambil Daftar Paket (🔥 FIX BUG 1: Hapus created_at, ganti dengan id)
+    const { data: pkgs, error: pkgsErr } = await supabase
       .from("menus")
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("category", "PAKET")
-      .order("created_at", { ascending: false });
+      .order("id", { ascending: false }); 
     
+    if (pkgsErr) console.error("Error fetching packages:", pkgsErr);
+
     // 3. Ambil isi dari masing-masing paket
     if (pkgs) {
       const { data: items } = await supabase.from("package_items").select("*, menus(name)").eq("tenant_id", tenantId);
@@ -56,7 +58,6 @@ export default function Paket() {
     if (existing) {
       setBundleItems(bundleItems.map(item => item.menu_id === menu.id ? { ...item, quantity: item.quantity + 1 } : item));
     } else {
-      // Kita simpan juga price dan hpp (jika ada) untuk dikalkulasi
       setBundleItems([...bundleItems, { 
         menu_id: menu.id, 
         name: menu.name, 
@@ -75,9 +76,8 @@ export default function Paket() {
   const totalNormalPrice = bundleItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const totalHPP = bundleItems.reduce((acc, item) => acc + (item.hpp * item.quantity), 0);
   
-  // Saran harga: Margin 40% dari HPP ATAU diskon 15% dari Harga Normal (Sistem mencari jalan tengah)
-  const marginPrice = totalHPP > 0 ? totalHPP * 1.5 : 0; // Margin 50% dari modal
-  const discountPrice = totalNormalPrice * 0.85; // Diskon 15% dari normal
+  const marginPrice = totalHPP > 0 ? totalHPP * 1.5 : 0; 
+  const discountPrice = totalNormalPrice * 0.85; 
   const suggestedPrice = totalHPP > 0 ? Math.max(marginPrice, discountPrice) : discountPrice;
 
   const handleSavePackage = async (e: any) => {
@@ -95,10 +95,12 @@ export default function Paket() {
 
     setLoading(true);
     try {
+      // 🔥 FIX BUG 3: Sekarang HPP ikut disetorkan ke tabel Menu Master!
       const { data: newMenu, error: menuErr } = await supabase.from("menus").insert({
         tenant_id: tenantId,
         name: packageName,
         price: Number(packagePrice),
+        hpp: totalHPP, // <--- INI KUNCI AGAR MENU MASTER TIDAK NOL
         category: "PAKET",
       }).select().single();
 
@@ -117,7 +119,7 @@ export default function Paket() {
       setPackageName("");
       setPackagePrice("");
       setBundleItems([]);
-      fetchData();
+      fetchData(); // Sekarang daftar paket langsung muncul di kanan!
       alert("Paket Bundling Berhasil Dibuat!");
     } catch (err: any) {
       alert("Gagal menyimpan paket: " + err.message);
@@ -145,9 +147,7 @@ export default function Paket() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        {/* ==================================================== */}
-        {/* KIRI: FORM BUILDER PAKET BARU                        */}
-        {/* ==================================================== */}
+        {/* KIRI: FORM BUILDER PAKET BARU */}
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-xl">
           <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2"><Plus className="text-purple-600"/> RAKIT PAKET BARU</h2>
           
@@ -157,7 +157,6 @@ export default function Paket() {
               <input type="text" value={packageName} onChange={(e) => setPackageName(e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-gray-900 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-purple-500 outline-none transition-all placeholder:text-gray-400" placeholder="Contoh: Paket Buka Puasa Berdua" required />
             </div>
 
-            {/* AREA PEMILIHAN MENU (KERANJANG BUNDLING) */}
             <div className="pt-2">
               <label className="text-xs font-black text-purple-700 uppercase tracking-widest mb-3 block">1. Pilih Isi Paket:</label>
               <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 bg-gray-50 rounded-xl">
@@ -170,7 +169,6 @@ export default function Paket() {
               </div>
             </div>
 
-            {/* KERANJANG ISI PAKET */}
             <div className="bg-purple-50 border border-purple-200 p-4 rounded-xl min-h-[100px]">
               <label className="text-[10px] font-black text-purple-800 uppercase tracking-widest mb-3 block">2. Komposisi Bundling:</label>
               {bundleItems.length === 0 ? (
@@ -187,7 +185,6 @@ export default function Paket() {
               )}
             </div>
 
-            {/* 🔥 FITUR INTELEJEN: ANALISIS HPP & SARAN HARGA */}
             {bundleItems.length > 0 && (
               <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
                 <div className="flex items-center gap-2 mb-3">
@@ -223,9 +220,7 @@ export default function Paket() {
           </form>
         </div>
 
-        {/* ==================================================== */}
-        {/* KANAN: DAFTAR PAKET AKTIF                            */}
-        {/* ==================================================== */}
+        {/* KANAN: DAFTAR PAKET AKTIF */}
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-xl flex flex-col h-[80vh]">
           <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2"><Package className="text-blue-500"/> PAKET AKTIF ({packages.length})</h2>
           
