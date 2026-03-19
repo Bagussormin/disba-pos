@@ -52,7 +52,7 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("menus") 
       .select("*")
       .eq("tenant_id", tenantId)
@@ -61,7 +61,8 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
 
     if (data) {
       setProducts(data);
-      const uniqueCategories = ["ALL", ...new Set(data.map((p: any) => p.category))];
+      // 🔥 ANTI-CRASH: Jika ada menu yang tidak punya kategori, jangan biarkan null!
+      const uniqueCategories = ["ALL", ...new Set(data.map((p: any) => p.category || "LAINNYA"))];
       setCategories(uniqueCategories as string[]);
     }
   };
@@ -74,21 +75,20 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
 
     if (data) {
       const existingItems = data.map((item: any) => ({
-        product: item.menus, // Bisa jadi null jika menu sudah dihapus di Master!
-        quantity: item.quantity,
+        product: item.menus, 
+        quantity: item.quantity || 1,
         isLocked: true,
         source: item.notes === "QR_ORDER" ? 'customer' : 'waiter'
       }));
       setCart(prev => {
         const unsentItems = prev.filter(i => !i.isLocked);
-        // 🔥 FIX BUGS: Kita TETAP masukkan menu yang null, tapi nanti di-handle saat render agar tidak nge-blank
         return [...existingItems, ...unsentItems];
       });
     }
   };
 
   const addToCart = (product: Product) => {
-    if (!product) return; // Keamanan ganda
+    if (!product) return; 
     setCart((prev) => {
       const existingIdx = prev.findIndex((item) => item.product?.id === product.id && !item.isLocked);
       if (existingIdx > -1) {
@@ -123,7 +123,7 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
         tenant_id: tenantId,
         menu_id: item.product.id,
         quantity: item.quantity,
-        price_at_time: item.product.price,
+        price_at_time: item.product.price || 0,
         notes: "WAITER_ORDER"
       }));
 
@@ -139,9 +139,12 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
     }
   };
 
-  const filteredProducts = category === "ALL" ? products : products.filter(p => p.category === category);
+  // 🔥 ANTI-CRASH: Amankan filter kategori
+  const filteredProducts = category === "ALL" 
+    ? products 
+    : products.filter(p => (p.category || "LAINNYA") === category);
   
-  // 🔥 FIX BUGS: Tambahkan pengaman tanda tanya (?.) agar kalau menu null, harganya dianggap 0 dan tidak meledak
+  // 🔥 ANTI-CRASH: Amankan kalkulasi harga dari ancaman null
   const totalLocked = cart.filter(i => i.isLocked).reduce((sum, item) => sum + ((item.product?.price || 0) * item.quantity), 0);
   const totalNew = cart.filter(i => !i.isLocked).reduce((sum, item) => sum + ((item.product?.price || 0) * item.quantity), 0);
 
@@ -161,9 +164,9 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
       <div className="flex flex-1 overflow-hidden">
         {/* SIDEBAR KATEGORI */}
         <nav className="w-20 border-r border-white/5 flex flex-col py-3 gap-2 px-2 overflow-y-auto no-scrollbar bg-black/20">
-          {categories.map((cat) => (
+          {categories.map((cat, index) => (
             <button
-              key={cat}
+              key={index}
               onClick={() => setCategory(cat)}
               className={`py-4 rounded-2xl text-[8px] font-black transition-all flex flex-col items-center gap-2 border ${
                 category === cat ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-white/[0.03] border-white/5 text-gray-500"
@@ -180,13 +183,16 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pb-20">
             {filteredProducts.map((product) => (
               <button
-                key={product.id}
+                key={product?.id}
                 onClick={() => addToCart(product)}
                 className="bg-white/[0.03] border border-white/5 rounded-[2rem] p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-500 transition-all active:scale-95 shadow-xl h-28"
               >
-                <span className="text-[9px] font-black text-center leading-tight line-clamp-2">{product.name}</span>
+                <span className="text-[9px] font-black text-center leading-tight line-clamp-2">
+                  {product?.name || "TANPA NAMA"}
+                </span>
                 <span className="text-blue-500 text-[10px] font-black font-mono">
-                  {(product.price).toLocaleString()}
+                  {/* 🔥 ANTI-CRASH: Paksa jadi angka 0 jika null, baru di-localeString */}
+                  {Number(product?.price || 0).toLocaleString('id-ID')}
                 </span>
               </button>
             ))}
@@ -211,8 +217,10 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
                   <div className="flex-1">
                     <div className="flex items-center gap-1.5 mb-1">
                         {item.source === 'customer' && <User size={10} className="text-orange-500" />}
-                        {/* 🔥 FIX BUGS: Kalau product null, tampilkan "MENU TERHAPUS" */}
-                        <p className="text-[9px] font-black truncate uppercase text-red-400">{item.product?.name || "❌ MENU TERHAPUS"}</p>
+                        {/* 🔥 ANTI-CRASH: Deteksi Menu Terhapus */}
+                        <p className={`text-[9px] font-black truncate uppercase ${!item.product ? 'text-red-500' : ''}`}>
+                          {item.product?.name || "❌ MENU TERHAPUS"}
+                        </p>
                     </div>
                     <p className={`text-[7px] font-black ${item.isLocked ? "text-gray-600" : "text-blue-500"}`}>
                       {item.isLocked ? "PRINTED / ON PROCESS" : "WAITING TO SEND"}
@@ -236,15 +244,15 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
             <div className="space-y-2">
                 <div className="flex justify-between text-[8px] font-black text-gray-600">
                     <span>SUBTOTAL_EXISTING</span>
-                    <span>RP {totalLocked.toLocaleString()}</span>
+                    <span>RP {totalLocked.toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex justify-between text-[8px] font-black text-blue-500">
                     <span>NEW_ADDITIONS</span>
-                    <span>+ RP {totalNew.toLocaleString()}</span>
+                    <span>+ RP {totalNew.toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex justify-between text-base font-black italic text-white border-t border-white/5 pt-2">
                     <span>TOTAL</span>
-                    <span className="text-blue-500">RP {(totalLocked + totalNew).toLocaleString()}</span>
+                    <span className="text-blue-500">RP {(totalLocked + totalNew).toLocaleString('id-ID')}</span>
                 </div>
             </div>
             
