@@ -10,7 +10,7 @@ type CartItem = {
   source?: 'customer' | 'waiter';
   status?: string;
 };
-type Props = { orderId: string; onBack: () => void }; // Diubah dari billId ke orderId
+type Props = { orderId: string; onBack: () => void }; 
 
 export default function WaiterOrder({ orderId, onBack }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -32,7 +32,6 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
     };
     initializeData();
 
-    // 🔥 REAL-TIME LISTENER: Pantau jika ada tambahan dari HP Tamu
     const channel = supabase.channel(`sync-order-${orderId}`)
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'order_items', filter: `order_id=eq.${orderId}` }, 
@@ -44,7 +43,6 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
   }, [orderId]);
 
   const fetchOrderDetails = async () => {
-    // Ambil info meja melalui tabel orders
     const { data } = await supabase
       .from("orders")
       .select(`tables(name)`)
@@ -76,22 +74,23 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
 
     if (data) {
       const existingItems = data.map((item: any) => ({
-        product: item.menus, 
+        product: item.menus, // Bisa jadi null jika menu sudah dihapus di Master!
         quantity: item.quantity,
         isLocked: true,
         source: item.notes === "QR_ORDER" ? 'customer' : 'waiter'
       }));
       setCart(prev => {
-        // Gabungkan item yang baru di-input waiter (isLocked: false) dengan data DB
         const unsentItems = prev.filter(i => !i.isLocked);
-        return [...existingItems.filter(i => i.product != null), ...unsentItems];
+        // 🔥 FIX BUGS: Kita TETAP masukkan menu yang null, tapi nanti di-handle saat render agar tidak nge-blank
+        return [...existingItems, ...unsentItems];
       });
     }
   };
 
   const addToCart = (product: Product) => {
+    if (!product) return; // Keamanan ganda
     setCart((prev) => {
-      const existingIdx = prev.findIndex((item) => item.product.id === product.id && !item.isLocked);
+      const existingIdx = prev.findIndex((item) => item.product?.id === product.id && !item.isLocked);
       if (existingIdx > -1) {
         const newCart = [...prev];
         newCart[existingIdx].quantity += 1;
@@ -114,7 +113,7 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
   };
 
   const handleSubmitOrder = async () => {
-    const newItems = cart.filter(item => !item.isLocked);
+    const newItems = cart.filter(item => !item.isLocked && item.product != null);
     if (newItems.length === 0) return;
 
     setIsSubmitting(true);
@@ -141,8 +140,10 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
   };
 
   const filteredProducts = category === "ALL" ? products : products.filter(p => p.category === category);
-  const totalLocked = cart.filter(i => i.isLocked).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-  const totalNew = cart.filter(i => !i.isLocked).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  
+  // 🔥 FIX BUGS: Tambahkan pengaman tanda tanya (?.) agar kalau menu null, harganya dianggap 0 dan tidak meledak
+  const totalLocked = cart.filter(i => i.isLocked).reduce((sum, item) => sum + ((item.product?.price || 0) * item.quantity), 0);
+  const totalNew = cart.filter(i => !i.isLocked).reduce((sum, item) => sum + ((item.product?.price || 0) * item.quantity), 0);
 
   return (
     <div className="fixed inset-0 z-[9999] bg-[#020617] flex flex-col font-sans italic text-white overflow-hidden uppercase">
@@ -210,7 +211,8 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
                   <div className="flex-1">
                     <div className="flex items-center gap-1.5 mb-1">
                         {item.source === 'customer' && <User size={10} className="text-orange-500" />}
-                        <p className="text-[9px] font-black truncate uppercase">{item.product.name}</p>
+                        {/* 🔥 FIX BUGS: Kalau product null, tampilkan "MENU TERHAPUS" */}
+                        <p className="text-[9px] font-black truncate uppercase text-red-400">{item.product?.name || "❌ MENU TERHAPUS"}</p>
                     </div>
                     <p className={`text-[7px] font-black ${item.isLocked ? "text-gray-600" : "text-blue-500"}`}>
                       {item.isLocked ? "PRINTED / ON PROCESS" : "WAITING TO SEND"}
@@ -221,7 +223,7 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
                       <button onClick={() => removeFromCart(idx)} className="w-7 h-7 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center"><Minus size={14}/></button>
                     )}
                     <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
-                    {!item.isLocked && (
+                    {!item.isLocked && item.product && (
                       <button onClick={() => addToCart(item.product)} className="w-7 h-7 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center"><Plus size={14}/></button>
                     )}
                   </div>
