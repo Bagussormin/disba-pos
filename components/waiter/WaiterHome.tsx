@@ -3,46 +3,47 @@ import { supabase } from "../../lib/supabase";
 import { Loader2 } from "lucide-react";
 
 type Table = { id: number; name: string; status: string; area: string; x_pos: number; y_pos: number; };
-type OpenBill = { id: number; table_id: number; guest_name: string; status: string; };
-type Props = { onOpenBill: (billId: number) => void; };
+// 🔥 FIX BUGS 1: Ubah tipe id menjadi string (karena aslinya UUID)
+type ActiveOrder = { id: string; table_id: number; guest_name: string; status: string; }; 
+type Props = { onOpenBill: (orderId: string) => void; };
 
 export default function WaiterHome({ onOpenBill }: Props) {
   const [tables, setTables] = useState<Table[]>([]);
-  const [bills, setBills] = useState<OpenBill[]>([]);
+  const [orders, setOrders] = useState<ActiveOrder[]>([]);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [guestName, setGuestName] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // 🔒 KUNCI MULTI-OUTLET (SaaS Mindset)
-  const tenantId = localStorage.getItem("tenant_id") || "NES_HOUSE_001";
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "NES_HOUSE_001" : "NES_HOUSE_001";
 
   const fetchTables = async () => {
     const { data } = await supabase
       .from("tables")
       .select("*")
-      .eq("tenant_id", tenantId) // 🔥 Filter dinamis per outlet
+      .eq("tenant_id", tenantId)
       .order("id");
     if (data) setTables(data);
     setLoading(false);
   };
 
-  const fetchBills = async () => {
+  const fetchOrders = async () => {
+    // 🔥 FIX BUGS 2: Kita ambil dari tabel 'orders' yang asli, bukan 'open_bills'
     const { data } = await supabase
-      .from("open_bills")
+      .from("orders")
       .select("*")
-      .eq("tenant_id", tenantId) // 🔥 Filter dinamis per outlet
+      .eq("tenant_id", tenantId)
       .eq("status", "open");
-    if (data) setBills(data);
+    if (data) setOrders(data);
   };
 
   useEffect(() => {
     fetchTables();
-    fetchBills();
+    fetchOrders();
 
-    // 🔥 Realtime yang dikunci khusus untuk outlet ini saja
     const channel = supabase.channel(`waiter-realtime-${tenantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchTables())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'open_bills', filter: `tenant_id=eq.${tenantId}` }, () => fetchBills())
+      // 🔥 FIX BUGS 3: Pantau tabel 'orders'
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` }, () => fetchOrders())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -53,60 +54,53 @@ export default function WaiterHome({ onOpenBill }: Props) {
     const tableIdClean = Number(selectedTable.id);
 
     try {
-      const { data: bill, error: billError } = await supabase
-        .from("open_bills")
+      // 🔥 FIX BUGS 4: Insert ke tabel 'orders' yang menggunakan UUID!
+      const { data: newOrder, error: orderError } = await supabase
+        .from("orders")
         .insert({ 
-          tenant_id: tenantId, // 🔥 Wajib diisi agar outlet lain tidak bisa melihat ini
+          tenant_id: tenantId,
           table_id: tableIdClean, 
           guest_name: guestName.toUpperCase(), 
           status: "open" 
         })
         .select().single();
       
-      if (billError) throw billError;
+      if (orderError) throw orderError;
 
       await supabase
         .from("tables")
         .update({ status: "open" })
         .eq("id", tableIdClean)
-        .eq("tenant_id", tenantId); // Keamanan ekstra
+        .eq("tenant_id", tenantId); 
 
-      onOpenBill(bill.id);
+      // UUID super aman ini yang akan dikirim ke dapur!
+      onOpenBill(newOrder.id);
 
     } catch (err: any) { 
-      alert("Gagal: " + err.message); 
+      alert("Gagal membuat order: " + err.message); 
     }
   };
 
   const handleExistingOrder = () => {
-    const bill = bills.find(b => b.table_id === selectedTable?.id);
-    if (bill) onOpenBill(bill.id);
+    const order = orders.find(o => o.table_id === selectedTable?.id);
+    if (order) onOpenBill(order.id);
   };
 
   return (
-    /* PERBAIKAN: Menghapus fixed inset-0 agar Header di WaiterApp.tsx terlihat */
     <div className="w-full h-[calc(100vh-120px)] overflow-hidden select-none font-sans italic text-white">
       <div className="max-w-7xl mx-auto flex flex-col h-full relative">
-        
         <div className="grid grid-cols-12 gap-4 h-full overflow-hidden pb-6">
           
           {/* BAGIAN DENAH */}
           <div className="col-span-12 lg:col-span-8 bg-white/[0.01] rounded-[2rem] border border-white/5 relative overflow-auto no-scrollbar shadow-2xl group">
+            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #ffffff10 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
             
-            <div 
-              className="absolute inset-0 opacity-20"
-              style={{ 
-                backgroundImage: 'radial-gradient(circle, #ffffff10 1px, transparent 1px)', 
-                backgroundSize: '30px 30px' 
-              }}
-            ></div>
-
             {loading ? (
               <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-blue-500" /></div>
             ) : (
               <div className="relative min-w-[800px] min-h-[600px] p-10">
                 {tables.map((table) => {
-                  const bill = bills.find(b => b.table_id === table.id);
+                  const order = orders.find(o => o.table_id === table.id);
                   const isOccupied = table.status === "open";
                   const isSelected = selectedTable?.id === table.id;
 
@@ -115,15 +109,9 @@ export default function WaiterHome({ onOpenBill }: Props) {
                       key={table.id}
                       onClick={() => { 
                         setSelectedTable(table); 
-                        setGuestName(bill?.guest_name || ""); 
+                        setGuestName(order?.guest_name || ""); 
                       }}
-                      style={{ 
-                        position: 'absolute',
-                        left: `${table.x_pos}px`, 
-                        top: `${table.y_pos}px`,
-                        width: '90px', 
-                        height: '90px'
-                      }}
+                      style={{ position: 'absolute', left: `${table.x_pos}px`, top: `${table.y_pos}px`, width: '90px', height: '90px' }}
                       className={`rounded-2xl flex flex-col items-center justify-center transition-all border active:scale-90 shadow-xl ${
                         isOccupied 
                           ? isSelected ? "border-orange-500 bg-orange-500/20" : "border-orange-500/40 bg-white/[0.02]"
@@ -136,7 +124,7 @@ export default function WaiterHome({ onOpenBill }: Props) {
                       
                       {isOccupied && (
                         <div className="text-[6px] text-white font-black mt-1 px-1 py-0.5 bg-orange-600 rounded-sm truncate w-[85%] uppercase">
-                          {bill?.guest_name}
+                          {order?.guest_name}
                         </div>
                       )}
 
