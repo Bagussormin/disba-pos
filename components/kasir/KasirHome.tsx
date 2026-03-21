@@ -233,6 +233,7 @@ export default function KasirHome() {
 
       if (trxError) throw trxError;
 
+      // 🔥 SINKRONISASI: Tutup order dan bersihkan meja
       await supabase.from("orders").update({ status: "completed" }).eq("id", activeOrder.id).eq("tenant_id", tenantId);
       await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
 
@@ -326,29 +327,31 @@ export default function KasirHome() {
     setShowCloseShiftModal(true);
   };
 
-  // 🔥 FUNGSI BARU: PRINT STRUK TUTUP SHIFT KE THERMAL
+  // 🔥 FUNGSI BARU: PRINT STRUK TUTUP SHIFT LEWAT PIPA KAPETN (executePrint)
   const handlePrintShiftClosing = async (selisih: number) => {
     const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
     
+    // Kita "tipu" struknya agar menampilkan laporan, bukan pesanan makanan.
     const reportData = {
-        orderId: "TUTUP SHIFT",
-        tableName: "REPORT",
+        orderId: "LAPORAN SHIFT",
+        tableName: "CLOSING",
         cashierName: typeof window !== "undefined" ? localStorage.getItem("username") || "KASIR" : "KASIR",
-        // Akali struktur agar printer mengira ini item belanjaan
         items: [
-            { name: "TOTAL PENJUALAN", qty: 1, price: shiftSummary.totalSales },
-            { name: "CASH SALES", qty: 1, price: shiftSummary.cashSales },
-            { name: "BANK SALES", qty: 1, price: shiftSummary.transferSales },
-            { name: "MODAL AWAL", qty: 1, price: currentShift?.starting_cash || 0 },
-            { name: "UANG FISIK KASIR", qty: 1, price: Number(endingCash) },
-            { name: "SELISIH UANG", qty: 1, price: selisih },
+            { name: "--------------------------------", qty: 1, price: 0 },
+            { name: "TOTAL PENJUALAN KOTOR", qty: 1, price: shiftSummary.totalSales },
+            { name: "UANG TUNAI DITERIMA", qty: 1, price: shiftSummary.cashSales },
+            { name: "TRANSFER BANK DITERIMA", qty: 1, price: shiftSummary.transferSales },
+            { name: "--------------------------------", qty: 1, price: 0 },
+            { name: "MODAL LACI AWAL", qty: 1, price: currentShift?.starting_cash || 0 },
+            { name: "UANG FISIK DIHITUNG KASIR", qty: 1, price: Number(endingCash) },
+            { name: "SELISIH (MINUS/PLUS)", qty: 1, price: selisih },
+            { name: "--------------------------------", qty: 1, price: 0 },
         ],
-        subtotal: shiftSummary.totalSales,
-        discount: 0, serviceCharge: 0, tax: 0,
-        total: shiftSummary.totalSales,
-        paymentMethod: "REPORT", paid: shiftSummary.totalSales, change: 0,
+        subtotal: 0, discount: 0, serviceCharge: 0, tax: 0,
+        total: 0,
+        paymentMethod: "REPORT", paid: 0, change: 0,
         storeName: printSettings?.store_name || "NES HOUSE",
-        footerText: "LAPORAN PENUTUPAN SHIFT"
+        footerText: "TUTUP SHIFT BERHASIL"
     };
 
     try { await executePrint(reportData); } catch (e) { console.error("Gagal print shift report:", e); }
@@ -371,7 +374,7 @@ export default function KasirHome() {
         difference: selisih
       }).eq("id", currentShift.id).eq("tenant_id", tenantId);
       
-      // 🔥 Panggil fungsi print struk ke Printer Thermal sesaat sebelum logout
+      // Panggil fungsi print struk ke Pipa Kapten sesaat sebelum logout
       await handlePrintShiftClosing(selisih);
 
       if (typeof window !== "undefined") {
@@ -410,19 +413,20 @@ export default function KasirHome() {
     setShowItemReportModal(true);
   };
 
-  // 🔥 FUNGSI BARU: PRINT REKAP ITEM KE THERMAL
+  // 🔥 FUNGSI BARU: PRINT REKAP ITEM LEWAT PIPA KAPTEN (executePrint)
   const handlePrintItemReport = async () => {
     const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
     const totalRev = itemSales.reduce((sum, item) => sum + item.total, 0);
 
     const reportData = {
-        orderId: "REKAP ITEM",
+        orderId: "REKAP PRODUK",
         tableName: "REPORT",
         cashierName: typeof window !== "undefined" ? localStorage.getItem("username") || "KASIR" : "KASIR",
-        // Akali struktur agar terbaca di struk
+        // Format ulang itemSales agar cocok dengan template cetak
         items: itemSales.map(item => ({
             name: item.name,
             qty: item.qty,
+            // Kita kalikan harga satuan agar di struk jadi total harga (karena di printer.ts qty * price)
             price: item.total / item.qty 
         })),
         subtotal: totalRev,
@@ -430,14 +434,14 @@ export default function KasirHome() {
         total: totalRev,
         paymentMethod: "REPORT", paid: totalRev, change: 0,
         storeName: printSettings?.store_name || "NES HOUSE",
-        footerText: "LAPORAN ITEM TERJUAL SHIFT INI"
+        footerText: "LAPORAN PRODUK TERJUAL (SHIFT)"
     };
 
     try { 
       await executePrint(reportData); 
-      alert("Rekap Item Sedang Dicetak ke Thermal!"); 
+      alert("Memproses Cetak Rekap ke Printer Kasir..."); 
     } catch (e) { 
-      alert("Gagal print ke Printer Kasir."); 
+      alert("Gagal mencetak. Pastikan printer terhubung."); 
     }
   };
 
@@ -708,8 +712,10 @@ export default function KasirHome() {
               </table>
             </div>
             <div className="p-5 bg-black/40 border-t border-white/5">
-              {/* 🔥 TOMBOL DIGANTI: Sekarang memanggil handlePrintItemReport untuk tembak ke Thermal */}
-              <button onClick={handlePrintItemReport} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"><Printer size={16}/> Cetak_Thermal</button>
+              {/* 🔥 TOMBOL CETAK DIGANTI agar tembak lewat file printer.ts Kapten! */}
+              <button onClick={handlePrintItemReport} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20">
+                <Printer size={16}/> Cetak_Thermal
+              </button>
             </div>
           </div>
         </div>

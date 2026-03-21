@@ -119,5 +119,24 @@
   
   "author": "",
   
-  "license": "ISC"
+  "license": "ISC",
+  
+  "repository": {
+  
+    
+  "type": "git",
+  
+    
+  "url": "git+https://github.com/Bagussormin/disba-pos.git"
+  
+  },
+  
+  "bugs": {
+  
+    
+  "url": "https://github.com/Bagussormin/disba-pos/issues"
+  
+  },
+  
+  "homepage": "https://github.com/Bagussormin/disba-pos#readme"
 }
