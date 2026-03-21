@@ -392,324 +392,341 @@ export default function KasirHome() {
     setShowItemReportModal(true);
   };
 
-  // =========================================================================
-  // 🔥 RENDER UI SAJA (SULTAN SIDEBAR EDITION)
-  // =========================================================================
   return (
-    <div className="fixed inset-0 bg-[#020617] text-white p-1 uppercase italic font-sans flex flex-col overflow-hidden print:bg-white print:text-black print:static print:overflow-visible print:h-auto">
-      
-      {/* 🔥 CSS KHUSUS PRINT: Memaksa browser mencetak hitam putih dan menghapus bg gelap */}
+    <>
+      {/* 🔥 INJEKSI CSS GLOBAL UNTUK MENGALAHKAN WARNA GELAP DI APP.TSX SAAT PRINT */}
       <style>
         {`
           @media print {
-            body, html { background-color: white !important; color: black !important; }
-            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .print-hidden { display: none !important; }
+            body, html, #root { background: white !important; color: black !important; }
+            #screen-ui { display: none !important; }
+            #print-ui { display: block !important; position: absolute; top: 0; left: 0; width: 100%; height: auto; z-index: 999999; }
           }
         `}
       </style>
 
-      {/* HEADER: ULTRA SLIM */}
-      <header className="flex justify-between items-center bg-black/60 border-b border-white/5 p-2 mb-1 shadow-2xl print:hidden">
-        <h1 className="text-[11px] font-black tracking-tighter">DISBA<span className="text-blue-500">_POS_CONTROL</span></h1>
-        <div className="flex gap-1.5">
-          <button onClick={fetchItemSales} className="h-7 px-3 bg-blue-600/10 rounded-md border border-blue-500/20 text-[8px] font-black active:scale-95 flex items-center gap-1"><BarChart3 size={10}/> REKAP</button>
-          <button onClick={openCloseShiftModal} className="h-7 px-3 bg-orange-600/10 rounded-md border border-orange-500/20 text-[8px] font-black active:scale-95 flex items-center gap-1"><Lock size={10}/> SHIFT</button>
-          <button onClick={handleLogOut} className="h-7 w-7 flex items-center justify-center bg-red-500/10 rounded-md border border-red-500/20 text-red-500"><LogOut size={12}/></button>
-        </div>
-      </header>
-
-      <div className="flex-1 flex gap-1 min-h-0 overflow-hidden print:hidden">
+      {/* =========================================================================
+          🔥 RENDER SCREEN UI (Hanya terlihat di Layar Monitor)
+          ========================================================================= */}
+      <div id="screen-ui" className="fixed inset-0 bg-[#020617] text-white p-1 uppercase italic font-sans flex flex-col overflow-hidden">
         
-        {/* KOLOM 1: MEJA (200px) */}
-        <div className="w-48 bg-black/20 rounded-xl border border-white/5 p-2 overflow-y-auto no-scrollbar">
-          {dynamicAreas.map(area => (
-            <div key={area} className="mb-4">
-              <p className="text-[7px] font-black text-gray-700 mb-2 tracking-[0.2em] text-center border-b border-white/5 pb-1 uppercase"><MapPin size={8} className="inline mr-1"/> {area}</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {tables.filter(t => (t.area || "AREA LAINNYA").toUpperCase() === area).map(t => {
-                   // 🔥 SINKRONISASI: Validasi meja berkedip berdasarkan 'orders'
-                   const hasOrder = orders.some(o => o.table_id === t.id); 
-                   return (
-                    <button key={t.id} onClick={() => setSelectedTable(t)}
-                      className={`h-12 rounded-lg border-2 transition-all text-[10px] font-black flex flex-col items-center justify-center ${
-                        selectedTable?.id === t.id ? 'border-blue-500 bg-blue-600/20 shadow-lg' : 
-                        hasOrder ? 'border-orange-500 bg-orange-500/10 animate-pulse text-orange-400' : 
-                        t.status === 'payment' || t.status === 'closed' ? 'border-red-500 bg-red-500/10 text-red-500' : 'border-white/5 bg-white/[0.02] opacity-40'
+        {/* HEADER: ULTRA SLIM */}
+        <header className="flex justify-between items-center bg-black/60 border-b border-white/5 p-2 mb-1 shadow-2xl">
+          <h1 className="text-[11px] font-black tracking-tighter">DISBA<span className="text-blue-500">_POS_CONTROL</span></h1>
+          <div className="flex gap-1.5">
+            <button onClick={fetchItemSales} className="h-7 px-3 bg-blue-600/10 rounded-md border border-blue-500/20 text-[8px] font-black active:scale-95 flex items-center gap-1"><BarChart3 size={10}/> REKAP</button>
+            <button onClick={openCloseShiftModal} className="h-7 px-3 bg-orange-600/10 rounded-md border border-orange-500/20 text-[8px] font-black active:scale-95 flex items-center gap-1"><Lock size={10}/> SHIFT</button>
+            <button onClick={handleLogOut} className="h-7 w-7 flex items-center justify-center bg-red-500/10 rounded-md border border-red-500/20 text-red-500"><LogOut size={12}/></button>
+          </div>
+        </header>
+
+        <div className="flex-1 flex gap-1 min-h-0 overflow-hidden">
+          
+          {/* KOLOM 1: MEJA (200px) */}
+          <div className="w-48 bg-black/20 rounded-xl border border-white/5 p-2 overflow-y-auto no-scrollbar">
+            {dynamicAreas.map(area => (
+              <div key={area} className="mb-4">
+                <p className="text-[7px] font-black text-gray-700 mb-2 tracking-[0.2em] text-center border-b border-white/5 pb-1 uppercase"><MapPin size={8} className="inline mr-1"/> {area}</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {tables.filter(t => (t.area || "AREA LAINNYA").toUpperCase() === area).map(t => {
+                    const hasOrder = orders.some(o => o.table_id === t.id); 
+                    return (
+                      <button key={t.id} onClick={() => setSelectedTable(t)}
+                        className={`h-12 rounded-lg border-2 transition-all text-[10px] font-black flex flex-col items-center justify-center ${
+                          selectedTable?.id === t.id ? 'border-blue-500 bg-blue-600/20 shadow-lg' : 
+                          hasOrder ? 'border-orange-500 bg-orange-500/10 animate-pulse text-orange-400' : 
+                          t.status === 'payment' || t.status === 'closed' ? 'border-red-500 bg-red-500/10 text-red-500' : 'border-white/5 bg-white/[0.02] opacity-40'
+                        }`}
+                      >
+                        {(t.status === 'payment' || t.status === 'closed') && <Lock size={8} className="mb-1" />}
+                        {t.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* KOLOM 2: ORDER LIST (FULL VERTICAL - FLEX 1) */}
+          <div className="flex-1 bg-black/40 rounded-xl border border-white/5 flex flex-col overflow-hidden">
+            {activeOrder ? (
+              <div className="flex flex-col h-full">
+                <div className="p-3 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                      <Receipt size={16} className="text-blue-500"/>
+                      <h2 className="text-sm font-black italic uppercase tracking-tighter text-white">BILLING_<span className="text-blue-500">{selectedTable?.name}</span></h2>
+                  </div>
+                  <button onClick={() => setSelectedTable(null)} className="text-gray-600 hover:text-white transition-all"><X size={18}/></button>
+                </div>
+
+                {/* AREA LIST PESANAN */}
+                <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+                  <table className="w-full text-left">
+                    <thead className="text-[9px] font-black text-gray-600 border-b border-white/5 sticky top-0 bg-[#020617] z-10 uppercase italic">
+                      <tr>
+                          <th className="pb-3">PRODUCT_NAME</th>
+                          <th className="pb-3 text-center">QTY</th>
+                          <th className="pb-3 text-right">UNIT_PRICE</th>
+                          <th className="pb-3 text-right">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.03]">
+                      {orderItems.map((item, i) => (
+                        <tr key={i} className="group hover:bg-white/[0.02] transition-colors">
+                          <td className="py-4">
+                              <span className="text-[11px] font-black text-white/90 uppercase tracking-tight">{item.name}</span>
+                          </td>
+                          <td className="py-4 text-center">
+                              <span className="text-[11px] font-mono font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">{item.qty}X</span>
+                          </td>
+                          <td className="py-4 text-right text-[10px] font-mono text-gray-500">{item.price.toLocaleString('id-ID')}</td>
+                          <td className="py-4 text-right text-[11px] font-mono font-black italic text-white">{(item.qty * item.price).toLocaleString('id-ID')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center opacity-5 grayscale">
+                <ShoppingBag size={100} strokeWidth={1}/>
+                <p className="text-xs font-black mt-4 tracking-[1em] uppercase italic">Ready_Station</p>
+              </div>
+            )}
+          </div>
+
+          {/* KOLOM 3: PAYMENT SIDEBAR (SCROLLABLE & ANTI-CUTOFF) */}
+          <div className="w-[320px] bg-black/60 rounded-xl border border-white/5 flex flex-col overflow-y-auto no-scrollbar p-4 shadow-2xl backdrop-blur-3xl">
+            {activeOrder ? (
+              <div className="flex flex-col min-h-full">
+                <h3 className="text-[9px] font-black text-gray-600 tracking-[0.3em] mb-4 border-b border-white/10 pb-2 flex items-center gap-2 uppercase italic"><CreditCard size={12}/> Checkout_Panel</h3>
+                
+                <div className="space-y-2 mb-4 bg-white/[0.02] p-3 rounded-xl border border-white/5">
+                  <div className="flex justify-between items-center text-[10px] font-black text-gray-500">
+                      <span>SUBTOTAL</span>
+                      <span className="text-white font-mono">{getSubtotal().toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-black text-blue-500 italic">
+                      <span>DISC_VALUE</span>
+                      <input type="number" className="w-20 bg-blue-500/10 border border-blue-500/30 rounded px-1.5 py-0.5 text-right text-blue-400 outline-none font-black" value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value))} />
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
+                      <span>SERVICE_5%</span>
+                      <span className="text-white font-mono">{getService().toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
+                      <span>PB1_10%</span>
+                      <span className="text-white font-mono">{getTax().toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+
+                <div className="mt-auto border-t-2 border-dashed border-white/10 pt-4">
+                  <p className="text-[9px] font-black text-blue-500 italic tracking-widest mb-1">GRAND_TOTAL_DUE</p>
+                  <p className="text-3xl font-black italic tracking-tighter text-white mb-6 border-b-2 border-white pb-2 leading-none">
+                      RP {getGrandTotal().toLocaleString('id-ID')}
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-1.5 mb-3">
+                    <button onClick={() => { setPaymentMethod("CASH"); setSelectedBank(null); setPaidAmount(0); }} className={`py-3 rounded-lg text-[10px] font-black border transition-all flex items-center justify-center gap-2 ${paymentMethod === 'CASH' ? 'bg-blue-600 border-blue-400 shadow-xl' : 'bg-white/5 border-white/10 opacity-30'}`}><Banknote size={14}/> CASH</button>
+                    <button onClick={() => { setPaymentMethod("TRANSFER"); setPaidAmount(getGrandTotal()); }} className={`py-3 rounded-lg text-[10px] font-black border transition-all flex items-center justify-center gap-2 ${paymentMethod === 'TRANSFER' ? 'bg-purple-600 border-purple-400 shadow-xl' : 'bg-white/5 border-white/10 opacity-30'}`}><CreditCard size={14}/> BANK</button>
+                  </div>
+
+                  {paymentMethod === "TRANSFER" ? (
+                    <div className="mb-4 space-y-1.5 animate-in fade-in slide-in-from-bottom-2">
+                      <p className="text-[8px] font-black text-purple-400 italic px-1 uppercase">Pilih_Rekening:</p>
+                      <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto no-scrollbar">
+                          {banks.map(b => (
+                              <button key={b.id} onClick={() => setSelectedBank(b)} className={`w-full p-2.5 rounded-lg border text-left transition-all relative ${selectedBank?.id === b.id ? 'bg-purple-600 border-purple-400' : 'bg-white/5 border-white/10 opacity-40'}`}>
+                                  <p className="text-[9px] font-black text-white">{b.bank_name}</p>
+                                  <p className="text-[11px] font-mono font-bold text-white/80">{b.account_number}</p>
+                                  {selectedBank?.id === b.id && <CheckCircle2 size={12} className="absolute top-2 right-2 text-white" />}
+                              </button>
+                          ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-4">
+                      <p className="text-[8px] font-black text-blue-500 italic mb-1 uppercase tracking-tighter">Amount_Received_:</p>
+                      <input ref={cashInputRef} type="number" className="w-full bg-blue-500/10 border border-blue-500/30 rounded-xl py-3 px-3 text-2xl font-black text-blue-400 outline-none focus:border-blue-400 text-center" placeholder="0" value={paidAmount || ""} onChange={(e) => setPaidAmount(Number(e.target.value))} />
+                      {paidAmount >= getGrandTotal() && (
+                          <div className="mt-2 flex justify-between items-center bg-emerald-500/10 p-2.5 rounded-lg border border-emerald-500/20">
+                              <span className="text-[9px] font-black text-emerald-500 italic">KEMBALIAN:</span>
+                              <span className="text-lg font-black text-emerald-400 font-mono">+{getChange().toLocaleString('id-ID')}</span>
+                          </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button 
+                      onClick={handleOpenSettlePreview} 
+                      disabled={loading || (paymentMethod === "CASH" && paidAmount < getGrandTotal()) || (paymentMethod === "TRANSFER" && !selectedBank)} 
+                      className={`w-full py-4 rounded-xl font-black text-[11px] flex items-center justify-center gap-2 transition-all shadow-xl active:scale-95 uppercase tracking-widest ${
+                      (paymentMethod === "CASH" ? paidAmount >= getGrandTotal() : !!selectedBank) ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-gray-800 text-gray-600 opacity-50 cursor-not-allowed'
                       }`}
-                    >
-                      {(t.status === 'payment' || t.status === 'closed') && <Lock size={8} className="mb-1" />}
-                      {t.name}
-                    </button>
-                   );
-                })}
+                  >
+                    <Printer size={16}/> PREVIEW_BILL
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center px-4 opacity-20">
+                  <CheckCircle2 size={32} className="mb-4 text-gray-500"/>
+                  <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest leading-relaxed italic">
+                      Select_Table_to_Pay
+                  </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* --- MODAL: START SHIFT --- */}
+        {showStartShiftModal && (
+          <div className="fixed inset-0 bg-[#020617] flex items-center justify-center z-[7000] p-4 backdrop-blur-md">
+            <div className="text-center p-8 bg-white/5 border border-white/10 rounded-[32px] w-full max-w-sm shadow-2xl relative">
+              <Wallet className="text-blue-500 mx-auto mb-4" size={50} />
+              <h2 className="text-xl font-black italic mb-2 uppercase tracking-tighter">Open_Shift</h2>
+              <p className="text-[8px] font-black text-gray-500 mb-8 tracking-[0.3em] uppercase italic">Input Modal Awal Tunai</p>
+              <input type="number" autoFocus className="w-full bg-white/5 border border-white/10 rounded-2xl py-6 text-center text-4xl font-black text-white outline-none focus:border-blue-500 mb-6" placeholder="0" onChange={(e) => setStartCash(Number(e.target.value))} />
+              <button onClick={handleStartShift} className="w-full py-5 bg-blue-600 rounded-[20px] font-black text-[10px] uppercase shadow-lg shadow-blue-600/30">Buka_Terminal</button>
+            </div>
+          </div>
+        )}
+
+        {/* --- MODAL: CLOSE SHIFT --- */}
+        {showCloseShiftModal && (
+          <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[7000] p-4 backdrop-blur-md">
+            <div className="bg-[#020617] p-8 rounded-[32px] border border-orange-500/20 w-full max-w-sm text-center shadow-2xl">
+              <AlertTriangle className="text-orange-500 mx-auto mb-4" size={40} />
+              <h2 className="text-xl font-black italic text-white uppercase mb-8">Shift_Closing</h2>
+              
+              <div className="space-y-3 mb-8 text-left">
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <p className="text-[7px] font-black text-gray-500 uppercase mb-1 tracking-widest">Total_Gross_Sales</p>
+                  <p className="text-2xl font-black text-white italic">Rp {shiftSummary.totalSales.toLocaleString('id-ID')}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-blue-600/10 p-4 rounded-2xl border border-blue-500/20">
+                    <p className="text-[7px] font-black text-blue-400 uppercase mb-1">Cash_Sales</p>
+                    <p className="text-sm font-black text-white">Rp {shiftSummary.cashSales.toLocaleString('id-ID')}</p>
+                  </div>
+                  <div className="bg-purple-600/10 p-4 rounded-2xl border border-purple-500/20">
+                    <p className="text-[7px] font-black text-purple-400 uppercase mb-1">Bank_Sales</p>
+                    <p className="text-sm font-black text-white">Rp {shiftSummary.transferSales.toLocaleString('id-ID')}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[7px] font-black text-orange-500 mb-2 italic uppercase tracking-widest">Actual_Cash_In_Drawer</p>
+                  <input type="number" className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 text-center text-3xl font-black text-orange-400 outline-none focus:border-orange-500" placeholder="0" onChange={(e) => setEndingCash(Number(e.target.value))} />
+                  <p className="text-[7px] text-gray-500 mt-2 text-center italic">
+                     Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales).toLocaleString('id-ID')}</span>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <button onClick={() => setShowCloseShiftModal(false)} className="flex-1 py-5 bg-white/5 rounded-[20px] font-black text-[9px] uppercase border border-white/10">Batal</button>
+                <button onClick={handleCloseShift} className="flex-[2] py-5 bg-orange-600 rounded-[20px] font-black text-[9px] uppercase shadow-lg shadow-orange-600/20">Akhiri_Shift</button>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
 
-        {/* KOLOM 2: ORDER LIST (FULL VERTICAL - FLEX 1) */}
-        <div className="flex-1 bg-black/40 rounded-xl border border-white/5 flex flex-col overflow-hidden">
-          {activeOrder ? (
-            <div className="flex flex-col h-full">
-              <div className="p-3 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    <Receipt size={16} className="text-blue-500"/>
-                    <h2 className="text-sm font-black italic uppercase tracking-tighter text-white">BILLING_<span className="text-blue-500">{selectedTable?.name}</span></h2>
-                </div>
-                <button onClick={() => setSelectedTable(null)} className="text-gray-600 hover:text-white transition-all"><X size={18}/></button>
+        {/* --- MODAL: ITEM REPORT (LAYAR MONITOR) --- */}
+        {showItemReportModal && (
+          <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[5000] p-4 backdrop-blur-md">
+            <div className="bg-[#020617] border border-white/10 w-full max-w-md rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
+              <div className="p-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                <h3 className="text-xs font-black italic text-blue-500 uppercase tracking-widest">Shift_Items_Report</h3>
+                <button onClick={() => setShowItemReportModal(false)} className="p-2 text-gray-500 hover:text-white"><X size={20}/></button>
               </div>
-
-              {/* AREA LIST PESANAN */}
-              <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+              <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
                 <table className="w-full text-left">
-                  <thead className="text-[9px] font-black text-gray-600 border-b border-white/5 sticky top-0 bg-[#020617] z-10 uppercase italic">
-                    <tr>
-                        <th className="pb-3">PRODUCT_NAME</th>
-                        <th className="pb-3 text-center">QTY</th>
-                        <th className="pb-3 text-right">UNIT_PRICE</th>
-                        <th className="pb-3 text-right">TOTAL</th>
-                    </tr>
+                  <thead className="border-b border-white/10 text-[10px] font-black uppercase text-gray-500 italic">
+                    <tr><th className="pb-3">Product</th><th className="pb-3 text-center">Qty</th><th className="pb-3 text-right">Revenue</th></tr>
                   </thead>
-                  <tbody className="divide-y divide-white/[0.03]">
-                    {orderItems.map((item, i) => (
-                      <tr key={i} className="group hover:bg-white/[0.02] transition-colors">
-                        <td className="py-4">
-                            <span className="text-[11px] font-black text-white/90 uppercase tracking-tight">{item.name}</span>
-                        </td>
-                        <td className="py-4 text-center">
-                            <span className="text-[11px] font-mono font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">{item.qty}X</span>
-                        </td>
-                        <td className="py-4 text-right text-[10px] font-mono text-gray-500">{item.price.toLocaleString('id-ID')}</td>
-                        <td className="py-4 text-right text-[11px] font-mono font-black italic text-white">{(item.qty * item.price).toLocaleString('id-ID')}</td>
+                  <tbody className="divide-y divide-white/5 italic">
+                    {itemSales.map((item, i) => (
+                      <tr key={i} className="text-white">
+                        <td className="py-4 text-[10px] font-black uppercase">{item.name}</td>
+                        <td className="py-4 text-center font-mono text-blue-400 font-bold">{item.qty}</td>
+                        <td className="py-4 text-right font-mono text-[10px]">Rp {item.total.toLocaleString('id-ID')}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center opacity-5 grayscale">
-              <ShoppingBag size={100} strokeWidth={1}/>
-              <p className="text-xs font-black mt-4 tracking-[1em] uppercase italic">Ready_Station</p>
-            </div>
-          )}
-        </div>
-
-        {/* KOLOM 3: PAYMENT SIDEBAR (SCROLLABLE & ANTI-CUTOFF) */}
-        <div className="w-[320px] bg-black/60 rounded-xl border border-white/5 flex flex-col overflow-y-auto no-scrollbar p-4 shadow-2xl backdrop-blur-3xl">
-          {activeOrder ? (
-            <div className="flex flex-col min-h-full">
-              <h3 className="text-[9px] font-black text-gray-600 tracking-[0.3em] mb-4 border-b border-white/10 pb-2 flex items-center gap-2 uppercase italic"><CreditCard size={12}/> Checkout_Panel</h3>
-              
-              <div className="space-y-2 mb-4 bg-white/[0.02] p-3 rounded-xl border border-white/5">
-                <div className="flex justify-between items-center text-[10px] font-black text-gray-500">
-                    <span>SUBTOTAL</span>
-                    <span className="text-white font-mono">{getSubtotal().toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between items-center text-[10px] font-black text-blue-500 italic">
-                    <span>DISC_VALUE</span>
-                    <input type="number" className="w-20 bg-blue-500/10 border border-blue-500/30 rounded px-1.5 py-0.5 text-right text-blue-400 outline-none font-black" value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value))} />
-                </div>
-                <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
-                    <span>SERVICE_5%</span>
-                    <span className="text-white font-mono">{getService().toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
-                    <span>PB1_10%</span>
-                    <span className="text-white font-mono">{getTax().toLocaleString('id-ID')}</span>
-                </div>
+              <div className="p-5 bg-black/40 border-t border-white/5">
+                <button onClick={() => window.print()} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"><Printer size={16}/> Cetak_Recap</button>
               </div>
+            </div>
+          </div>
+        )}
 
-              <div className="mt-auto border-t-2 border-dashed border-white/10 pt-4">
-                <p className="text-[9px] font-black text-blue-500 italic tracking-widest mb-1">GRAND_TOTAL_DUE</p>
-                <p className="text-3xl font-black italic tracking-tighter text-white mb-6 border-b-2 border-white pb-2 leading-none">
-                    RP {getGrandTotal().toLocaleString('id-ID')}
-                </p>
+        {/* --- MODAL: PREVIEW STRUK --- */}
+        {showPreviewModal && (
+          <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[6000] p-4 backdrop-blur-md">
+            <div className="bg-white text-black p-6 rounded-2xl w-full max-w-[320px] font-mono shadow-2xl relative uppercase italic font-bold">
+              <h3 className="font-black text-xl text-center border-b-2 border-black border-double pb-2 mb-4 tracking-tighter">DISBA_STATION</h3>
+              <div className="text-[10px] space-y-1">
+                <div className="flex justify-between"><span>Meja:</span> <span>{selectedTable?.name}</span></div>
+                <div className="flex justify-between"><span>Bayar:</span> <span className="text-blue-600">{paymentMethod}</span></div>
+                {paymentMethod === "TRANSFER" && <div className="flex justify-between font-black text-purple-700 bg-purple-50 p-1 rounded"><span>Bank:</span> <span>{selectedBank?.bank_name}</span></div>}
+                <div className="border-b border-black border-dashed my-2"></div>
                 
-                <div className="grid grid-cols-2 gap-1.5 mb-3">
-                  <button onClick={() => { setPaymentMethod("CASH"); setSelectedBank(null); setPaidAmount(0); }} className={`py-3 rounded-lg text-[10px] font-black border transition-all flex items-center justify-center gap-2 ${paymentMethod === 'CASH' ? 'bg-blue-600 border-blue-400 shadow-xl' : 'bg-white/5 border-white/10 opacity-30'}`}><Banknote size={14}/> CASH</button>
-                  <button onClick={() => { setPaymentMethod("TRANSFER"); setPaidAmount(getGrandTotal()); }} className={`py-3 rounded-lg text-[10px] font-black border transition-all flex items-center justify-center gap-2 ${paymentMethod === 'TRANSFER' ? 'bg-purple-600 border-purple-400 shadow-xl' : 'bg-white/5 border-white/10 opacity-30'}`}><CreditCard size={14}/> BANK</button>
+                <div className="max-h-40 overflow-y-auto no-scrollbar">
+                  {orderItems.map((item, i) => (<div key={i} className="flex justify-between py-0.5"><span>{item.qty} {item.name}</span><span>{(item.qty * item.price).toLocaleString('id-ID')}</span></div>))}
                 </div>
-
-                {paymentMethod === "TRANSFER" ? (
-                  <div className="mb-4 space-y-1.5 animate-in fade-in slide-in-from-bottom-2">
-                    <p className="text-[8px] font-black text-purple-400 italic px-1 uppercase">Pilih_Rekening:</p>
-                    <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto no-scrollbar">
-                        {banks.map(b => (
-                            <button key={b.id} onClick={() => setSelectedBank(b)} className={`w-full p-2.5 rounded-lg border text-left transition-all relative ${selectedBank?.id === b.id ? 'bg-purple-600 border-purple-400' : 'bg-white/5 border-white/10 opacity-40'}`}>
-                                <p className="text-[9px] font-black text-white">{b.bank_name}</p>
-                                <p className="text-[11px] font-mono font-bold text-white/80">{b.account_number}</p>
-                                {selectedBank?.id === b.id && <CheckCircle2 size={12} className="absolute top-2 right-2 text-white" />}
-                            </button>
-                        ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mb-4">
-                    <p className="text-[8px] font-black text-blue-500 italic mb-1 uppercase tracking-tighter">Amount_Received_:</p>
-                    <input ref={cashInputRef} type="number" className="w-full bg-blue-500/10 border border-blue-500/30 rounded-xl py-3 px-3 text-2xl font-black text-blue-400 outline-none focus:border-blue-400 text-center" placeholder="0" value={paidAmount || ""} onChange={(e) => setPaidAmount(Number(e.target.value))} />
-                    {paidAmount >= getGrandTotal() && (
-                        <div className="mt-2 flex justify-between items-center bg-emerald-500/10 p-2.5 rounded-lg border border-emerald-500/20">
-                            <span className="text-[9px] font-black text-emerald-500 italic">KEMBALIAN:</span>
-                            <span className="text-lg font-black text-emerald-400 font-mono">+{getChange().toLocaleString('id-ID')}</span>
-                        </div>
-                    )}
+                
+                <div className="border-b border-black border-dashed my-2"></div>
+                <div className="flex justify-between font-black text-lg pt-2 border-t-2 border-black mt-1"><span>TOTAL:</span><span>{getGrandTotal().toLocaleString('id-ID')}</span></div>
+                
+                {paymentMethod === "CASH" && (
+                  <div className="mt-2 pt-2 border-t border-black border-dotted">
+                     <div className="flex justify-between"><span>Cash:</span><span>{paidAmount.toLocaleString('id-ID')}</span></div>
+                     <div className="flex justify-between font-black text-blue-600"><span>Kembali:</span><span>{getChange().toLocaleString('id-ID')}</span></div>
                   </div>
                 )}
-
-                <button 
-                    onClick={handleOpenSettlePreview} 
-                    disabled={loading || (paymentMethod === "CASH" && paidAmount < getGrandTotal()) || (paymentMethod === "TRANSFER" && !selectedBank)} 
-                    className={`w-full py-4 rounded-xl font-black text-[11px] flex items-center justify-center gap-2 transition-all shadow-xl active:scale-95 uppercase tracking-widest ${
-                    (paymentMethod === "CASH" ? paidAmount >= getGrandTotal() : !!selectedBank) ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-gray-800 text-gray-600 opacity-50 cursor-not-allowed'
-                    }`}
-                >
-                  <Printer size={16}/> PREVIEW_BILL
+              </div>
+              <div className="flex gap-2 mt-8">
+                <button onClick={handleCancelSettle} className="flex-1 py-4 bg-gray-100 rounded-xl font-black text-[9px]">Batal</button>
+                <button onClick={processPayment} disabled={loading} className="flex-[2] py-4 bg-black text-white rounded-xl font-black text-[9px] flex items-center justify-center gap-2">
+                  {loading ? "SAVING..." : <><Printer size={16}/> Save_&_Print</>}
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center px-4 opacity-20">
-                <CheckCircle2 size={32} className="mb-4 text-gray-500"/>
-                <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest leading-relaxed italic">
-                    Select_Table_to_Pay
-                </p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* --- MODAL: START SHIFT --- */}
-      {showStartShiftModal && (
-        <div className="fixed inset-0 bg-[#020617] flex items-center justify-center z-[7000] p-4 backdrop-blur-md print:hidden">
-          <div className="text-center p-8 bg-white/5 border border-white/10 rounded-[32px] w-full max-w-sm shadow-2xl relative">
-            <Wallet className="text-blue-500 mx-auto mb-4" size={50} />
-            <h2 className="text-xl font-black italic mb-2 uppercase tracking-tighter">Open_Shift</h2>
-            <p className="text-[8px] font-black text-gray-500 mb-8 tracking-[0.3em] uppercase italic">Input Modal Awal Tunai</p>
-            <input type="number" autoFocus className="w-full bg-white/5 border border-white/10 rounded-2xl py-6 text-center text-4xl font-black text-white outline-none focus:border-blue-500 mb-6" placeholder="0" onChange={(e) => setStartCash(Number(e.target.value))} />
-            <button onClick={handleStartShift} className="w-full py-5 bg-blue-600 rounded-[20px] font-black text-[10px] uppercase shadow-lg shadow-blue-600/30">Buka_Terminal</button>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL: CLOSE SHIFT --- */}
-      {showCloseShiftModal && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[7000] p-4 backdrop-blur-md print:hidden">
-          <div className="bg-[#020617] p-8 rounded-[32px] border border-orange-500/20 w-full max-w-sm text-center shadow-2xl">
-            <AlertTriangle className="text-orange-500 mx-auto mb-4" size={40} />
-            <h2 className="text-xl font-black italic text-white uppercase mb-8">Shift_Closing</h2>
-            
-            <div className="space-y-3 mb-8 text-left">
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <p className="text-[7px] font-black text-gray-500 uppercase mb-1 tracking-widest">Total_Gross_Sales</p>
-                <p className="text-2xl font-black text-white italic">Rp {shiftSummary.totalSales.toLocaleString('id-ID')}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-blue-600/10 p-4 rounded-2xl border border-blue-500/20">
-                  <p className="text-[7px] font-black text-blue-400 uppercase mb-1">Cash_Sales</p>
-                  <p className="text-sm font-black text-white">Rp {shiftSummary.cashSales.toLocaleString('id-ID')}</p>
-                </div>
-                <div className="bg-purple-600/10 p-4 rounded-2xl border border-purple-500/20">
-                  <p className="text-[7px] font-black text-purple-400 uppercase mb-1">Bank_Sales</p>
-                  <p className="text-sm font-black text-white">Rp {shiftSummary.transferSales.toLocaleString('id-ID')}</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-[7px] font-black text-orange-500 mb-2 italic uppercase tracking-widest">Actual_Cash_In_Drawer</p>
-                <input type="number" className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 text-center text-3xl font-black text-orange-400 outline-none focus:border-orange-500" placeholder="0" onChange={(e) => setEndingCash(Number(e.target.value))} />
-                <p className="text-[7px] text-gray-500 mt-2 text-center italic">
-                   Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales).toLocaleString('id-ID')}</span>
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex gap-2">
-              <button onClick={() => setShowCloseShiftModal(false)} className="flex-1 py-5 bg-white/5 rounded-[20px] font-black text-[9px] uppercase border border-white/10">Batal</button>
-              <button onClick={handleCloseShift} className="flex-[2] py-5 bg-orange-600 rounded-[20px] font-black text-[9px] uppercase shadow-lg shadow-orange-600/20">Akhiri_Shift</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL: ITEM REPORT --- */}
-      {showItemReportModal && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[5000] p-4 backdrop-blur-md print:absolute print:inset-0 print:bg-white print:p-0">
-          <div className="bg-[#020617] border border-white/10 w-full max-w-md rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl print:bg-white print:border-none print:shadow-none print:max-h-none print:overflow-visible print:w-full print:max-w-full">
-            
-            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02] print:bg-white print:border-black">
-              <h3 className="text-xs font-black italic text-blue-500 uppercase tracking-widest print:text-black">Shift_Items_Report</h3>
-              <button onClick={() => setShowItemReportModal(false)} className="p-2 text-gray-500 hover:text-white print:hidden"><X size={20}/></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-5 no-scrollbar print:overflow-visible">
-              <table className="w-full text-left">
-                <thead className="border-b border-white/10 text-[10px] font-black uppercase text-gray-500 italic print:border-black print:text-black">
-                  <tr>
-                    <th className="pb-3">Product</th>
-                    <th className="pb-3 text-center">Qty</th>
-                    <th className="pb-3 text-right">Revenue</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 italic print:divide-black/20">
-                  {itemSales.map((item, i) => (
-                    <tr key={i} className="text-white print:text-black">
-                      <td className="py-4 text-[10px] font-black uppercase">{item.name}</td>
-                      <td className="py-4 text-center font-mono text-blue-400 font-bold print:text-black">{item.qty}</td>
-                      <td className="py-4 text-right font-mono text-[10px]">Rp {item.total.toLocaleString('id-ID')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            
-            <div className="p-5 bg-black/40 border-t border-white/5 print:hidden">
-              <button onClick={() => window.print()} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20">
-                <Printer size={16}/> Cetak_Recap
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL: PREVIEW STRUK --- */}
-      {showPreviewModal && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[6000] p-4 backdrop-blur-md print:hidden">
-          <div className="bg-white text-black p-6 rounded-2xl w-full max-w-[320px] font-mono shadow-2xl relative uppercase italic font-bold">
-            <h3 className="font-black text-xl text-center border-b-2 border-black border-double pb-2 mb-4 tracking-tighter">DISBA_STATION</h3>
-            <div className="text-[10px] space-y-1">
-              <div className="flex justify-between"><span>Meja:</span> <span>{selectedTable?.name}</span></div>
-              <div className="flex justify-between"><span>Bayar:</span> <span className="text-blue-600">{paymentMethod}</span></div>
-              {paymentMethod === "TRANSFER" && <div className="flex justify-between font-black text-purple-700 bg-purple-50 p-1 rounded"><span>Bank:</span> <span>{selectedBank?.bank_name}</span></div>}
-              <div className="border-b border-black border-dashed my-2"></div>
-              
-              <div className="max-h-40 overflow-y-auto no-scrollbar">
-                {orderItems.map((item, i) => (<div key={i} className="flex justify-between py-0.5"><span>{item.qty} {item.name}</span><span>{(item.qty * item.price).toLocaleString('id-ID')}</span></div>))}
-              </div>
-              
-              <div className="border-b border-black border-dashed my-2"></div>
-              <div className="flex justify-between font-black text-lg pt-2 border-t-2 border-black mt-1"><span>TOTAL:</span><span>{getGrandTotal().toLocaleString('id-ID')}</span></div>
-              
-              {paymentMethod === "CASH" && (
-                <div className="mt-2 pt-2 border-t border-black border-dotted">
-                   <div className="flex justify-between"><span>Cash:</span><span>{paidAmount.toLocaleString('id-ID')}</span></div>
-                   <div className="flex justify-between font-black text-blue-600"><span>Kembali:</span><span>{getChange().toLocaleString('id-ID')}</span></div>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2 mt-8">
-              <button onClick={handleCancelSettle} className="flex-1 py-4 bg-gray-100 rounded-xl font-black text-[9px]">Batal</button>
-              <button onClick={processPayment} disabled={loading} className="flex-[2] py-4 bg-black text-white rounded-xl font-black text-[9px] flex items-center justify-center gap-2">
-                {loading ? "SAVING..." : <><Printer size={16}/> Save_&_Print</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
+      {/* =========================================================================
+          🔥 RENDER PRINT UI (LEMBAR KERTAS KHUSUS PRINTER, Tersembunyi di Layar)
+          ========================================================================= */}
+      <div id="print-ui" className="hidden text-black bg-white font-sans p-8 uppercase not-italic">
+          <h2 className="text-2xl font-black mb-4 border-b-2 border-black pb-2">
+            REKAP SHIFT : {typeof window !== "undefined" ? localStorage.getItem("username") || "KASIR" : "KASIR"}
+          </h2>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b-2 border-black text-sm">
+                <th className="py-2">NAMA PRODUK</th>
+                <th className="py-2 text-center">QTY TERJUAL</th>
+                <th className="py-2 text-right">TOTAL PENDAPATAN</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemSales.map((item, i) => (
+                <tr key={i} className="border-b border-gray-300 text-sm">
+                  <td className="py-2 font-bold">{item.name}</td>
+                  <td className="py-2 text-center font-bold">{item.qty}</td>
+                  <td className="py-2 text-right">Rp {item.total.toLocaleString('id-ID')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+      </div>
+    </>
   );
 }
