@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { printReceipt } from '../../lib/printer';
+import { executePrint } from '../../lib/printer';
 
 interface CartItem {
   name: string;
   price: number;
   qty: number;
 }
-``
+
 interface Props {
   cartItems: CartItem[];
   subtotal: number;
@@ -57,7 +57,8 @@ const CartPanel: React.FC<Props> = ({ cartItems, subtotal }) => {
     };
 
     try {
-      await printReceipt(payload);
+      // 🔥 ERROR FIXED: Menggunakan executePrint sesuai dengan lib/printer.ts
+      await executePrint(payload);
     } catch (error) {
       alert("Gagal konek ke printer!");
     }
@@ -72,7 +73,7 @@ const CartPanel: React.FC<Props> = ({ cartItems, subtotal }) => {
         {cartItems.map((item, idx) => (
           <div key={idx} className="flex justify-between py-1 border-b text-sm">
             <span>{item.name} x{item.qty}</span>
-            <span>Rp {(item.price * item.qty).toLocaleString()}</span>
+            <span>Rp {(item.price * item.qty).toLocaleString('id-ID')}</span>
           </div>
         ))}
       </div>
@@ -126,17 +127,17 @@ const CartPanel: React.FC<Props> = ({ cartItems, subtotal }) => {
       <div className="border-t pt-2 mb-4 space-y-1 text-sm">
         <div className="flex justify-between">
           <span>Subtotal</span>
-          <span>Rp {subtotal.toLocaleString()}</span>
+          <span>Rp {subtotal.toLocaleString('id-ID')}</span>
         </div>
         {discount > 0 && (
           <div className="flex justify-between text-red-500 font-bold">
             <span>Diskon</span>
-            <span>-Rp {discount.toLocaleString()}</span>
+            <span>-Rp {discount.toLocaleString('id-ID')}</span>
           </div>
         )}
         <div className="flex justify-between text-blue-600 font-bold text-lg">
           <span>Total + PB1</span>
-          <span>Rp {(subtotal - discount + Math.round(subtotal * 0.1)).toLocaleString()}</span>
+          <span>Rp {(subtotal - discount + Math.round(subtotal * 0.1)).toLocaleString('id-ID')}</span>
         </div>
       </div>
 
@@ -152,7 +153,7 @@ const CartPanel: React.FC<Props> = ({ cartItems, subtotal }) => {
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[99999] p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
             <h3 className="text-center font-bold text-lg mb-4 text-black">PERSETUJUAN ADMIN</h3>
-            <p className="text-center text-xs mb-4 text-gray-500">Konfirmasi Diskon: Rp {tempDiscount.toLocaleString()}</p>
+            <p className="text-center text-xs mb-4 text-gray-500">Konfirmasi Diskon: Rp {tempDiscount.toLocaleString('id-ID')}</p>
             <input 
               type="password" 
               className="w-full p-3 border-2 border-orange-500 rounded-xl text-center text-2xl mb-4 bg-white text-black"
