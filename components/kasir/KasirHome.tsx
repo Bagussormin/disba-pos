@@ -13,10 +13,10 @@ const TAX_RATE = 0.10;    // 10% PB1
 export default function KasirHome() {
   // --- STATE DASAR ---
   const [tables, setTables] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]); // Ganti bills jadi orders
+  const [orders, setOrders] = useState<any[]>([]); 
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [selectedTable, setSelectedTable] = useState<any | null>(null);
-  const [activeOrder, setActiveOrder] = useState<any | null>(null); // Ganti activeBill jadi activeOrder
+  const [activeOrder, setActiveOrder] = useState<any | null>(null); 
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [banks, setBanks] = useState<any[]>([]);
 
@@ -57,7 +57,6 @@ export default function KasirHome() {
   // --- AUTO PRINT DAPUR/BAR ---
   const handleAutoPrintDapur = async (newOrderItem: any) => {
     try {
-      // 🔥 SINKRONISASI: Baca dari tabel 'orders' bukan 'open_bills'
       const { data: order } = await supabase.from("orders").select("tables(name)").eq("id", newOrderItem.order_id).single();
       const { data: menu } = await supabase.from("menus").select("name, category").eq("id", newOrderItem.menu_id).single();
 
@@ -93,7 +92,6 @@ export default function KasirHome() {
 
     const channel = supabase.channel(`pos-realtime-${tenantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
-      // 🔥 SINKRONISASI: Pantau tabel 'orders'
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` }, (payload) => {
         handleAutoPrintDapur(payload.new);
@@ -141,10 +139,10 @@ export default function KasirHome() {
   };
 
   const fetchData = async () => {
-    // 🔥 SINKRONISASI: Ambil dari 'orders' dengan status 'pending'
+    // 🔥 FIX BUGS: Ubah status dari "pending" menjadi "open" agar sinkron dengan Waiter
     const [tRes, oRes] = await Promise.all([
       supabase.from("tables").select("*").eq("tenant_id", tenantId).order("name", { ascending: true }),
-      supabase.from("orders").select("*").eq("tenant_id", tenantId).eq("status", "pending")
+      supabase.from("orders").select("*").eq("tenant_id", tenantId).eq("status", "open") 
     ]);
     if (tRes.data) setTables(tRes.data);
     if (oRes.data) setOrders(oRes.data);
@@ -154,7 +152,7 @@ export default function KasirHome() {
     const { data: orderData, error } = await supabase
       .from("order_items")
       .select(`*, menus(name)`) 
-      .eq("order_id", orderId) // 🔥 SINKRONISASI: Pakai order_id
+      .eq("order_id", orderId) 
       .eq("tenant_id", tenantId);
 
     if (error) console.error("Error fetching items:", error);
@@ -164,7 +162,7 @@ export default function KasirHome() {
         id: item.menu_id, 
         name: item.menus?.name || item.name || `MENU ID: ${item.menu_id}`, 
         qty: item.quantity || 1,
-        price: item.price_at_time || 0 // 🔥 SINKRONISASI: CustomerMenu menyimpan harga sebagai price_at_time
+        price: item.price_at_time || 0 
       })));
     } else {
       setOrderItems([]);
@@ -189,7 +187,7 @@ export default function KasirHome() {
 
   const handleCancelSettle = async () => {
     if (!selectedTable) return;
-    await supabase.from("tables").update({ status: "occupied" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
+    await supabase.from("tables").update({ status: "open" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
     setShowPreviewModal(false);
   };
 
@@ -412,7 +410,6 @@ export default function KasirHome() {
               <p className="text-[7px] font-black text-gray-700 mb-2 tracking-[0.2em] text-center border-b border-white/5 pb-1 uppercase"><MapPin size={8} className="inline mr-1"/> {area}</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {tables.filter(t => (t.area || "AREA LAINNYA").toUpperCase() === area).map(t => {
-                   // 🔥 SINKRONISASI: Validasi meja berkedip berdasarkan 'orders'
                    const hasOrder = orders.some(o => o.table_id === t.id); 
                    return (
                     <button key={t.id} onClick={() => setSelectedTable(t)}
@@ -464,8 +461,8 @@ export default function KasirHome() {
                         <td className="py-4 text-center">
                             <span className="text-[11px] font-mono font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">{item.qty}X</span>
                         </td>
-                        <td className="py-4 text-right text-[10px] font-mono text-gray-500">{item.price.toLocaleString()}</td>
-                        <td className="py-4 text-right text-[11px] font-mono font-black italic text-white">{(item.qty * item.price).toLocaleString()}</td>
+                        <td className="py-4 text-right text-[10px] font-mono text-gray-500">{item.price.toLocaleString('id-ID')}</td>
+                        <td className="py-4 text-right text-[11px] font-mono font-black italic text-white">{(item.qty * item.price).toLocaleString('id-ID')}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -489,7 +486,7 @@ export default function KasirHome() {
               <div className="space-y-2 mb-4 bg-white/[0.02] p-3 rounded-xl border border-white/5">
                 <div className="flex justify-between items-center text-[10px] font-black text-gray-500">
                     <span>SUBTOTAL</span>
-                    <span className="text-white font-mono">{getSubtotal().toLocaleString()}</span>
+                    <span className="text-white font-mono">{getSubtotal().toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex justify-between items-center text-[10px] font-black text-blue-500 italic">
                     <span>DISC_VALUE</span>
@@ -497,18 +494,18 @@ export default function KasirHome() {
                 </div>
                 <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
                     <span>SERVICE_5%</span>
-                    <span className="text-white font-mono">{getService().toLocaleString()}</span>
+                    <span className="text-white font-mono">{getService().toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
                     <span>PB1_10%</span>
-                    <span className="text-white font-mono">{getTax().toLocaleString()}</span>
+                    <span className="text-white font-mono">{getTax().toLocaleString('id-ID')}</span>
                 </div>
               </div>
 
               <div className="mt-auto border-t-2 border-dashed border-white/10 pt-4">
                 <p className="text-[9px] font-black text-blue-500 italic tracking-widest mb-1">GRAND_TOTAL_DUE</p>
                 <p className="text-3xl font-black italic tracking-tighter text-white mb-6 border-b-2 border-white pb-2 leading-none">
-                    RP {getGrandTotal().toLocaleString()}
+                    RP {getGrandTotal().toLocaleString('id-ID')}
                 </p>
                 
                 <div className="grid grid-cols-2 gap-1.5 mb-3">
@@ -536,7 +533,7 @@ export default function KasirHome() {
                     {paidAmount >= getGrandTotal() && (
                         <div className="mt-2 flex justify-between items-center bg-emerald-500/10 p-2.5 rounded-lg border border-emerald-500/20">
                             <span className="text-[9px] font-black text-emerald-500 italic">KEMBALIAN:</span>
-                            <span className="text-lg font-black text-emerald-400 font-mono">+{getChange().toLocaleString()}</span>
+                            <span className="text-lg font-black text-emerald-400 font-mono">+{getChange().toLocaleString('id-ID')}</span>
                         </div>
                     )}
                   </div>
@@ -587,17 +584,17 @@ export default function KasirHome() {
             <div className="space-y-3 mb-8 text-left">
               <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                 <p className="text-[7px] font-black text-gray-500 uppercase mb-1 tracking-widest">Total_Gross_Sales</p>
-                <p className="text-2xl font-black text-white italic">Rp {shiftSummary.totalSales.toLocaleString()}</p>
+                <p className="text-2xl font-black text-white italic">Rp {shiftSummary.totalSales.toLocaleString('id-ID')}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-blue-600/10 p-4 rounded-2xl border border-blue-500/20">
                   <p className="text-[7px] font-black text-blue-400 uppercase mb-1">Cash_Sales</p>
-                  <p className="text-sm font-black text-white">Rp {shiftSummary.cashSales.toLocaleString()}</p>
+                  <p className="text-sm font-black text-white">Rp {shiftSummary.cashSales.toLocaleString('id-ID')}</p>
                 </div>
                 <div className="bg-purple-600/10 p-4 rounded-2xl border border-purple-500/20">
                   <p className="text-[7px] font-black text-purple-400 uppercase mb-1">Bank_Sales</p>
-                  <p className="text-sm font-black text-white">Rp {shiftSummary.transferSales.toLocaleString()}</p>
+                  <p className="text-sm font-black text-white">Rp {shiftSummary.transferSales.toLocaleString('id-ID')}</p>
                 </div>
               </div>
 
@@ -605,7 +602,7 @@ export default function KasirHome() {
                 <p className="text-[7px] font-black text-orange-500 mb-2 italic uppercase tracking-widest">Actual_Cash_In_Drawer</p>
                 <input type="number" className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 text-center text-3xl font-black text-orange-400 outline-none focus:border-orange-500" placeholder="0" onChange={(e) => setEndingCash(Number(e.target.value))} />
                 <p className="text-[7px] text-gray-500 mt-2 text-center italic">
-                   Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales).toLocaleString()}</span>
+                   Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales).toLocaleString('id-ID')}</span>
                 </p>
               </div>
             </div>
@@ -636,7 +633,7 @@ export default function KasirHome() {
                     <tr key={i} className="text-white">
                       <td className="py-4 text-[10px] font-black uppercase">{item.name}</td>
                       <td className="py-4 text-center font-mono text-blue-400 font-bold">{item.qty}</td>
-                      <td className="py-4 text-right font-mono text-[10px]">Rp {item.total.toLocaleString()}</td>
+                      <td className="py-4 text-right font-mono text-[10px]">Rp {item.total.toLocaleString('id-ID')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -661,16 +658,16 @@ export default function KasirHome() {
               <div className="border-b border-black border-dashed my-2"></div>
               
               <div className="max-h-40 overflow-y-auto no-scrollbar">
-                {orderItems.map((item, i) => (<div key={i} className="flex justify-between py-0.5"><span>{item.qty} {item.name}</span><span>{(item.qty * item.price).toLocaleString()}</span></div>))}
+                {orderItems.map((item, i) => (<div key={i} className="flex justify-between py-0.5"><span>{item.qty} {item.name}</span><span>{(item.qty * item.price).toLocaleString('id-ID')}</span></div>))}
               </div>
               
               <div className="border-b border-black border-dashed my-2"></div>
-              <div className="flex justify-between font-black text-lg pt-2 border-t-2 border-black mt-1"><span>TOTAL:</span><span>{getGrandTotal().toLocaleString()}</span></div>
+              <div className="flex justify-between font-black text-lg pt-2 border-t-2 border-black mt-1"><span>TOTAL:</span><span>{getGrandTotal().toLocaleString('id-ID')}</span></div>
               
               {paymentMethod === "CASH" && (
                 <div className="mt-2 pt-2 border-t border-black border-dotted">
-                   <div className="flex justify-between"><span>Cash:</span><span>{paidAmount.toLocaleString()}</span></div>
-                   <div className="flex justify-between font-black text-blue-600"><span>Kembali:</span><span>{getChange().toLocaleString()}</span></div>
+                   <div className="flex justify-between"><span>Cash:</span><span>{paidAmount.toLocaleString('id-ID')}</span></div>
+                   <div className="flex justify-between font-black text-blue-600"><span>Kembali:</span><span>{getChange().toLocaleString('id-ID')}</span></div>
                 </div>
               )}
             </div>
