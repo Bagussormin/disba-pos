@@ -36,7 +36,7 @@ export default function KasirHome() {
   const [endingCash, setEndingCash] = useState(0);
   const [loading, setLoading] = useState(false);
   
-  // 🔥 STATE BARU UNTUK MENYIMPAN REKAP BERDASARKAN KATEGORI
+  // STATE UNTUK MENYIMPAN REKAP BERDASARKAN KATEGORI
   const [itemSales, setItemSales] = useState<any[]>([]);
   
   const [shiftSummary, setShiftSummary] = useState({ 
@@ -242,7 +242,7 @@ export default function KasirHome() {
         paymentMethod: paymentMethod,
         paid: paidAmount,
         change: getChange(),
-        storeName: printSettings?.store_name || "NES HOUSE COLD BREW",
+        storeName: printSettings?.store_name || "NES HOUSE",
         address: printSettings?.address || "",
         contact: printSettings?.contact || "",
         socialMedia: printSettings?.social_media || "",
@@ -362,10 +362,11 @@ export default function KasirHome() {
       
       await handlePrintShiftClosing(selisih);
 
+      // 🔥 FIX ROUTING: Gunakan window.location.replace("/") agar tidak nyangkut di blank screen
       if (typeof window !== "undefined") {
         localStorage.removeItem("role");
         localStorage.removeItem("username");
-        window.location.href = "/login"; 
+        window.location.replace("/"); 
       }
     } catch (e: any) { 
       alert(e.message); 
@@ -374,12 +375,11 @@ export default function KasirHome() {
     }
   };
 
-  // 🔥 FUNGSI REKAP KATEGORI: Mengambil kategori dari menu dan menyusun format
+  // FUNGSI REKAP KATEGORI
   const fetchItemSales = async () => {
     if (!currentShift) return;
     setLoading(true);
 
-    // 1. Tarik Peta Kategori Menu
     const { data: menuData } = await supabase.from("menus").select("name, category").eq("tenant_id", tenantId);
     const catMap: Record<string, string> = {};
     if (menuData) {
@@ -388,10 +388,8 @@ export default function KasirHome() {
         });
     }
 
-    // 2. Tarik Transaksi
     const { data: transactions } = await supabase.from("transactions").select("items").eq("shift_id", currentShift.id).eq("tenant_id", tenantId);
     
-    // 3. Gabungkan dan Hitung
     const summary: any = {};
     if (transactions) {
       transactions.forEach((trx: any) => {
@@ -399,7 +397,6 @@ export default function KasirHome() {
         if (Array.isArray(items)) {
           items.forEach((item: any) => {
             const name = (item.name || "Unknown").toUpperCase();
-            // Ambil nama kategori yang pas
             const cat = catMap[name] || "Lainnya";
             
             if (!summary[cat]) summary[cat] = {};
@@ -409,7 +406,6 @@ export default function KasirHome() {
       });
     }
 
-    // 4. Format ke Array agar rapi
     const formattedSales = Object.keys(summary).map(cat => ({
         category: cat,
         items: Object.keys(summary[cat]).map(name => ({ name, qty: summary[cat][name] })).sort((a, b) => b.qty - a.qty)
@@ -420,17 +416,15 @@ export default function KasirHome() {
     setShowItemReportModal(true);
   };
 
-  // 🔥 FUNGSI PRINT KATEGORI
+  // FUNGSI PRINT KATEGORI
   const handlePrintItemReport = async () => {
     const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
 
     const reportData = {
         orderId: "REKAP", 
-        // Kita titipkan start_time di dalam table_name karena executePrint sudah membaca tableName
         tableName: new Date(currentShift.start_time).toLocaleString('id-ID'), 
-        // 🔥 FLAG INI YANG AKAN MEMBUAT server.js MENCETAK LAYOUT BARU!
         paymentMethod: "REKAP_PRODUK", 
-        items: itemSales, // Data yang sudah di-group by Category
+        items: itemSales,
         subtotal: 0, discount: 0, serviceCharge: 0, tax: 0, total: 0, paid: 0, change: 0,
         storeName: printSettings?.store_name || "NES HOUSE",
     };
@@ -445,11 +439,12 @@ export default function KasirHome() {
 
   const handleLogOut = () => { 
     if (window.confirm("Keluar dari Terminal Kasir?")) { 
+      // 🔥 FIX ROUTING: Gunakan window.location.replace("/") agar tidak nyangkut di blank screen
       if (typeof window !== "undefined") {
         localStorage.removeItem("role"); 
         localStorage.removeItem("username"); 
         localStorage.removeItem("is_admin"); 
-        window.location.href = "/login"; 
+        window.location.replace("/"); 
       }
     } 
   };
@@ -680,7 +675,6 @@ export default function KasirHome() {
               <button onClick={() => setShowItemReportModal(false)} className="p-2 text-gray-500 hover:text-white"><X size={20}/></button>
             </div>
             
-            {/* TAMPILAN KATEGORI (MAPPING ARRAY) */}
             <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
               {itemSales.map((catGroup, i) => (
                 <div key={i} className="mb-6">
