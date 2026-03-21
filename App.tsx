@@ -177,31 +177,11 @@ export default function App() {
   }
 
   // 6. DASHBOARD UTAMA (Untuk Kasir & Waiter)
+  // 🔥 FIX: Hapus header lama, biarkan KasirHome dan WaiterApp render full screen!
   return (
-    <div className="min-h-screen bg-[#020617] text-white font-sans italic">
-      <div className="p-4 bg-white/5 backdrop-blur-md border-b border-white/10 flex justify-between items-center shadow-xl not-italic relative z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
-          <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80 text-cyan-400">
-              TENANT_ID: {activeTenantId}
-          </span>
-          <span className="text-[10px] font-medium text-gray-500">|</span>
-          <span className="text-[10px] font-black tracking-[0.2em] uppercase italic opacity-80">
-            {user.username} <span className="text-blue-500">[{user.role}]</span>
-          </span>
-        </div>
-        <button 
-          onClick={handleLogout} 
-          className="text-[9px] font-black bg-red-500/10 hover:bg-red-500/20 text-red-500 px-5 py-2 rounded-xl border border-red-500/20 uppercase tracking-widest transition-all"
-        >
-          Logout Terminal
-        </button>
-      </div>
-
-      <div className="p-4 relative z-10">
-        {user.role === "kasir" && <KasirHome />}
-        {user.role === "waiter" && <WaiterApp />}
-      </div>
+    <div className="min-h-screen bg-[#020617] text-white font-sans italic w-full">
+      {user.role === "kasir" && <KasirHome />}
+      {user.role === "waiter" && <WaiterApp />}
     </div>
   );
 }
