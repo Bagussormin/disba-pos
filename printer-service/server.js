@@ -77,16 +77,50 @@ const sendToDevice = async (ip, port, content, label, includeLogo = false) => {
 };
 
 // --- ENDPOINT KASIR ---
+// --- ENDPOINT KASIR ---
 app.post('/print-receipt', async (req, res) => {
     const d = req.body;
     console.log("DEBUG KASIR DATA:", d); 
 
+    // 🔥 DETEKSI KHUSUS: JIKA INI ADALAH CETAK REKAP PRODUK
+    if (d.payment_method === "REKAP_PRODUK") {
+        let header = `\x1b\x61\x01\x1b\x21\x10${d.header_title || "OUTLET"}\x1b\x21\x00\n`;
+        header += `Ringkasan Penjualan Produk\n\n`;
+
+        let body = `\x1b\x61\x00`; // Rata Kiri
+        body += `Mulai    : ${d.table_name}\n`; // table_name kita bajak untuk mengirim Waktu Mulai
+        body += `Akhir    : ${new Date().toLocaleString('id-ID')}\n`;
+        body += `Tercetak : ${new Date().toLocaleString('id-ID')}\n\n`;
+
+        body += `Kategori\n`;
+
+        const categories = d.items_list || [];
+        categories.forEach(catGroup => {
+            body += `--------------------------------\n`;
+            body += `${catGroup.category}\n`;
+            body += `--------------------------------\n`;
+            catGroup.items.forEach(item => {
+                let left = item.name.substring(0, 24); // Potong nama jika kepanjangan
+                let right = item.qty.toString();
+                body += left + " ".repeat(Math.max(1, 32 - (left.length + right.length))) + right + "\n";
+            });
+            body += `\n`;
+        });
+
+        const fullContent = Buffer.concat([Buffer.from(header), Buffer.from(body)]);
+        await sendToDevice(PRINTERS.KASIR.ip, PRINTERS.KASIR.port, fullContent, "KASIR", false); // false = Tanpa logo untuk rekap
+        return res.json({ success: true, message: "Rekap Tercetak" });
+    }
+
+    // ==========================================
+    // LOGIKA STRUK TRANSAKSI BIASA (TIDAK BERUBAH SAMA SEKALI)
+    // ==========================================
     const noTrx = d.receipt_no || d.order_id || d.id || d.transaction_id || "-";
     const namaPelanggan = (d.customer_name || d.customer || d.pelanggan || "-").toUpperCase();
     const namaUser = (d.waiter || d.cashier || d.user_name || d.user || "-").toUpperCase();
     
-    let header = `\x1b\x61\x01\x1b\x21\x10NES HOUSE COLD BREW\x1b\x21\x00\n`; 
-    header += `Jl. Sudirman No. 61 AB\nPematangsiantar\n`;
+    let header = `\x1b\x61\x01\x1b\x21\x10${d.header_title || "NES HOUSE COLD BREW"}\x1b\x21\x00\n`; 
+    header += `${d.header_address || "Jl. Sudirman No. 61 AB"}\n${d.header_contact || "Pematangsiantar"}\n`;
     header += `--------------------------------\n`;
 
     let body = `\x1b\x61\x00`; 
@@ -100,14 +134,14 @@ app.post('/print-receipt', async (req, res) => {
     const items = d.items_list || d.items || [];
     items.forEach(i => {
         body += `${i.name.toUpperCase()}\n`;
-        let left = `${i.qty} x ${Number(i.price).toLocaleString()}`;
-        let right = `Rp${(i.qty * i.price).toLocaleString()}`;
+        let left = `${i.qty} x ${Number(i.price).toLocaleString('id-ID')}`;
+        let right = `Rp${(i.qty * i.price).toLocaleString('id-ID')}`;
         body += left + " ".repeat(Math.max(1, 32 - (left.length + right.length))) + right + "\n";
     });
 
     body += `--------------------------------\n`;
     const addLine = (label, val) => {
-        let v = `Rp${(val || 0).toLocaleString()}`;
+        let v = `Rp${(val || 0).toLocaleString('id-ID')}`;
         return label + " ".repeat(Math.max(1, 32 - (label.length + v.length))) + v + "\n";
     };
 
@@ -118,10 +152,10 @@ app.post('/print-receipt', async (req, res) => {
     body += `\x1b\x21\x10` + addLine("TOTAL", d.total) + `\x1b\x21\x00`;
     body += `--------------------------------\n`;
     
-    let footer = `\x1b\x61\x01\nTERIMA KASIH\nSELAMAT MENIKMATI!\n`;
+    let footer = `\x1b\x61\x01\n${d.footer_thanks || "TERIMA KASIH"}\n${d.footer_message || "SELAMAT MENIKMATI!"}\n`;
 
     const fullContent = Buffer.concat([Buffer.from(header), Buffer.from(body), Buffer.from(footer)]);
-    await sendToDevice(PRINTERS.KASIR.ip, PRINTERS.KASIR.port, fullContent, "KASIR", true);
+    await sendToDevice(PRINTERS.KASIR.ip, PRINTERS.KASIR.port, fullContent, "KASIR", true); // true = Pakai logo untuk struk
     res.json({ success: true });
 });
 

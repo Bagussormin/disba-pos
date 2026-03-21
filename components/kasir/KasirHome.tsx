@@ -11,7 +11,6 @@ const SERVICE_RATE = 0.05; // 5% Service Charge
 const TAX_RATE = 0.10;    // 10% PB1
 
 export default function KasirHome() {
-  // --- STATE DASAR ---
   const [tables, setTables] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]); 
   const [orderItems, setOrderItems] = useState<any[]>([]);
@@ -20,19 +19,15 @@ export default function KasirHome() {
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [banks, setBanks] = useState<any[]>([]);
 
-  // KUNCI MASTER
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "NES_HOUSE_001" : "NES_HOUSE_001"; 
 
-  // --- TRIGGER UNTUK REFRESH PESANAN BARU ---
   const [lastIncomingOrder, setLastIncomingOrder] = useState<number>(0);
 
-  // --- STATE MODALS ---
   const [showStartShiftModal, setShowStartShiftModal] = useState(false);
   const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showItemReportModal, setShowItemReportModal] = useState(false);
 
-  // --- STATE TRANSAKSI ---
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
   const [selectedBank, setSelectedBank] = useState<any | null>(null);
   const [paidAmount, setPaidAmount] = useState(0);
@@ -40,6 +35,8 @@ export default function KasirHome() {
   const [startCash, setStartCash] = useState(0);
   const [endingCash, setEndingCash] = useState(0);
   const [loading, setLoading] = useState(false);
+  
+  // 🔥 STATE BARU UNTUK MENYIMPAN REKAP BERDASARKAN KATEGORI
   const [itemSales, setItemSales] = useState<any[]>([]);
   
   const [shiftSummary, setShiftSummary] = useState({ 
@@ -54,7 +51,6 @@ export default function KasirHome() {
   
   const dynamicAreas = Array.from(new Set(tables.map(t => (t.area || "AREA LAINNYA").toUpperCase())));
 
-  // --- AUTO PRINT DAPUR/BAR ---
   const handleAutoPrintDapur = async (newOrderItem: any) => {
     try {
       const { data: order } = await supabase.from("orders").select("tables(name)").eq("id", newOrderItem.order_id).single();
@@ -84,7 +80,6 @@ export default function KasirHome() {
     }
   };
 
-  // --- INITIAL LOAD & REALTIME RADAR ---
   useEffect(() => {
     checkActiveShift();
     fetchData();
@@ -132,7 +127,6 @@ export default function KasirHome() {
     }
   }, [tables, orders, selectedTable]);
 
-  // --- FETCHERS ---
   const fetchBanks = async () => {
     const { data } = await supabase.from("merchant_banks").select("*").eq("is_active", true);
     if (data) setBanks(data);
@@ -168,7 +162,6 @@ export default function KasirHome() {
     }
   };
 
-  // --- CALCULATIONS ---
   const getSubtotal = () => orderItems.reduce((a, b) => a + (b.qty * b.price), 0);
   const safeDiscount = Math.min(discount, getSubtotal());
   const getNetSubtotal = () => getSubtotal() - safeDiscount;
@@ -177,7 +170,6 @@ export default function KasirHome() {
   const getGrandTotal = () => getNetSubtotal() + getService() + getTax();
   const getChange = () => Math.max(0, paidAmount - getGrandTotal());
 
-  // --- PAYMENT HANDLERS ---
   const handleOpenSettlePreview = async () => {
     if (!selectedTable) return;
     await supabase.from("tables").update({ status: "payment", last_status_change: new Date().toISOString() }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
@@ -233,7 +225,6 @@ export default function KasirHome() {
 
       if (trxError) throw trxError;
 
-      // 🔥 SINKRONISASI: Tutup order dan bersihkan meja
       await supabase.from("orders").update({ status: "completed" }).eq("id", activeOrder.id).eq("tenant_id", tenantId);
       await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
 
@@ -277,7 +268,6 @@ export default function KasirHome() {
     }
   };
 
-  // --- SHIFT LOGIC & REPORT PRINTING ---
   const checkActiveShift = async () => {
     const { data } = await supabase.from("shifts").select("*").eq("status", "open").eq("tenant_id", tenantId).maybeSingle();
     if (data) { 
@@ -327,11 +317,9 @@ export default function KasirHome() {
     setShowCloseShiftModal(true);
   };
 
-  // 🔥 FUNGSI BARU: PRINT STRUK TUTUP SHIFT LEWAT PIPA KAPETN (executePrint)
   const handlePrintShiftClosing = async (selisih: number) => {
     const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
     
-    // Kita "tipu" struknya agar menampilkan laporan, bukan pesanan makanan.
     const reportData = {
         orderId: "LAPORAN SHIFT",
         tableName: "CLOSING",
@@ -343,17 +331,15 @@ export default function KasirHome() {
             { name: "TRANSFER BANK DITERIMA", qty: 1, price: shiftSummary.transferSales },
             { name: "--------------------------------", qty: 1, price: 0 },
             { name: "MODAL LACI AWAL", qty: 1, price: currentShift?.starting_cash || 0 },
-            { name: "UANG FISIK DIHITUNG KASIR", qty: 1, price: Number(endingCash) },
+            { name: "UANG FISIK DIHITUNG", qty: 1, price: Number(endingCash) },
             { name: "SELISIH (MINUS/PLUS)", qty: 1, price: selisih },
             { name: "--------------------------------", qty: 1, price: 0 },
         ],
-        subtotal: 0, discount: 0, serviceCharge: 0, tax: 0,
-        total: 0,
+        subtotal: 0, discount: 0, serviceCharge: 0, tax: 0, total: 0,
         paymentMethod: "REPORT", paid: 0, change: 0,
         storeName: printSettings?.store_name || "NES HOUSE",
         footerText: "TUTUP SHIFT BERHASIL"
     };
-
     try { await executePrint(reportData); } catch (e) { console.error("Gagal print shift report:", e); }
   };
 
@@ -374,7 +360,6 @@ export default function KasirHome() {
         difference: selisih
       }).eq("id", currentShift.id).eq("tenant_id", tenantId);
       
-      // Panggil fungsi print struk ke Pipa Kapten sesaat sebelum logout
       await handlePrintShiftClosing(selisih);
 
       if (typeof window !== "undefined") {
@@ -389,59 +374,72 @@ export default function KasirHome() {
     }
   };
 
+  // 🔥 FUNGSI REKAP KATEGORI: Mengambil kategori dari menu dan menyusun format
   const fetchItemSales = async () => {
     if (!currentShift) return;
     setLoading(true);
+
+    // 1. Tarik Peta Kategori Menu
+    const { data: menuData } = await supabase.from("menus").select("name, category").eq("tenant_id", tenantId);
+    const catMap: Record<string, string> = {};
+    if (menuData) {
+        menuData.forEach((m: any) => {
+            catMap[m.name.toUpperCase()] = m.category ? m.category : "Lainnya";
+        });
+    }
+
+    // 2. Tarik Transaksi
     const { data: transactions } = await supabase.from("transactions").select("items").eq("shift_id", currentShift.id).eq("tenant_id", tenantId);
+    
+    // 3. Gabungkan dan Hitung
     const summary: any = {};
     if (transactions) {
       transactions.forEach((trx: any) => {
         const items = typeof trx.items === 'string' ? JSON.parse(trx.items) : trx.items;
         if (Array.isArray(items)) {
           items.forEach((item: any) => {
-            const name = item.name || "Unknown";
-            summary[name] = { 
-              qty: (summary[name]?.qty || 0) + Number(item.qty), 
-              total: (summary[name]?.total || 0) + (Number(item.qty) * (Number(item.price) || 0)) 
-            };
+            const name = (item.name || "Unknown").toUpperCase();
+            // Ambil nama kategori yang pas
+            const cat = catMap[name] || "Lainnya";
+            
+            if (!summary[cat]) summary[cat] = {};
+            summary[cat][name] = (summary[cat][name] || 0) + Number(item.qty);
           });
         }
       });
-      setItemSales(Object.keys(summary).map(name => ({ name, ...summary[name] })).sort((a,b) => b.qty - a.qty));
     }
+
+    // 4. Format ke Array agar rapi
+    const formattedSales = Object.keys(summary).map(cat => ({
+        category: cat,
+        items: Object.keys(summary[cat]).map(name => ({ name, qty: summary[cat][name] })).sort((a, b) => b.qty - a.qty)
+    })).sort((a, b) => a.category.localeCompare(b.category));
+
+    setItemSales(formattedSales);
     setLoading(false);
     setShowItemReportModal(true);
   };
 
-  // 🔥 FUNGSI BARU: PRINT REKAP ITEM LEWAT PIPA KAPTEN (executePrint)
+  // 🔥 FUNGSI PRINT KATEGORI
   const handlePrintItemReport = async () => {
     const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
-    const totalRev = itemSales.reduce((sum, item) => sum + item.total, 0);
 
     const reportData = {
-        orderId: "REKAP PRODUK",
-        tableName: "REPORT",
-        cashierName: typeof window !== "undefined" ? localStorage.getItem("username") || "KASIR" : "KASIR",
-        // Format ulang itemSales agar cocok dengan template cetak
-        items: itemSales.map(item => ({
-            name: item.name,
-            qty: item.qty,
-            // Kita kalikan harga satuan agar di struk jadi total harga (karena di printer.ts qty * price)
-            price: item.total / item.qty 
-        })),
-        subtotal: totalRev,
-        discount: 0, serviceCharge: 0, tax: 0,
-        total: totalRev,
-        paymentMethod: "REPORT", paid: totalRev, change: 0,
+        orderId: "REKAP", 
+        // Kita titipkan start_time di dalam table_name karena executePrint sudah membaca tableName
+        tableName: new Date(currentShift.start_time).toLocaleString('id-ID'), 
+        // 🔥 FLAG INI YANG AKAN MEMBUAT server.js MENCETAK LAYOUT BARU!
+        paymentMethod: "REKAP_PRODUK", 
+        items: itemSales, // Data yang sudah di-group by Category
+        subtotal: 0, discount: 0, serviceCharge: 0, tax: 0, total: 0, paid: 0, change: 0,
         storeName: printSettings?.store_name || "NES HOUSE",
-        footerText: "LAPORAN PRODUK TERJUAL (SHIFT)"
     };
 
     try { 
       await executePrint(reportData); 
-      alert("Memproses Cetak Rekap ke Printer Kasir..."); 
+      alert("Memproses Cetak Rekap ke Thermal..."); 
     } catch (e) { 
-      alert("Gagal mencetak. Pastikan printer terhubung."); 
+      alert("Gagal print ke Printer Kasir."); 
     }
   };
 
@@ -456,14 +454,13 @@ export default function KasirHome() {
     } 
   };
 
-
   // =========================================================================
-  // 🔥 RENDER UI SAJA (SULTAN SIDEBAR EDITION)
+  // 🔥 RENDER UI SAJA 
   // =========================================================================
   return (
     <div className="fixed inset-0 bg-[#020617] text-white p-1 uppercase italic font-sans flex flex-col overflow-hidden">
       
-      {/* HEADER: ULTRA SLIM */}
+      {/* HEADER */}
       <header className="flex justify-between items-center bg-black/60 border-b border-white/5 p-2 mb-1 shadow-2xl">
         <h1 className="text-[11px] font-black tracking-tighter">DISBA<span className="text-blue-500">_POS_CONTROL</span></h1>
         <div className="flex gap-1.5">
@@ -475,7 +472,7 @@ export default function KasirHome() {
 
       <div className="flex-1 flex gap-1 min-h-0 overflow-hidden">
         
-        {/* KOLOM 1: MEJA (200px) */}
+        {/* KOLOM 1: MEJA */}
         <div className="w-48 bg-black/20 rounded-xl border border-white/5 p-2 overflow-y-auto no-scrollbar">
           {dynamicAreas.map(area => (
             <div key={area} className="mb-4">
@@ -501,7 +498,7 @@ export default function KasirHome() {
           ))}
         </div>
 
-        {/* KOLOM 2: ORDER LIST (FULL VERTICAL - FLEX 1) */}
+        {/* KOLOM 2: ORDER LIST */}
         <div className="flex-1 bg-black/40 rounded-xl border border-white/5 flex flex-col overflow-hidden">
           {activeOrder ? (
             <div className="flex flex-col h-full">
@@ -513,26 +510,16 @@ export default function KasirHome() {
                 <button onClick={() => setSelectedTable(null)} className="text-gray-600 hover:text-white transition-all"><X size={18}/></button>
               </div>
 
-              {/* AREA LIST PESANAN */}
               <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
                 <table className="w-full text-left">
                   <thead className="text-[9px] font-black text-gray-600 border-b border-white/5 sticky top-0 bg-[#020617] z-10 uppercase italic">
-                    <tr>
-                        <th className="pb-3">PRODUCT_NAME</th>
-                        <th className="pb-3 text-center">QTY</th>
-                        <th className="pb-3 text-right">UNIT_PRICE</th>
-                        <th className="pb-3 text-right">TOTAL</th>
-                    </tr>
+                    <tr><th className="pb-3">PRODUCT_NAME</th><th className="pb-3 text-center">QTY</th><th className="pb-3 text-right">UNIT_PRICE</th><th className="pb-3 text-right">TOTAL</th></tr>
                   </thead>
                   <tbody className="divide-y divide-white/[0.03]">
                     {orderItems.map((item, i) => (
                       <tr key={i} className="group hover:bg-white/[0.02] transition-colors">
-                        <td className="py-4">
-                            <span className="text-[11px] font-black text-white/90 uppercase tracking-tight">{item.name}</span>
-                        </td>
-                        <td className="py-4 text-center">
-                            <span className="text-[11px] font-mono font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">{item.qty}X</span>
-                        </td>
+                        <td className="py-4"><span className="text-[11px] font-black text-white/90 uppercase tracking-tight">{item.name}</span></td>
+                        <td className="py-4 text-center"><span className="text-[11px] font-mono font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">{item.qty}X</span></td>
                         <td className="py-4 text-right text-[10px] font-mono text-gray-500">{item.price.toLocaleString('id-ID')}</td>
                         <td className="py-4 text-right text-[11px] font-mono font-black italic text-white">{(item.qty * item.price).toLocaleString('id-ID')}</td>
                       </tr>
@@ -549,7 +536,7 @@ export default function KasirHome() {
           )}
         </div>
 
-        {/* KOLOM 3: PAYMENT SIDEBAR (SCROLLABLE & ANTI-CUTOFF) */}
+        {/* KOLOM 3: PAYMENT SIDEBAR */}
         <div className="w-[320px] bg-black/60 rounded-xl border border-white/5 flex flex-col overflow-y-auto no-scrollbar p-4 shadow-2xl backdrop-blur-3xl">
           {activeOrder ? (
             <div className="flex flex-col min-h-full">
@@ -557,20 +544,17 @@ export default function KasirHome() {
               
               <div className="space-y-2 mb-4 bg-white/[0.02] p-3 rounded-xl border border-white/5">
                 <div className="flex justify-between items-center text-[10px] font-black text-gray-500">
-                    <span>SUBTOTAL</span>
-                    <span className="text-white font-mono">{getSubtotal().toLocaleString('id-ID')}</span>
+                    <span>SUBTOTAL</span><span className="text-white font-mono">{getSubtotal().toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex justify-between items-center text-[10px] font-black text-blue-500 italic">
                     <span>DISC_VALUE</span>
                     <input type="number" className="w-20 bg-blue-500/10 border border-blue-500/30 rounded px-1.5 py-0.5 text-right text-blue-400 outline-none font-black" value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value))} />
                 </div>
                 <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
-                    <span>SERVICE_5%</span>
-                    <span className="text-white font-mono">{getService().toLocaleString('id-ID')}</span>
+                    <span>SERVICE_5%</span><span className="text-white font-mono">{getService().toLocaleString('id-ID')}</span>
                 </div>
                 <div className="flex justify-between items-center text-[9px] font-black text-gray-500 opacity-50">
-                    <span>PB1_10%</span>
-                    <span className="text-white font-mono">{getTax().toLocaleString('id-ID')}</span>
+                    <span>PB1_10%</span><span className="text-white font-mono">{getTax().toLocaleString('id-ID')}</span>
                 </div>
               </div>
 
@@ -687,7 +671,7 @@ export default function KasirHome() {
         </div>
       )}
 
-      {/* --- MODAL: ITEM REPORT --- */}
+      {/* --- MODAL: ITEM REPORT (BERDASARKAN KATEGORI) --- */}
       {showItemReportModal && (
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[5000] p-4 backdrop-blur-md">
           <div className="bg-[#020617] border border-white/10 w-full max-w-md rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
@@ -695,24 +679,25 @@ export default function KasirHome() {
               <h3 className="text-xs font-black italic text-blue-500 uppercase tracking-widest">Shift_Items_Report</h3>
               <button onClick={() => setShowItemReportModal(false)} className="p-2 text-gray-500 hover:text-white"><X size={20}/></button>
             </div>
+            
+            {/* TAMPILAN KATEGORI (MAPPING ARRAY) */}
             <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
-              <table className="w-full text-left">
-                <thead className="border-b border-white/10 text-[10px] font-black uppercase text-gray-500 italic">
-                  <tr><th className="pb-3">Product</th><th className="pb-3 text-center">Qty</th><th className="pb-3 text-right">Revenue</th></tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 italic">
-                  {itemSales.map((item, i) => (
-                    <tr key={i} className="text-white">
-                      <td className="py-4 text-[10px] font-black uppercase">{item.name}</td>
-                      <td className="py-4 text-center font-mono text-blue-400 font-bold">{item.qty}</td>
-                      <td className="py-4 text-right font-mono text-[10px]">Rp {item.total.toLocaleString('id-ID')}</td>
-                    </tr>
+              {itemSales.map((catGroup, i) => (
+                <div key={i} className="mb-6">
+                  <h4 className="text-[11px] font-black text-blue-400 border-b border-white/10 pb-2 mb-3 uppercase tracking-widest">
+                    {catGroup.category}
+                  </h4>
+                  {catGroup.items.map((item: any, j: number) => (
+                    <div key={j} className="flex justify-between items-center text-[10px] text-white/90 mb-2 px-1">
+                      <span className="uppercase">{item.name}</span>
+                      <span className="font-mono text-blue-300 font-bold bg-blue-500/10 px-2 py-0.5 rounded">{item.qty}X</span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              ))}
             </div>
+
             <div className="p-5 bg-black/40 border-t border-white/5">
-              {/* 🔥 TOMBOL CETAK DIGANTI agar tembak lewat file printer.ts Kapten! */}
               <button onClick={handlePrintItemReport} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20">
                 <Printer size={16}/> Cetak_Thermal
               </button>
