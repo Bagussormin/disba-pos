@@ -139,7 +139,6 @@ export default function KasirHome() {
   };
 
   const fetchData = async () => {
-    // 🔥 FIX BUGS: Ubah status dari "pending" menjadi "open" agar sinkron dengan Waiter
     const [tRes, oRes] = await Promise.all([
       supabase.from("tables").select("*").eq("tenant_id", tenantId).order("name", { ascending: true }),
       supabase.from("orders").select("*").eq("tenant_id", tenantId).eq("status", "open") 
@@ -331,11 +330,19 @@ export default function KasirHome() {
   const handleCloseShift = async () => {
     setLoading(true);
     try {
+      // 🔥 SINKRONISASI BACKOFFICE: Hitung ekspektasi uang di laci dan selisihnya
+      const expectedCash = Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales;
+      const selisih = Number(endingCash) - expectedCash;
+
       await supabase.from("shifts").update({
         status: 'closed', 
         end_time: new Date().toISOString(),
         total_sales: Number(shiftSummary.totalSales), 
-        actual_ending_cash: Number(endingCash)
+        cash_sales: Number(shiftSummary.cashSales),
+        transfer_sales: Number(shiftSummary.transferSales),
+        expected_ending_cash: expectedCash,
+        actual_ending_cash: Number(endingCash),
+        difference: selisih
       }).eq("id", currentShift.id).eq("tenant_id", tenantId);
       
       if (typeof window !== "undefined") {
@@ -389,10 +396,21 @@ export default function KasirHome() {
   // 🔥 RENDER UI SAJA (SULTAN SIDEBAR EDITION)
   // =========================================================================
   return (
-    <div className="fixed inset-0 bg-[#020617] text-white p-1 uppercase italic font-sans flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-[#020617] text-white p-1 uppercase italic font-sans flex flex-col overflow-hidden print:bg-white print:text-black print:static print:overflow-visible print:h-auto">
       
+      {/* 🔥 CSS KHUSUS PRINT: Memaksa browser mencetak hitam putih dan menghapus bg gelap */}
+      <style>
+        {`
+          @media print {
+            body, html { background-color: white !important; color: black !important; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .print-hidden { display: none !important; }
+          }
+        `}
+      </style>
+
       {/* HEADER: ULTRA SLIM */}
-      <header className="flex justify-between items-center bg-black/60 border-b border-white/5 p-2 mb-1 shadow-2xl">
+      <header className="flex justify-between items-center bg-black/60 border-b border-white/5 p-2 mb-1 shadow-2xl print:hidden">
         <h1 className="text-[11px] font-black tracking-tighter">DISBA<span className="text-blue-500">_POS_CONTROL</span></h1>
         <div className="flex gap-1.5">
           <button onClick={fetchItemSales} className="h-7 px-3 bg-blue-600/10 rounded-md border border-blue-500/20 text-[8px] font-black active:scale-95 flex items-center gap-1"><BarChart3 size={10}/> REKAP</button>
@@ -401,7 +419,7 @@ export default function KasirHome() {
         </div>
       </header>
 
-      <div className="flex-1 flex gap-1 min-h-0 overflow-hidden">
+      <div className="flex-1 flex gap-1 min-h-0 overflow-hidden print:hidden">
         
         {/* KOLOM 1: MEJA (200px) */}
         <div className="w-48 bg-black/20 rounded-xl border border-white/5 p-2 overflow-y-auto no-scrollbar">
@@ -410,6 +428,7 @@ export default function KasirHome() {
               <p className="text-[7px] font-black text-gray-700 mb-2 tracking-[0.2em] text-center border-b border-white/5 pb-1 uppercase"><MapPin size={8} className="inline mr-1"/> {area}</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {tables.filter(t => (t.area || "AREA LAINNYA").toUpperCase() === area).map(t => {
+                   // 🔥 SINKRONISASI: Validasi meja berkedip berdasarkan 'orders'
                    const hasOrder = orders.some(o => o.table_id === t.id); 
                    return (
                     <button key={t.id} onClick={() => setSelectedTable(t)}
@@ -563,7 +582,7 @@ export default function KasirHome() {
 
       {/* --- MODAL: START SHIFT --- */}
       {showStartShiftModal && (
-        <div className="fixed inset-0 bg-[#020617] flex items-center justify-center z-[7000] p-4 backdrop-blur-md">
+        <div className="fixed inset-0 bg-[#020617] flex items-center justify-center z-[7000] p-4 backdrop-blur-md print:hidden">
           <div className="text-center p-8 bg-white/5 border border-white/10 rounded-[32px] w-full max-w-sm shadow-2xl relative">
             <Wallet className="text-blue-500 mx-auto mb-4" size={50} />
             <h2 className="text-xl font-black italic mb-2 uppercase tracking-tighter">Open_Shift</h2>
@@ -576,7 +595,7 @@ export default function KasirHome() {
 
       {/* --- MODAL: CLOSE SHIFT --- */}
       {showCloseShiftModal && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[7000] p-4 backdrop-blur-md">
+        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[7000] p-4 backdrop-blur-md print:hidden">
           <div className="bg-[#020617] p-8 rounded-[32px] border border-orange-500/20 w-full max-w-sm text-center shadow-2xl">
             <AlertTriangle className="text-orange-500 mx-auto mb-4" size={40} />
             <h2 className="text-xl font-black italic text-white uppercase mb-8">Shift_Closing</h2>
@@ -617,38 +636,48 @@ export default function KasirHome() {
 
       {/* --- MODAL: ITEM REPORT --- */}
       {showItemReportModal && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[5000] p-4 backdrop-blur-md">
-          <div className="bg-[#020617] border border-white/10 w-full max-w-md rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
-            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-              <h3 className="text-xs font-black italic text-blue-500 uppercase tracking-widest">Shift_Items_Report</h3>
-              <button onClick={() => setShowItemReportModal(false)} className="p-2 text-gray-500 hover:text-white"><X size={20}/></button>
+        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[5000] p-4 backdrop-blur-md print:absolute print:inset-0 print:bg-white print:p-0">
+          <div className="bg-[#020617] border border-white/10 w-full max-w-md rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl print:bg-white print:border-none print:shadow-none print:max-h-none print:overflow-visible print:w-full print:max-w-full">
+            
+            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02] print:bg-white print:border-black">
+              <h3 className="text-xs font-black italic text-blue-500 uppercase tracking-widest print:text-black">Shift_Items_Report</h3>
+              <button onClick={() => setShowItemReportModal(false)} className="p-2 text-gray-500 hover:text-white print:hidden"><X size={20}/></button>
             </div>
-            <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
+            
+            <div className="flex-1 overflow-y-auto p-5 no-scrollbar print:overflow-visible">
               <table className="w-full text-left">
-                <thead className="border-b border-white/10 text-[10px] font-black uppercase text-gray-500 italic">
-                  <tr><th className="pb-3">Product</th><th className="pb-3 text-center">Qty</th><th className="pb-3 text-right">Revenue</th></tr>
+                <thead className="border-b border-white/10 text-[10px] font-black uppercase text-gray-500 italic print:border-black print:text-black">
+                  <tr>
+                    <th className="pb-3">Product</th>
+                    <th className="pb-3 text-center">Qty</th>
+                    <th className="pb-3 text-right">Revenue</th>
+                  </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 italic">
+                <tbody className="divide-y divide-white/5 italic print:divide-black/20">
                   {itemSales.map((item, i) => (
-                    <tr key={i} className="text-white">
+                    <tr key={i} className="text-white print:text-black">
                       <td className="py-4 text-[10px] font-black uppercase">{item.name}</td>
-                      <td className="py-4 text-center font-mono text-blue-400 font-bold">{item.qty}</td>
+                      <td className="py-4 text-center font-mono text-blue-400 font-bold print:text-black">{item.qty}</td>
                       <td className="py-4 text-right font-mono text-[10px]">Rp {item.total.toLocaleString('id-ID')}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="p-5 bg-black/40 border-t border-white/5">
-              <button onClick={() => window.print()} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"><Printer size={16}/> Cetak_Recap</button>
+            
+            <div className="p-5 bg-black/40 border-t border-white/5 print:hidden">
+              <button onClick={() => window.print()} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20">
+                <Printer size={16}/> Cetak_Recap
+              </button>
             </div>
+
           </div>
         </div>
       )}
 
       {/* --- MODAL: PREVIEW STRUK --- */}
       {showPreviewModal && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[6000] p-4 backdrop-blur-md">
+        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[6000] p-4 backdrop-blur-md print:hidden">
           <div className="bg-white text-black p-6 rounded-2xl w-full max-w-[320px] font-mono shadow-2xl relative uppercase italic font-bold">
             <h3 className="font-black text-xl text-center border-b-2 border-black border-double pb-2 mb-4 tracking-tighter">DISBA_STATION</h3>
             <div className="text-[10px] space-y-1">
