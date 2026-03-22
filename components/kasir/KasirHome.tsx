@@ -48,6 +48,7 @@ export default function KasirHome() {
   
   const dynamicAreas = Array.from(new Set(tables.map(t => (t.area || "AREA LAINNYA").toUpperCase())));
 
+  // 🔥 OPERASI BEDAH MIKRO DI SINI: Menyisipkan ip_dapur dan ip_bar
   const handleAutoPrintDapur = async (newOrderItem: any) => {
     try {
       const { data: order } = await supabase.from("orders").select("tables(name)").eq("id", newOrderItem.order_id).single();
@@ -58,9 +59,19 @@ export default function KasirHome() {
         const category = (menu.category || "FOOD").toUpperCase();
         const targetIp = typeof window !== "undefined" ? localStorage.getItem("printer_ip") || "127.0.0.1" : "127.0.0.1";
         
+        // Mengambil IP dari Slot Admin
+        const tenantIdStr = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "DEFAULT" : "DEFAULT";
+        const ipDapur = typeof window !== "undefined" ? localStorage.getItem(`disba_ip_dapur_${tenantIdStr}`) || "" : "";
+        const ipBar = typeof window !== "undefined" ? localStorage.getItem(`disba_ip_bar_${tenantIdStr}`) || "" : "";
+
         await fetch(`http://${targetIp}:4000/print-order`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ table_name: tableName, items: [{ name: menu.name, qty: newOrderItem.quantity, category: category }] })
+          body: JSON.stringify({ 
+            table_name: tableName, 
+            ip_dapur: ipDapur,  // Dikirim ke server.js
+            ip_bar: ipBar,      // Dikirim ke server.js
+            items: [{ name: menu.name, qty: newOrderItem.quantity, category: category }] 
+          })
         }).catch(err => console.error(`❌ GAGAL Print Dapur:`, err));
       }
     } catch (error) { console.error("❌ Error Auto Print:", error); }

@@ -27,6 +27,15 @@
   "dependencies": {
   
     
+  "@capacitor/android": "^8.2.0",
+  
+    
+  "@capacitor/cli": "^8.2.0",
+  
+    
+  "@capacitor/core": "^8.2.0",
+  
+    
   "@google/genai": "^1.38.0",
   
     

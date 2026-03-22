@@ -1,4 +1,6 @@
+import OutletLogin from './components/OutletLogin'; 
 import { useState, useEffect } from "react";
+
 // Import Landing Page
 import LandingPage from "./components/LandingPage"; 
 
@@ -83,17 +85,16 @@ export default function App() {
   // --- HANDLERS ---
 
   const handleEnterSystem = () => {
-    localStorage.setItem("system_ready", "true");
-    window.location.href = "/login"; 
+    // 🔥 UBAH ARAH: Dari Landing Page, arahkan ke Outlet Login dulu
+    window.history.pushState({}, "", "/outlet-login");
+    setCurrentPath("/outlet-login");
   };
 
   const handleLoginSuccess = (role: string) => {
     const savedUsername = localStorage.getItem("username") || "User";
     
-    // Tenant ID sudah diset di Login.tsx / AdminLogin.tsx, jadi kita tidak hardcode lagi di sini.
     setUser({ username: savedUsername, role: role });
     
-    // Arahkan Admin ke jalurnya sendiri
     if (role === "admin") {
       window.history.pushState({}, "", "/admin/dashboard");
       setCurrentPath("/admin/dashboard");
@@ -107,9 +108,9 @@ export default function App() {
     localStorage.removeItem("role");
     localStorage.removeItem("username");
     localStorage.removeItem("is_admin");
-    localStorage.removeItem("tenant_id"); // Hancurkan KTP Digital saat keluar
-    localStorage.removeItem("tenant_name");
-
+    // Catatan: tenant_id JANGAN dihapus saat logout kasir, agar tablet tetap terikat ke outlet!
+    // localStorage.removeItem("tenant_id"); 
+    
     setUser(null);
     window.location.href = "/login"; 
   };
@@ -124,34 +125,31 @@ export default function App() {
   if (normalizedPath === "/founder-hq" || normalizedPath === "/founder-console") return <FounderHQ />;
   if (!isLicenseActive) return <ProtocolLock />;
 
-  // -------------------------------------------------------------
-  // 2. AREA PUBLIK (MENU QR) - HARUS DI ATAS!
-  // Supaya HP tamu yang memori (localStorage)-nya kosong tidak diblokir
-  // -------------------------------------------------------------
+  // 2. AREA PUBLIK (MENU QR)
   if (normalizedPath.startsWith("/menu")) {
     return <CustomerMenu />;
   }
 
-  // 3. Jika Sistem Belum Ready (Hanya berlaku untuk Kasir/Admin)
+  // 🔥 3. JALUR BARU: HALAMAN INISIALISASI OUTLET
+  if (normalizedPath === "/outlet-login") {
+    return <OutletLogin />;
+  }
+
+  // 4. Jika Sistem Belum Ready (Belum di-bind ke Outlet)
   if (!isSystemReady) {
     return <LandingPage onEnterSystem={handleEnterSystem} />;
   }
 
-  // 4. AREA ADMIN (Cek URL /admin lebih dulu)
+  // 5. AREA ADMIN 
   if (normalizedPath.startsWith("/admin")) {
-    // Jika belum login ATAU login tapi bukan admin, tampilkan AdminLogin
     if (!user || user.role !== "admin") return <AdminLogin />;
     
     return (
       <AdminLayout>
-        {/* DAFTAR ROUTE KOMPONEN */}
         {(normalizedPath === "/admin/dashboard" || normalizedPath === "/admin") && <AdminHome />}
         {normalizedPath === "/admin/qr" && <TableQRManager />}
         {normalizedPath === "/admin/menu" && <MenuMaster />}
-        
-        {/* 🔥 JALUR ROUTING PAKET BUNDLING KITA */}
         {normalizedPath === "/admin/paket" && <Paket />} 
-        
         {normalizedPath === "/admin/recipes" && <RecipeManagement />}
         {normalizedPath === "/admin/hpp-calculator" && <HPPCalculator />} 
         {normalizedPath === "/admin/inventory" && <InventoryApp />}
@@ -164,20 +162,18 @@ export default function App() {
         {normalizedPath === "/admin/settings/profile" && <OutletProfile />}
         {normalizedPath === "/admin/settings/payments" && <MerchantBank />}
         {normalizedPath === "/admin/settings/printer" && <PrinterSettings />}
-        
-        {/* 🔥 JALUR ROUTING RECEIPT BUILDER */}
         {normalizedPath === "/admin/settings/receipt" && <ReceiptSettings />}
       </AdminLayout>
     );
   }
 
-  // 5. JIKA BUKAN AREA ADMIN & BELUM LOGIN (Kasir/Waiter)
+  // 6. JIKA BUKAN AREA ADMIN & BELUM LOGIN (Kasir/Waiter)
   if (!user) {
+    // Jika sistem sudah ready (sudah bind outlet), masuk ke login karyawan
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // 6. DASHBOARD UTAMA (Untuk Kasir & Waiter)
-  // 🔥 FIX: Hapus header lama, biarkan KasirHome dan WaiterApp render full screen!
+  // 7. DASHBOARD UTAMA (Untuk Kasir & Waiter)
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans italic w-full">
       {user.role === "kasir" && <KasirHome />}
