@@ -11,6 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Fallback Printer bawaan jika frontend gagal kirim IP
 const PRINTERS = {
     KASIR: { ip: '192.168.1.27', port: 9100 },
     DAPUR: { ip: '192.168.1.30', port: 9100 },
@@ -65,7 +66,6 @@ const sendToDevice = async (ip, port, content, label, includeLogo = false) => {
             client.write(Buffer.from([0x0a, 0x0a])); 
         }
         client.write(content);
-        // Potong kertas
         client.write(Buffer.from([0x0a, 0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x42, 0x00])); 
         client.end();
     });
@@ -90,7 +90,6 @@ app.post('/print-receipt', async (req, res) => {
         body += `Mulai    : ${d.table_name || "-"}\n`; 
         body += `Akhir    : ${new Date().toLocaleString('id-ID')}\n`;
         body += `Tercetak : ${new Date().toLocaleString('id-ID')}\n\n`;
-
         body += `Kategori\n`;
 
         const categories = d.items_list || d.items || [];
@@ -184,7 +183,10 @@ app.post('/print-receipt', async (req, res) => {
 // --- ENDPOINT ORDER (DAPUR/BAR) ---
 app.post('/print-order', async (req, res) => {
     const d = req.body;
-    const { items, table_name } = d;
+    
+    // 🔥 MENANGKAP IP DINAMIS DARI FRONTEND
+    const { items, table_name, ip_dapur, ip_bar } = d;
+    
     const namaPelanggan = (d.customer_name || d.customer || d.pelanggan || "-").toUpperCase();
     const namaWaiter = (d.waiter || d.cashier || d.user_name || d.user || "-").toUpperCase();
     
@@ -205,8 +207,13 @@ app.post('/print-order', async (req, res) => {
         return Buffer.from(h);
     };
 
-    if (food.length > 0) await sendToDevice(PRINTERS.DAPUR.ip, PRINTERS.DAPUR.port, formatOrder("DAPUR", food), "DAPUR", false);
-    if (drink.length > 0) await sendToDevice(PRINTERS.BAR.ip, PRINTERS.BAR.port, formatOrder("BAR", drink), "BAR", false);
+    // Gunakan IP dari Frontend. Jika kosong, gunakan PRINTERS bawaan.
+    const targetDapur = ip_dapur || PRINTERS.DAPUR.ip;
+    const targetBar = ip_bar || PRINTERS.BAR.ip;
+
+    if (food.length > 0 && targetDapur) await sendToDevice(targetDapur, PRINTERS.DAPUR.port, formatOrder("DAPUR", food), "DAPUR", false);
+    if (drink.length > 0 && targetBar) await sendToDevice(targetBar, PRINTERS.BAR.port, formatOrder("BAR", drink), "BAR", false);
+    
     res.json({ success: true });
 });
 
