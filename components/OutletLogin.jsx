@@ -1,8 +1,11 @@
-import { useState } from 'react';
-import { supabase } from '../supabaseClient'; // Pastikan path ini sesuai dengan file supabaseClient Letjen
+import { useState } from 'react'; // Pastikan ini ada di paling atas
+import { supabase } from "../lib/supabase"; 
+
+// HAPUS BARIS YANG INI: import { supabase } from "../supabaseClient";
 
 export default function OutletLogin() {
   const [email, setEmail] = useState('');
+  // ... sisa kode di bawahnya ...
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
