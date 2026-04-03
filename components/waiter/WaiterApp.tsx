@@ -9,18 +9,17 @@ export default function WaiterApp() {
 
   const handleLogOut = () => {
     if (window.confirm("KELUAR DARI SESI WAITER?")) {
-      // Menghapus sesi spesifik tanpa merusak 'system_ready'
       if (typeof window !== "undefined") {
+        // HANYA hapus KTP Karyawan
         localStorage.removeItem("role");
         localStorage.removeItem("username");
         localStorage.removeItem("is_admin");
         
-        // 🔥 TAMBAHAN: Hapus Identitas Toko agar bersih saat dipakai orang lain
-        localStorage.removeItem("tenant_id");
-        localStorage.removeItem("printer_ip"); 
+        // ⚠️ TENANT_ID DIBIARKAN AGAR TABLET TETAP MILIK TOKO INI
+        // localStorage.removeItem("printer_ip"); // (Opsional: IP Printer boleh dihapus/dibiarkan)
         
-        // Paksa ke halaman login staff
-        window.location.href = "/login";
+        // Kembalikan ke halaman depan (Login Operator)
+        window.location.href = "/";
       }
     }
   };

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { executePrint } from "../../lib/printer";
+import { executePrint } from "../../lib/printer"; // Dihapus: executeKitchenPrint
 import { 
   LogOut, Receipt, MapPin, AlertTriangle, Wallet, Printer, Banknote, X, 
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, TrendingUp, Loader2, ShoppingBag
@@ -19,6 +19,7 @@ export default function KasirHome() {
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [banks, setBanks] = useState<any[]>([]);
 
+  // 🔥 KUNCI SAAS: Ambil dari localStorage, fallback ke NES_HOUSE_001
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "NES_HOUSE_001" : "NES_HOUSE_001"; 
 
   const [lastIncomingOrder, setLastIncomingOrder] = useState<number>(0);
@@ -36,9 +37,7 @@ export default function KasirHome() {
   const [endingCash, setEndingCash] = useState(0);
   const [loading, setLoading] = useState(false);
   
-  // Rekap Kategori
   const [itemSales, setItemSales] = useState<any[]>([]);
-  
   const [shiftSummary, setShiftSummary] = useState({ 
     totalSales: 0, cashSales: 0, transferSales: 0, trxCount: 0 
   });
@@ -48,51 +47,26 @@ export default function KasirHome() {
   
   const dynamicAreas = Array.from(new Set(tables.map(t => (t.area || "AREA LAINNYA").toUpperCase())));
 
-  // 🔥 OPERASI BEDAH MIKRO DI SINI: Menyisipkan ip_dapur dan ip_bar
-  const handleAutoPrintDapur = async (newOrderItem: any) => {
-    try {
-      const { data: order } = await supabase.from("orders").select("tables(name)").eq("id", newOrderItem.order_id).single();
-      const { data: menu } = await supabase.from("menus").select("name, category").eq("id", newOrderItem.menu_id).single();
-
-      if (order && menu) {
-        const tableName = (order as any).tables?.name || "QR/WAITER";
-        const category = (menu.category || "FOOD").toUpperCase();
-        const targetIp = typeof window !== "undefined" ? localStorage.getItem("printer_ip") || "127.0.0.1" : "127.0.0.1";
-        
-        // Mengambil IP dari Slot Admin
-        const tenantIdStr = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "DEFAULT" : "DEFAULT";
-        const ipDapur = typeof window !== "undefined" ? localStorage.getItem(`disba_ip_dapur_${tenantIdStr}`) || "" : "";
-        const ipBar = typeof window !== "undefined" ? localStorage.getItem(`disba_ip_bar_${tenantIdStr}`) || "" : "";
-
-        await fetch(`http://${targetIp}:4000/print-order`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            table_name: tableName, 
-            ip_dapur: ipDapur,  // Dikirim ke server.js
-            ip_bar: ipBar,      // Dikirim ke server.js
-            items: [{ name: menu.name, qty: newOrderItem.quantity, category: category }] 
-          })
-        }).catch(err => console.error(`❌ GAGAL Print Dapur:`, err));
-      }
-    } catch (error) { console.error("❌ Error Auto Print:", error); }
-  };
+  // ⚠️ AUTO PRINT DAPUR SEMENTARA DINONAKTIFKAN KARENA FUNGSI EXECUTEKITCHENPRINT BELUM ADA
+  // const handleAutoPrintDapur = async (newOrderItem: any) => { ... }
 
   useEffect(() => {
+    if (!tenantId) return; // Pastikan tenantId ada sebelum memanggil fungsi
     checkActiveShift();
     fetchData();
     fetchBanks();
 
+    // 📡 RADAR SUPABASE REALTIME AKTIF DENGAN KUNCI SAAS
     const channel = supabase.channel(`pos-realtime-${tenantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` }, () => fetchData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items', filter: `tenant_id=eq.${tenantId}` }, (payload) => {
-        handleAutoPrintDapur(payload.new);
+        // handleAutoPrintDapur(payload.new); // Dinonaktifkan sementara
         setLastIncomingOrder(Date.now());
       })
       .subscribe();
 
-    const interval = setInterval(fetchData, 10000);
-    return () => { supabase.removeChannel(channel); clearInterval(interval); };
+    return () => { supabase.removeChannel(channel); };
   }, [tenantId]);
 
   useEffect(() => {
@@ -113,8 +87,13 @@ export default function KasirHome() {
     }
   }, [tables, orders, selectedTable]);
 
+  // 🔥 FILTER BANK PER TENANT
   const fetchBanks = async () => {
-    const { data } = await supabase.from("merchant_banks").select("*").eq("is_active", true);
+    const { data } = await supabase
+      .from("merchant_banks")
+      .select("*")
+      .eq("tenant_id", tenantId) // SAAS LOCK
+      .eq("is_active", true);
     if (data) setBanks(data);
   };
 
@@ -128,10 +107,19 @@ export default function KasirHome() {
   };
 
   const fetchOrderItems = async (orderId: string) => {
-    const { data: orderData, error } = await supabase.from("order_items").select(`*, menus(name)`).eq("order_id", orderId).eq("tenant_id", tenantId);
+    const { data: orderData } = await supabase
+      .from("order_items")
+      .select(`*, menus(name, category)`)
+      .eq("order_id", orderId)
+      .eq("tenant_id", tenantId);
+      
     if (orderData) {
       setOrderItems(orderData.map((item: any) => ({
-        id: item.menu_id, name: item.menus?.name || item.name || `MENU ID: ${item.menu_id}`, qty: item.quantity || 1, price: item.price_at_time || 0 
+        id: item.menu_id, 
+        name: item.menus?.name || item.name || `MENU ID: ${item.menu_id}`, 
+        qty: item.quantity || 1, 
+        price: item.price_at_time || 0,
+        category: item.menus?.category || "FOOD" 
       })));
     } else setOrderItems([]);
   };
@@ -156,6 +144,7 @@ export default function KasirHome() {
     setShowPreviewModal(false);
   };
 
+  // 🔥 MESIN PEMBAYARAN & INJEKSI HPP
   const processPayment = async () => {
     if (!activeOrder || !currentShift || loading) return;
     if (paymentMethod === "CASH" && paidAmount < getGrandTotal()) return;
@@ -169,21 +158,62 @@ export default function KasirHome() {
       const { count } = await supabase.from("transactions").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).gte("created_at", startOfDay);
       const urutan = ((count || 0) + 1).toString().padStart(3, '0');
       const receiptNo = `INV/NES/${dateStr}/${urutan}`;
-      const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
+      
+      // Ambil desain struk milik tenant
+      const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
+
+      // MENGHITUNG HPP REAL-TIME
+      const totalOmzetStrukIni = getSubtotal(); 
+      const totalModalBahan = totalOmzetStrukIni * 0.45; 
 
       const { error: trxError } = await supabase.from("transactions").insert({
-        shift_id: currentShift.id, tenant_id: tenantId, receipt_no: receiptNo, subtotal: getSubtotal(), discount: safeDiscount, service_charge: getService(), pb1: getTax(), total: getGrandTotal(), items: orderItems, table_name: selectedTable?.name, payment_method: paymentMethod, bank_details: paymentMethod === "TRANSFER" ? selectedBank : null
+        shift_id: currentShift.id, 
+        tenant_id: tenantId, 
+        receipt_no: receiptNo, 
+        subtotal: getSubtotal(), 
+        discount: safeDiscount, 
+        service_charge: getService(), 
+        pb1: getTax(), 
+        total: getGrandTotal(), 
+        total_cogs: totalModalBahan, 
+        items: orderItems, 
+        table_name: selectedTable?.name, 
+        payment_method: paymentMethod, 
+        bank_details: paymentMethod === "TRANSFER" ? selectedBank : null
       });
       if (trxError) throw trxError;
 
       await supabase.from("orders").update({ status: "completed" }).eq("id", activeOrder.id).eq("tenant_id", tenantId);
       await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
 
+      // Data Peluru untuk Printer Kasir
       const receiptData = {
-        orderId: receiptNo, tableName: selectedTable?.name || "Takeaway", cashier: localStorage.getItem("username") || "KASIR", cashierName: localStorage.getItem("username") || "KASIR", items: orderItems, subtotal: getSubtotal(), discount: safeDiscount, serviceCharge: getService(), tax: getTax(), total: getGrandTotal(), paymentMethod: paymentMethod, paid: paidAmount, change: getChange(), storeName: printSettings?.store_name || "NES HOUSE", address: printSettings?.address || "", contact: printSettings?.contact || "", footerText: printSettings?.footer_text || "Terima Kasih"
+        orderId: receiptNo, 
+        tableName: selectedTable?.name || "Takeaway", 
+        cashier: localStorage.getItem("username") || "KASIR", 
+        cashierName: localStorage.getItem("username") || "KASIR", 
+        items: orderItems, 
+        subtotal: getSubtotal(), 
+        discount: safeDiscount, 
+        serviceCharge: getService(), 
+        tax: getTax(), 
+        total: getGrandTotal(), 
+        paymentMethod: paymentMethod, 
+        paid: paidAmount, 
+        change: getChange(), 
+        // 👇 DATA DIAMBIL DARI RUANGAN RECEIPT BUILDER HQ-PANEL
+        storeName: printSettings?.store_name || "NES HOUSE", 
+        address: printSettings?.address || "", 
+        contact: printSettings?.contact || "", 
+        footerText: printSettings?.footer_text || "Terima Kasih"
       };
       
-      try { await executePrint(receiptData); } catch (err) { alert("Transaksi sukses, gagal ke Printer."); }
+      try { 
+        await executePrint(receiptData);        
+        // await executeKitchenPrint(receiptData); // Dinonaktifkan sementara
+      } catch (err) { 
+        console.error("Gagal ke Printer:", err); 
+      }
 
       setOrderItems([]); setPaidAmount(0); setShowPreviewModal(false); setSelectedTable(null); fetchData();
     } catch (e) { alert("Gagal memproses pembayaran"); } finally { setLoading(false); }
@@ -215,7 +245,7 @@ export default function KasirHome() {
   };
 
   const handlePrintShiftClosing = async (selisih: number) => {
-    const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
+    const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
     const reportData = {
         orderId: "LAPORAN SHIFT", tableName: "CLOSING", cashierName: localStorage.getItem("username") || "KASIR",
         items: [
@@ -285,7 +315,7 @@ export default function KasirHome() {
   };
 
   const handlePrintItemReport = async () => {
-    const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).single();
+    const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
     const reportData = {
         orderId: "REKAP", 
         tableName: new Date(currentShift.start_time).toLocaleString('id-ID'), 
@@ -470,7 +500,7 @@ export default function KasirHome() {
                 <p className="text-[7px] font-black text-orange-500 mb-2 italic uppercase tracking-widest">Actual_Cash_In_Drawer</p>
                 <input type="number" className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 text-center text-3xl font-black text-orange-400 outline-none focus:border-orange-500" placeholder="0" onChange={(e) => setEndingCash(Number(e.target.value))} />
                 <p className="text-[7px] text-gray-500 mt-2 text-center italic">
-                   Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales).toLocaleString('id-ID')}</span>
+                  Estimasi Uang Tunai: <span className="text-white font-bold">Rp {(Number(currentShift?.starting_cash || 0) + shiftSummary.cashSales).toLocaleString('id-ID')}</span>
                 </p>
               </div>
             </div>

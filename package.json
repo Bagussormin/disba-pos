@@ -88,6 +88,9 @@
   "devDependencies": {
   
     
+  "@capacitor/assets": "^3.0.5",
+  
+    
   "@types/cors": "^2.8.19",
   
     
