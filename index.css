@@ -13,11 +13,16 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  
   /* Background Gahar dengan Gradasi Halus */
   background: radial-gradient(circle at top right, #1e293b, #020617);
   background-attachment: fixed;
   color: #f8fafc;
   min-height: 100vh;
+
+  /* 🔥 PENTING UNTUK TABLET: Memberitahu browser ini mode gelap */
+  color-scheme: dark;
+  overflow-x: hidden;
 }
 
 /* 2. CUSTOM SCROLLBAR (Biar dashboard tetap elegan) */
@@ -49,7 +54,7 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  /* Sembunyikan Scrollbar tapi tetap bisa scroll */
+  /* Sembunyikan Scrollbar tapi tetap bisa scroll (Untuk Denah Meja) */
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
@@ -57,11 +62,15 @@ body {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Animasi Pulse untuk Meja Open */
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
 }
 
 /* 4. KONFIGURASI PRINT (Tetap kita jaga agar tidak rusak) */
 @media print {
-  /* Sembunyikan semua elemen kecuali yang di-print */
   body > *:not(#receipt-print) {
     display: none !important;
   }
@@ -75,9 +84,9 @@ body {
     background: white !important;
     color: black !important;
     padding: 10px;
+    font-family: 'Courier New', Courier, monospace;
   }
 
-  /* Paksa warna muncul di print (untuk logo/total) */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -90,16 +99,21 @@ body {
   }
 }
 
-/* 5. ANIMASI HALUS */
+/* 5. ANIMASI & TRANSISI */
 .transition-all {
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
+  transition-duration: 300ms;
 }
 
-/* Utility untuk teks gradasi */
+/* Utility untuk teks gradasi biru */
 .text-gradient-blue {
   background: linear-gradient(to right, #60a5fa, #2563eb);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* Fix untuk iOS/Android Tap Highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
 }

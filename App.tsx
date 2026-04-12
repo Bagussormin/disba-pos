@@ -156,14 +156,21 @@ export default function App() {
   }
 
   // 6. DASHBOARD TERMINAL (KASIR & WAITER)
-  if (user.role === "kasir" || user.role === "waiter") {
-    return (
-      <div className="min-h-screen bg-[#020617] text-white font-sans italic w-full">
-        {user.role === "kasir" && <KasirHome />}
-        {user.role === "waiter" && <WaiterApp />}
-      </div>
-    );
-  }
+if (user.role === "kasir" || user.role === "waiter") {
+  return (
+    <div className="min-h-screen bg-[#020617] text-white font-sans italic w-full">
+      {/* LOGIKA PEMISAH HALAMAN */}
+      {normalizedPath === "/admin/history" ? (
+        <TransactionHistory />
+      ) : (
+        <>
+          {user.role === "kasir" && <KasirHome />}
+          {user.role === "waiter" && <WaiterApp />}
+        </>
+      )}
+    </div>
+  );
+}
 
   // 7. JARING PENGAMAN TERAKHIR: JIKA ROLE NYANGKUT (Bukan Kasir/Waiter), KEMBALI KE LOGIN
   return <Login onLoginSuccess={handleLoginSuccess} />;
