@@ -74,22 +74,59 @@ export default function TransactionHistory() {
   // --- FUNGSI DOWNLOAD PDF (ARSIP DIGITAL) ---
   const downloadPDF = () => {
     const doc = new jsPDF();
-    const dateRange = `${startDate} to ${endDate}`;
-    doc.setFontSize(18);
-    doc.text(`TRANSACTION ARCHIVE - ${tenantId}`, 14, 20);
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Brand Header
+    doc.setFillColor(2, 6, 23); // Dark slate
+    doc.rect(0, 0, pageWidth, 25, 'F');
+    doc.setTextColor(6, 182, 212); // Cyan 500
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DISBA POS ARCHIVE', 14, 13);
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tenant: ${tenantId || "STORE"}`, 14, 19);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Transaction Details', 14, 37);
+
     doc.setFontSize(10);
-    doc.text(`Periode: ${dateRange}`, 14, 28);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    const dateRange = `${startDate} to ${endDate}`;
+    doc.text(`Period: ${dateRange}`, 14, 44);
+
     autoTable(doc, {
-      startY: 40,
-      head: [["Tanggal", "No. Resi", "Kasir", "Meja", "Total (IDR)"]],
+      startY: 50,
+      head: [["Date", "Receipt No", "Cashier", "Table", "Total (IDR)"]],
       body: filteredData.map((t) => [
         new Date(t.created_at).toLocaleDateString('id-ID'),
         t.receipt_no,
         t.cashier_name || t.cashier || "System",
         t.table_name || "N/A",
-        t.total.toLocaleString()
+        `Rp ${t.total.toLocaleString()}`
       ]),
+      theme: 'striped',
+      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+      bodyStyles: { textColor: [50, 50, 50] },
+      alternateRowStyles: { fillColor: [241, 245, 249] },
+      styles: { cellPadding: 4, fontSize: 9 },
+      columnStyles: { 4: { halign: 'right', fontStyle: 'bold', textColor: [2, 6, 23] } }
     });
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Generated: ${new Date().toLocaleString('id-ID')} | Page ${i} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
+    }
+
     doc.save(`Archive_${tenantId}_${startDate}.pdf`);
   };
 

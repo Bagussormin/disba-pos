@@ -52,7 +52,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
         .select('id, status')
         .eq('table_id', Number(activeTableId))
         .eq('tenant_id', tenantId)
-        .eq('status', 'pending')
+        .eq('status', 'open')
         .order('id', { ascending: false }) 
         .limit(1);
 
@@ -131,7 +131,7 @@ export default function CustomerMenu({ tableId: propsTableId }: { tableId?: stri
           .insert({ 
             table_id: numericTableId, 
             tenant_id: tenantId, 
-            status: "pending", 
+            status: "open", 
             total_price: cart.reduce((a, b) => a + (b.qty * b.price), 0) 
           })
           .select()

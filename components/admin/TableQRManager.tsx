@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Printer, MapPin, Plus, Trash2, X, Loader2, QrCode } from "lucide-react";
+import QRCode from "qrcode";
 
 export default function TableQRManager() {
   const [tables, setTables] = useState<any[]>([]);
@@ -69,13 +70,21 @@ export default function TableQRManager() {
   }, {});
 
   // =========================================================================
-  // 🔥 FUNGSI PRINT QR INSTAN (FIX UKURAN LONCAT & PERBESAR QR CODE)
+  // 🔥 FUNGSI PRINT QR INSTAN (OFFLINE SECURE MODE)
   // =========================================================================
-  const printQR = (tableId: string, tableName: string) => {
+  const printQR = async (tableId: string, tableName: string) => {
     const baseUrl = window.location.origin;
     const qrUrl = `${baseUrl}/menu?tenant=${tenantId}&table=${tableId}`;
-    // Minta gambar ukuran 400x400 dari server agar pas
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qrUrl)}`;
+    
+    let qrImageUrl = "";
+    try {
+      // Generate QR Code secara lokal tanpa bergantung API Eksternal
+      qrImageUrl = await QRCode.toDataURL(qrUrl, { width: 400, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+    } catch (err) {
+      alert("Gagal generate QR Code lokal.");
+      return;
+    }
+
     const displayTenantName = tenantId ? tenantId.replace(/_/g, " ") : "DISBA POS";
     
     const printWindow = window.open('', '_blank');

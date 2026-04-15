@@ -96,30 +96,74 @@ export default function SalesReport() {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
 
+    // Brand Header
+    doc.setFillColor(2, 6, 23); // Dark slate
+    doc.rect(0, 0, pageWidth, 25, 'F');
+    doc.setTextColor(6, 182, 212); // Cyan 500
     doc.setFontSize(16);
-    doc.text(`${tenantId || "STORE"} REPORT`, pageWidth / 2, 15, { align: "center" });
-    doc.setFontSize(10);
-    doc.text(`Sales Intelligence Report: ${startDate} to ${endDate}`, pageWidth / 2, 22, { align: "center" });
+    doc.setFont('helvetica', 'bold');
+    doc.text('DISBA POS INTELLIGENCE', 14, 13);
     
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tenant: ${tenantId || "STORE"}`, 14, 19);
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Sales Analytics Report', 14, 37);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Period: ${startDate} to ${endDate}`, 14, 44);
+
     autoTable(doc, {
-      startY: 30,
+      startY: 50,
       head: [["Financial Summary", "Value (IDR)"]],
       body: [
-        ["Gross Sales", summary.subtotal.toLocaleString()],
-        ["Service Charge", summary.service.toLocaleString()],
-        ["PB1 (Tax)", summary.tax.toLocaleString()],
-        ["Discounts", `(${summary.discount.toLocaleString()})`],
-        ["NET REVENUE", { content: summary.total.toLocaleString(), styles: { fontStyle: 'bold', textColor: [0, 102, 204] } }],
+        ["Gross Sales", `Rp ${summary.subtotal.toLocaleString()}`],
+        ["Service Charge", `Rp ${summary.service.toLocaleString()}`],
+        ["PB1 (Tax)", `Rp ${summary.tax.toLocaleString()}`],
+        ["Discounts", `(Rp ${summary.discount.toLocaleString()})`],
+        ["NET REVENUE", `Rp ${summary.total.toLocaleString()}`],
       ],
+      theme: 'grid',
+      headStyles: { fillColor: [2, 6, 23], textColor: [6, 182, 212], fontStyle: 'bold' },
+      bodyStyles: { textColor: [50, 50, 50] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      styles: { cellPadding: 5, fontSize: 10 },
+      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY;
+    const finalY = (doc as any).lastAutoTable.finalY || 50;
+
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Product Performance (Top Items)', 14, finalY + 15);
 
     autoTable(doc, {
-      startY: finalY + 10,
+      startY: finalY + 20,
       head: [["Product Name", "Qty Sold", "Total Revenue"]],
-      body: topItems.slice(0, 15).map(i => [i.name, i.qty, i.revenue.toLocaleString()]),
+      body: topItems.slice(0, 25).map(i => [i.name, `${i.qty} Pcs`, `Rp ${i.revenue.toLocaleString()}`]),
+      theme: 'striped',
+      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+      bodyStyles: { textColor: [50, 50, 50] },
+      alternateRowStyles: { fillColor: [241, 245, 249] },
+      styles: { cellPadding: 4, fontSize: 9 },
+      columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right', fontStyle: 'bold' } }
     });
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Generated: ${new Date().toLocaleString('id-ID')} | Page ${i} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
+    }
 
     doc.save(`${tenantId}_Report_${startDate}_${endDate}.pdf`);
   };

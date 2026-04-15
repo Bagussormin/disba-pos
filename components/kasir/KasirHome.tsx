@@ -176,13 +176,23 @@ export default function KasirHome() {
       const today = new Date();
       const dateStr = today.toISOString().slice(2, 10).replace(/-/g, ""); 
       const startOfDay = new Date(today.setHours(0,0,0,0)).toISOString();
-      const { count } = await supabase.from("transactions").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).gte("created_at", startOfDay);
+      
+      const { count } = await supabase.from("transactions")
+        .select("*", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .gte("created_at", startOfDay);
+        
       const urutan = ((count || 0) + 1).toString().padStart(3, '0');
       const receiptNo = `INV/NES/${dateStr}/${urutan}`;
       
-      const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
+      // Ambil Setting Receipt & Tenant Data (Untuk Bridge IP)
+      const { data: tenantConfig } = await supabase.from("receipt_settings")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
 
-      const { error: trxError } = await supabase.from("transactions").insert({
+      // --- AKSI 1: SIMPAN TRANSAKSI ---
+      const { data: newTrx, error: trxError } = await supabase.from("transactions").insert({
         shift_id: currentShift.id,
         tenant_id: tenantId, 
         receipt_no: receiptNo,
@@ -196,26 +206,65 @@ export default function KasirHome() {
         payment_method: paymentMethod, 
         bank_details: paymentMethod === "TRANSFER" ? selectedBank : null,
         cashier: localStorage.getItem("username") || "KASIR"
-      });
+      }).select().single();
+
       if (trxError) throw trxError;
 
-      await supabase.from("orders").update({ status: "completed" }).eq("id", activeOrder.id).eq("tenant_id", tenantId);
-      await supabase.from("tables").update({ status: "available" }).eq("id", selectedTable.id).eq("tenant_id", tenantId);
+      // --- AKSI 2: OTOMATIS POTONG STOK (via RPC) ---
+      // Kita looping orderItems untuk memicu resep di database
+      const stockReductions = orderItems.map(item => 
+        supabase.rpc('reduce_stock_by_recipe', {
+          p_menu_id: item.id, // item.id di sini adalah menu_id
+          p_qty_sold: item.qty,
+          p_tenant_id: tenantId,
+          p_sales_order_id: receiptNo
+        })
+      );
+      await Promise.all(stockReductions);
 
+      // --- AKSI 3: UPDATE STATUS MEJA & ORDER ---
+      await supabase.from("orders").update({ status: "completed" })
+        .eq("id", activeOrder.id).eq("tenant_id", tenantId);
+      await supabase.from("tables").update({ status: "available" })
+        .eq("id", selectedTable.id).eq("tenant_id", tenantId);
+
+      // --- AKSI 4: PRINTING ---
       const receiptData = {
-        receipt_no: receiptNo, tableName: selectedTable?.name || "Takeaway", 
-        cashierName: localStorage.getItem("username") || "KASIR", items: orderItems, 
-        subtotal: getSubtotal(), discount: safeDiscount, serviceCharge: getService(), 
-        tax: getTax(), total: getGrandTotal(), paymentMethod: paymentMethod, 
-        paid: paidAmount, change: getChange(), 
-        storeName: printSettings?.store_name || "NES HOUSE", 
-        address: printSettings?.address || "", contact: printSettings?.contact || "", 
-        footerText: printSettings?.footer_text || "Terima Kasih"
+        receipt_no: receiptNo, 
+        tableName: selectedTable?.name || "Takeaway", 
+        cashierName: localStorage.getItem("username") || "KASIR", 
+        items: orderItems, 
+        subtotal: getSubtotal(), 
+        discount: safeDiscount, 
+        serviceCharge: getService(), 
+        tax: getTax(), 
+        total: getGrandTotal(), 
+        paymentMethod: paymentMethod, 
+        paid: paidAmount, 
+        change: getChange(), 
+        storeName: tenantConfig?.store_name || "NES HOUSE", 
+        address: tenantConfig?.address || "", 
+        contact: tenantConfig?.contact || "", 
+        footerText: tenantConfig?.footer_text || "Terima Kasih"
       };
       
-      try { await executePrint(receiptData); } catch (err) { console.error("Gagal ke Printer:", err); }
+      try { 
+        // Menggunakan library printer yang sudah ada
+        await executePrint(receiptData); 
+      } catch (err) { 
+        console.error("Gagal ke Printer:", err); 
+      }
+
+      // Reset State
       setOrderItems([]); setPaidAmount(0); setShowPreviewModal(false); setSelectedTable(null); fetchData();
-    } catch (e) { alert("Gagal memproses pembayaran"); } finally { setLoading(false); }
+      alert("✅ Transaksi Berhasil & Stok Terupdate!");
+
+    } catch (e: any) { 
+      console.error(e);
+      alert("❌ Gagal: " + e.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const checkActiveShift = async () => {
