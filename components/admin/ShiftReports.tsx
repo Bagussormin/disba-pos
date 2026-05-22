@@ -2,12 +2,30 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Calendar, ChevronLeft, ChevronRight, Loader2, ShoppingBag, RefreshCcw, Download } from "lucide-react";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import autoTable from "jspdf-autotable"; // Ensure this is imported
+
+interface Shift {
+  id: number;
+  start_time: string;
+  end_time: string | null;
+  cashier_name: string;
+  tenant_id: string;
+  // Add other shift properties as needed
+}
+
+interface Transaction {
+  id: string;
+  total: number;
+  payment_method: string;
+  items: string | { name: string; qty?: number; quantity?: number; price: number }[];
+  created_at: string;
+  tenant_id: string;
+}
 
 export default function ShiftReports() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [shifts, setShifts] = useState<any[]>([]);
-  const [selectedShift, setSelectedShift] = useState<any>(null);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [itemSales, setItemSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState({ cash: 0, transfer: 0, total: 0, count: 0 });
@@ -27,13 +45,15 @@ export default function ShiftReports() {
 
   const fetchShiftsByDate = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("shifts")
       .select("*")
       .eq("tenant_id", tenantId) // 🔥 FILTER OUTLET
       .gte("start_time", `${selectedDate}T00:00:00`)
       .lte("start_time", `${selectedDate}T23:59:59`)
       .order("start_time", { ascending: false });
+    
+    if (error) console.error("Error fetching shifts:", error.message);
 
     if (data && data.length > 0) {
       setShifts(data);
@@ -50,21 +70,14 @@ export default function ShiftReports() {
     try {
       const [trxRes, prodRes] = await Promise.all([
         supabase.from("transactions").select("*").eq("shift_id", shiftId).eq("tenant_id", tenantId), // 🔥 FILTER
-        supabase.from("products").select("id, name, price").eq("tenant_id", tenantId) // 🔥 FILTER
+        supabase.from("menus").select("id, name, price").eq("tenant_id", tenantId) // 🔥 FILTER (prodRes is not used directly here, but kept for consistency)
       ]);
 
       if (trxRes.error) throw trxRes.error;
 
-      const productMapId: Record<string, string> = {};
-      const productMapPrice: Record<number, string> = {};
-      prodRes.data?.forEach(p => { 
-        productMapId[String(p.id)] = p.name; 
-        productMapPrice[p.price] = p.name;
-      });
-
-      const summary = trxRes.data.reduce((acc, curr) => {
+      const summary = (trxRes.data as Transaction[]).reduce((acc, curr) => {
         const total = Number(curr.total) || 0;
-        if (curr.payment_method?.toUpperCase() === "CASH") acc.cash += total;
+        if (curr.payment_method?.toUpperCase() === "CASH") acc.cash += total; // payment_method can be null
         else acc.transfer += total;
         acc.total += total;
         acc.count += 1;
@@ -72,18 +85,17 @@ export default function ShiftReports() {
       }, { cash: 0, transfer: 0, total: 0, count: 0 });
       setPaymentSummary(summary);
 
-      const itemMap: any = {};
+      const itemMap: Record<string, { name: string; qty: number; total: number }> = {};
       trxRes.data.forEach((trx: any) => {
         let items = typeof trx.items === 'string' ? JSON.parse(trx.items) : trx.items;
         if (Array.isArray(items)) {
           items.forEach((it: any) => {
-            const pId = String(it.product_id || it.id || "");
-            let finalName = it.name === "MENU" || !it.name ? (productMapId[pId] || productMapPrice[Number(it.price)] || `ID:${pId}`) : it.name;
+            const name = (it.name || "Unknown Item").toUpperCase(); // Gunakan nama item langsung
             const qty = Number(it.qty || it.quantity || 0);
             if (qty > 0) {
-              if (!itemMap[finalName]) itemMap[finalName] = { name: finalName, qty: 0, total: 0 };
-              itemMap[finalName].qty += qty;
-              itemMap[finalName].total += (it.subtotal ? Number(it.subtotal) : (qty * Number(it.price || 0)));
+              if (!itemMap[name]) itemMap[name] = { name: name, qty: 0, total: 0 };
+              itemMap[name].qty += qty;
+              itemMap[name].total += (qty * Number(it.price || 0)); // Pastikan selalu qty * unit_price
             }
           });
         }

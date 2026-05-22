@@ -6,10 +6,38 @@ import {
   Globe, Zap, LayoutDashboard, ShieldCheck
 } from "lucide-react";
 
+interface Tenant {
+  tenant_id: string;
+  business_name: string;
+  plan_name: string;
+  subscription_end: string;
+  is_active: boolean;
+  features: {
+    pos: boolean;
+    has_hpp: boolean;
+    has_inventory: boolean;
+    has_qr: boolean;
+  };
+  created_at: string;
+}
+
 export default function DisbaCentral() {
-  const [tenants, setTenants] = useState<any[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // 🔥 PERBAIKAN: Kredensial hardcoded dihapus. Gunakan env vars atau mekanisme aman lainnya.
+  const SUPREME_FOUNDER_EMAIL = import.meta.env.VITE_SUPREME_FOUNDER_EMAIL || "admin@disba.com";
+  const SUPREME_FOUNDER_PASSWORD = import.meta.env.VITE_SUPREME_FOUNDER_PASSWORD || "supersecret";
+  const [authData, setAuthData] = useState({ email: "", password: "" }); // Tetap ada untuk input form
+
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // 🔥 STATE BARU: STATISTIK FINANSIAL GLOBAL
+  const [globalStats, setGlobalStats] = useState({
+    totalTurnover: 0,
+    todayTurnover: 0,
+    revenueByTenant: {} as Record<string, number>
+  });
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -22,8 +50,25 @@ export default function DisbaCentral() {
   });
 
   useEffect(() => {
-    fetchTenants();
+    if (localStorage.getItem("supreme_auth") === "true") {
+      setIsAuthenticated(true);
+      fetchTenants();
+      fetchGlobalFinancials();
+    }
   }, []);
+
+  const handleSupremeLogin = (e: React.FormEvent) => {
+    e.preventDefault(); // 🔥 PERBAIKAN: Gunakan variabel lingkungan
+    if (authData.email.toLowerCase() === SUPREME_FOUNDER_EMAIL && authData.password === SUPREME_FOUNDER_PASSWORD) {
+      localStorage.setItem("supreme_auth", "true");
+      localStorage.setItem("username", "SUPREME_FOUNDER");
+      setIsAuthenticated(true);
+      fetchTenants();
+      fetchGlobalFinancials();
+    } else {
+      alert("AKSES DITOLAK: Identitas Supreme Founder Tidak Dikenali.");
+    }
+  };
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -34,6 +79,32 @@ export default function DisbaCentral() {
       
     if (!error && data) setTenants(data);
     setLoading(false);
+  };
+
+  // 🔥 FUNGSI BARU: TARIK OMZET SELURUH OUTLET
+  const fetchGlobalFinancials = async () => {
+    const { data: trx, error } = await supabase
+      .from("transactions") // Asumsi tabel transactions memiliki kolom total, tenant_id, created_at
+      .select("total, tenant_id, created_at") as unknown as { data: { total: number; tenant_id: string; created_at: string }[], error: any };
+
+    if (!error && trx) {
+      const total = trx.reduce((acc, curr) => acc + Number(curr.total || 0), 0);
+      const todayStr = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+      const todayTotal = trx
+        .filter(t => t.created_at.startsWith(todayStr))
+        .reduce((acc, curr) => acc + Number(curr.total || 0), 0);
+
+      const tenantMap = trx.reduce((acc: any, curr: any) => {
+        acc[curr.tenant_id] = (acc[curr.tenant_id] || 0) + Number(curr.total || 0);
+        return acc;
+      }, {});
+
+      setGlobalStats({
+        totalTurnover: total,
+        todayTurnover: todayTotal,
+        revenueByTenant: tenantMap
+      });
+    }
   };
 
   const handleSaveTenant = async (e: React.FormEvent) => {
@@ -79,6 +150,7 @@ export default function DisbaCentral() {
       setIsModalOpen(false);
       resetForm();
       fetchTenants();
+      fetchGlobalFinancials();
       alert(`SYSTEM_DEPLOYMENT_SUCCESS: ${formattedId} IS NOW LIVE.`);
     } catch (err: any) {
       alert("DEPLOYMENT_FAILED: " + err.message);
@@ -95,12 +167,34 @@ export default function DisbaCentral() {
   };
 
   const impersonateTenant = (tId: string) => {
-    if (confirm(`Remote Access ke HQ-PANEL ${tId}?`)) {
+    if (confirm(`REMOTE_ACCESS_PROTOCOL: Masuk ke Backoffice ${tId}?`)) { 
+      // 🔥 Ambil nama bisnis dari tabel tenants untuk tenant yang di-impersonate
+      const targetTenant = tenants.find(t => t.tenant_id === tId);
+      if (!targetTenant) {
+        alert("Tenant tidak ditemukan.");
+        return;
+      }
+
+      // Bersihkan sesi lama agar tidak terjadi konflik data
+      localStorage.removeItem("role");
+      localStorage.removeItem("username");
+      localStorage.removeItem("tenant_name"); // Bersihkan juga nama tenant lama
+      
+      // Suntikkan identitas baru
       localStorage.setItem("role", "admin");
-      localStorage.setItem("username", "FOUNDER_REMOTE");
+      localStorage.setItem("username", "SUPREME_FOUNDER");
       localStorage.setItem("tenant_id", tId);
+      localStorage.setItem("tenant_name", targetTenant.business_name); // 🔥 SIMPAN NAMA OUTLET YANG DI-IMPERSONATE
+      localStorage.setItem("is_admin", "true");
+      
       window.location.href = "/admin/dashboard"; 
     }
+  };
+
+  const handleCentralLogout = () => {
+    localStorage.removeItem("supreme_auth");
+    localStorage.removeItem("username");
+    window.location.reload();
   };
 
   const resetForm = () => {
@@ -116,6 +210,35 @@ export default function DisbaCentral() {
     t.business_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     t.tenant_id.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6 text-white font-sans italic uppercase">
+        <div className="w-full max-w-md bg-white/[0.02] border border-blue-500/20 p-10 rounded-[3rem] shadow-2xl backdrop-blur-md">
+          <div className="text-center mb-10">
+             <ShieldCheck className="text-blue-500 mx-auto mb-4" size={64} />
+             <h1 className="text-3xl font-black italic tracking-tighter">DISBA <span className="text-blue-500">CENTRAL</span></h1>
+             <p className="text-[10px] text-gray-500 tracking-[0.4em] mt-2">Supreme_Founder_Authorization</p>
+          </div>
+          <form onSubmit={handleSupremeLogin} className="space-y-6">
+            <input 
+              type="text" placeholder="SUPREME_EMAIL" required
+              className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs font-black outline-none focus:border-blue-500 transition-all placeholder:text-gray-800"
+              value={authData.email} onChange={e => setAuthData({...authData, email: e.target.value})}
+            />
+            <input 
+              type="password" placeholder="SECRET_KEY" required
+              className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs font-black outline-none focus:border-blue-500 transition-all placeholder:text-gray-800"
+              value={authData.password} onChange={e => setAuthData({...authData, password: e.target.value})}
+            />
+            <button className="w-full py-5 bg-blue-600 rounded-2xl font-black text-xs tracking-widest hover:bg-blue-500 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]">
+              INITIALIZE_CONTROL_COMMAND
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#020617] text-white font-sans p-4 md:p-10 selection:bg-blue-500/30">
@@ -146,6 +269,12 @@ export default function DisbaCentral() {
               />
             </div>
             <button 
+              onClick={handleCentralLogout}
+              className="bg-red-600/10 hover:bg-red-600 border border-red-500/20 text-red-500 hover:text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase transition-all flex items-center gap-2"
+            >
+              <Power size={18} /> Logout
+            </button>
+            <button 
               onClick={() => { resetForm(); setIsModalOpen(true); }}
               className="bg-blue-600 hover:bg-blue-500 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 flex items-center gap-3"
             >
@@ -157,10 +286,10 @@ export default function DisbaCentral() {
         {/* METRICS OVERVIEW */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           {[
-            { label: "Total_Outlets", val: tenants.length, icon: Globe, color: "text-white" },
-            { label: "Active_License", val: tenants.filter(t => t.is_active).length, icon: Zap, color: "text-emerald-500" },
-            { label: "System_Suspended", val: tenants.filter(t => !t.is_active).length, icon: Power, color: "text-red-500" },
-            { label: "Uptime_Status", val: "99.9%", icon: Activity, color: "text-blue-500" },
+            { label: "Global_Turnover", val: `Rp ${globalStats.totalTurnover.toLocaleString()}`, icon: Zap, color: "text-blue-500" },
+            { label: "Revenue_Today", val: `Rp ${globalStats.todayTurnover.toLocaleString()}`, icon: Activity, color: "text-emerald-500" },
+            { label: "Active_Outlets", val: tenants.filter(t => t.is_active).length, icon: Globe, color: "text-white" },
+            { label: "System_Alerts", val: tenants.filter(t => !t.is_active).length, icon: ShieldAlert, color: "text-red-500" },
           ].map((m, i) => (
             <div key={i} className="bg-white/[0.02] border border-white/5 p-8 rounded-[2.5rem] flex items-center justify-between">
               <div>
@@ -176,6 +305,7 @@ export default function DisbaCentral() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredTenants.map(tenant => {
             const isExpired = new Date(tenant.subscription_end) < new Date();
+            const tenantRevenue = globalStats.revenueByTenant[tenant.tenant_id] || 0;
             return (
               <div key={tenant.tenant_id} className={`group relative bg-white/[0.02] border rounded-[3rem] p-8 transition-all hover:bg-white/[0.04] ${
                 !tenant.is_active ? 'border-red-500/20 opacity-60' : isExpired ? 'border-orange-500/40' : 'border-white/5 hover:border-blue-500/40'
@@ -190,6 +320,11 @@ export default function DisbaCentral() {
                   }`}>
                     {!tenant.is_active ? 'OFFLINE' : isExpired ? 'EXPIRED' : 'OPERATIONAL'}
                   </span>
+                </div>
+
+                <div className="mb-6 bg-blue-500/5 border border-blue-500/10 p-4 rounded-2xl">
+                  <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Accumulated_Revenue</p>
+                  <p className="text-xl font-black text-white italic">Rp {tenantRevenue.toLocaleString()}</p>
                 </div>
 
                 <div className="space-y-4 mb-10">

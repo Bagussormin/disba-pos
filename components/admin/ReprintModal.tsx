@@ -1,4 +1,8 @@
-type Item = {
+import { useEffect, useState } from "react";
+import { executePrint } from "../../lib/printer";
+import { supabase } from "../../lib/supabase";
+
+interface Item {
   id: number;
   name: string;
   price: number;
@@ -8,49 +12,103 @@ type Item = {
 type Props = {
   open: boolean;
   onClose: () => void;
-  trx: {
-    receipt_no: string;
-    items: Item[];
-    total: number;
-    paid: number;
-    change: number;
-    created_at: string;
-  } | null;
+  trx: TransactionDetails | null;
 };
+
+interface TransactionDetails {
+  id: string; // Transaction ID
+  receipt_no: string;
+  items: Item[] | string; // Can be string (JSONB) or parsed array
+  total: number;
+  paid: number;
+  change: number;
+  created_at: string;
+  subtotal?: number;
+  service_charge?: number;
+  pb1?: number; // Assuming this is tax
+  discount?: number;
+  payment_method?: string;
+  cashier?: string;
+  cashier_name?: string;
+  table_name?: string;
+  table_number?: string;
+}
 
 export default function ReprintModal({ open, onClose, trx }: Props) {
   if (!open || !trx) return null;
 
+  const [receiptSettings, setReceiptSettings] = useState<any>(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+  
+  interface ReceiptSettings {
+    store_name: string;
+    address: string;
+    contact: string;
+    footer_text: string;
+    bridge_ip: string;
+    cashier_printer_ip: string;
+    // Add other properties from receipt_settings as needed
+  }
+  
+  useEffect(() => {
+    if (open && tenantId) {
+      fetchReceiptSettings();
+    }
+  }, [open, tenantId]);
+
+  const fetchReceiptSettings = async () => {
+    setLoadingSettings(true);
+    const { data, error } = await supabase
+      .from("receipt_settings")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .maybeSingle() as unknown as { data: ReceiptSettings | null, error: any };
+
+    if (error) {
+      console.error("Error fetching receipt settings:", error.message);
+    }
+    setReceiptSettings(data);
+    setLoadingSettings(false);
+  };
+
   // 🔥 Mengambil nama outlet secara dinamis dari sistem
   const tenantName = typeof window !== "undefined" ? localStorage.getItem("tenant_name") || "DISBA POS" : "DISBA POS";
 
-  const printThermal = () => {
-    const win = window.open("", "", "width=300");
+  const printThermal = async () => {
+    if (!receiptSettings) {
+      alert("Pengaturan struk belum dimuat. Coba lagi.");
+      return;
+    }
 
-    win!.document.write(`
-      <pre>
-${tenantName.toUpperCase()}
-========================
-No : ${trx.receipt_no}
-${new Date(trx.created_at).toLocaleString()}
-------------------------
-${trx.items
-  .map(
-    (i) =>
-      `${i.name} x${i.qty}\n${(i.price * i.qty).toLocaleString()}`
-  )
-  .join("\n")}
-------------------------
-TOTAL   : ${trx.total.toLocaleString()}
-BAYAR   : ${trx.paid.toLocaleString()}
-KEMBALI : ${trx.change.toLocaleString()}
-========================
-TERIMA KASIH
-      </pre>
-      <script>window.onload = function() { window.print(); window.close(); }</script>
-    `);
+    const itemsParsed = typeof trx.items === 'string' ? JSON.parse(trx.items) : trx.items;
 
-    win!.document.close();
+    const receiptData = {
+      receipt_no: trx.receipt_no,
+      tableName: trx.table_name || trx.table_number || "TAKE AWAY",
+      cashierName: trx.cashier || trx.cashier_name || localStorage.getItem("username") || "KASIR",
+      paymentMethod: trx.payment_method || "CASH",
+      items: itemsParsed,
+      subtotal: trx.subtotal || 0,
+      discount: trx.discount || 0,
+      serviceCharge: trx.service_charge || 0,
+      tax: trx.pb1 || 0,
+      total: trx.total,
+      paid: trx.paid,
+      change: trx.change,
+      storeName: receiptSettings.store_name || tenantName,
+      address: receiptSettings.address || "",
+      contact: receiptSettings.contact || "",
+      footerText: receiptSettings.footer_text || "Terima Kasih"
+    };
+
+    try {
+      await executePrint(receiptData);
+      alert(`REPRINT COMMAND SENT: ${trx.receipt_no}`);
+    } catch (err) {
+      alert("ERROR: Gagal menghubungi Printer Bridge! Pastikan aplikasi Bridge menyala.");
+      console.error("Reprint error:", err);
+    }
   };
 
   return (

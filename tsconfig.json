@@ -19,6 +19,7 @@
     "App.tsx",
     "index.tsx",
     "types.ts",
+    "vite-env.d.ts",
     "components/**/*.tsx",
     "components/**/*.ts",
     "services/**/*.ts",

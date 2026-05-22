@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+interface Promo {
+  id: string;
+  name: string;
+  type: "PERCENTAGE" | "NOMINAL";
+  value: number;
+  min_purchase: number;
+  code: string | null;
+  is_active: boolean;
+  tenant_id: string;
+}
 
 export default function MarketingApp() {
   const [activeSubMenu, setActiveSubMenu] = useState("DISCOUNT");
-  const [promos, setPromos] = useState<any[]>([]);
+  const [promos, setPromos] = useState<Promo[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -29,7 +39,7 @@ export default function MarketingApp() {
         .eq("tenant_id", tenantId) 
         .order("created_at", { ascending: false });
         
-      if (error) throw error;
+      if (error) throw error; // error is of type PostgrestError
       
       const filtered = (data || []).filter((p: any) => {
         return activeSubMenu === "DISCOUNT" ? (!p.code || p.code === "") : (p.code && p.code !== "");

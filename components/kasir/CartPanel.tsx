@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { executePrint } from '../../lib/printer';
+import { supabase } from '../../lib/supabase';
 
 interface CartItem {
   name: string;
@@ -22,20 +23,34 @@ const CartPanel: React.FC<Props> = ({ cartItems, subtotal }) => {
   const [discount, setDiscount] = useState(0); // Diskon Fix
   const [tempDiscount, setTempDiscount] = useState(0); // Input sementara
   const [showPinModal, setShowPinModal] = useState(false);
-  const [adminPin, setAdminPin] = useState("");
-  
-  const CORRECT_PIN = "1234"; // PIN ADMIN NES CAFE
+  const [enteredPin, setEnteredPin] = useState("");
+  const [adminPinError, setAdminPinError] = useState<string | null>(null);
 
+  // 🔥 PERBAIKAN: Ambil PIN Admin dari database atau env var, jangan hardcode
+  const getAdminPin = async (): Promise<string | null> => {
+    const tenantId = localStorage.getItem("tenant_id");
+    if (!tenantId) return null;
+    const { data, error } = await supabase
+      .from("users")
+      .select("pin")
+      .eq("tenant_id", tenantId)
+      .eq("role", "admin")
+      .single();
+    if (error) console.error("Error fetching admin PIN:", error.message);
+    return data?.pin || null;
+  };
+  
   // 3. FUNGSI VERIFIKASI PIN
-  const handleVerifyPin = () => {
-    if (adminPin === CORRECT_PIN) {
+  const handleVerifyPin = async () => {
+    const adminPin = await getAdminPin();
+    if (enteredPin === adminPin && adminPin !== null) {
       setDiscount(tempDiscount);
       setShowPinModal(false);
-      setAdminPin("");
+      setEnteredPin("");
       alert("Diskon Berhasil Diterapkan!");
     } else {
       alert("PIN Admin Salah!");
-      setAdminPin("");
+      setEnteredPin("");
     }
   };
 
@@ -158,13 +173,13 @@ const CartPanel: React.FC<Props> = ({ cartItems, subtotal }) => {
               type="password" 
               className="w-full p-3 border-2 border-orange-500 rounded-xl text-center text-2xl mb-4 bg-white text-black"
               placeholder="PIN"
-              value={adminPin}
-              onChange={(e) => setAdminPin(e.target.value)}
+              value={enteredPin}
+              onChange={(e) => setEnteredPin(e.target.value)}
               autoFocus
             />
             <div className="flex gap-2">
               <button onClick={() => setShowPinModal(false)} className="flex-1 p-3 bg-gray-200 rounded-xl text-black font-bold">BATAL</button>
-              <button onClick={handleVerifyPin} className="flex-1 p-3 bg-orange-500 text-white rounded-xl font-bold">KONFIRMASI</button>
+              <button onClick={handleVerifyPin} className="flex-1 p-3 bg-orange-500 text-white rounded-xl font-bold">KONFIRMASI</button> {/* This will need to be async */}
             </div>
           </div>
         </div>

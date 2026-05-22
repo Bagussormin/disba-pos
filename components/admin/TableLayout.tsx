@@ -2,17 +2,24 @@ import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase"; 
 import { Plus, Trash2, Layout, Loader2, MousePointer2 } from "lucide-react";
 
+interface Table {
+  id: string;
+  name: string;
+  status: string;
+  x_pos: number;
+  y_pos: number;
+  tenant_id: string;
+}
+
 export default function TableLayout() {
-  const [tables, setTables] = useState<any[]>([]);
+  const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(false);
   const [newTableName, setNewTableName] = useState("");
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   useEffect(() => {
-    // Cegah eksekusi jika tidak ada tenant_id (misal: memori terhapus)
     if (tenantId) {
       fetchTables();
     } else {
@@ -22,14 +29,14 @@ export default function TableLayout() {
 
   const fetchTables = async () => {
     setLoading(true);
-    // 🔥 FILTER 1: Hanya ambil meja milik toko ini
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("tables")
       .select("*")
       .eq("tenant_id", tenantId) 
       .order("name");
     
-    setTables(data || []);
+    if (data) setTables(data);
+    if (error) console.error("Error fetching tables:", error.message);
     setLoading(false);
   };
 
@@ -37,14 +44,13 @@ export default function TableLayout() {
     e.preventDefault();
     if (!newTableName || !tenantId) return;
     
-    // 🔥 FILTER 2: Stempel meja baru dengan identitas toko ini
     const { error } = await supabase.from("tables").insert([
       { 
-        name: newTableName.toUpperCase(), 
+        name: newTableName.trim().toUpperCase(), 
         status: "available", 
         x_pos: 20, 
         y_pos: 20,
-        tenant_id: tenantId // Wajib diisi!
+        tenant_id: tenantId 
       }
     ]);
     
@@ -69,7 +75,6 @@ export default function TableLayout() {
 
     setTables(prev => prev.map(t => t.id === id ? { ...t, x_pos: newX, y_pos: newY } : t));
 
-    // 🔥 FILTER 3: Amankan proses update posisi
     await supabase
       .from("tables")
       .update({ x_pos: newX, y_pos: newY })
@@ -81,7 +86,6 @@ export default function TableLayout() {
     if (!tenantId) return;
     
     if (confirm("Hapus meja ini?")) {
-      // 🔥 FILTER 4: Amankan proses penghapusan
       await supabase
         .from("tables")
         .delete()
@@ -93,27 +97,27 @@ export default function TableLayout() {
   };
 
   return (
-    <div className="space-y-6 font-sans italic uppercase animate-in fade-in">
-      <div className="flex justify-between items-center bg-white/[0.02] p-6 rounded-[2rem] border border-white/5">
+    <div className="space-y-6 font-sans text-slate-100 animate-in fade-in">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900/40 p-6 rounded-[1.8rem] border border-slate-800/85 gap-4 backdrop-blur-xl">
         <div>
-          <h1 className="text-xl font-black tracking-tighter italic flex items-center gap-3">
-            <MousePointer2 className="text-blue-500" /> Layout Denah Meja
+          <h1 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+            <MousePointer2 className="text-blue-500" size={18} /> Layout Denah Meja
           </h1>
-          <p className="text-[8px] text-gray-500 font-bold tracking-widest mt-1">Geser meja ke posisi yang diinginkan</p>
+          <p className="text-[10px] text-slate-500 font-bold tracking-wider mt-1 uppercase">Geser meja ke posisi yang diinginkan untuk layout operasional</p>
         </div>
         
-        <form onSubmit={addTable} className="flex gap-2 not-italic">
+        <form onSubmit={addTable} className="flex gap-2 w-full sm:w-auto">
           <input 
             type="text" 
-            placeholder="NAMA MEJA" 
-            className="bg-white/5 border border-white/10 p-3 rounded-xl text-[10px] font-bold text-white uppercase outline-none focus:border-blue-500"
+            placeholder="NAMA MEJA (contoh: 01)" 
+            className="flex-1 sm:flex-initial bg-slate-950 border border-slate-850 p-3.5 rounded-xl text-xs font-bold text-white uppercase outline-none focus:border-blue-500"
             value={newTableName}
             onChange={(e) => setNewTableName(e.target.value)}
-            disabled={!tenantId} // Matikan input jika tidak ada sesi
+            disabled={!tenantId} 
           />
           <button 
             disabled={!tenantId}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 px-6 py-3 rounded-xl font-black text-[9px] transition-all"
+            className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 px-6 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider text-white shadow-lg shadow-blue-600/10 transition-colors"
           >
             TAMBAH
           </button>
@@ -123,14 +127,14 @@ export default function TableLayout() {
       {/* CANVAS AREA */}
       <div 
         ref={canvasRef}
-        className="relative w-full h-[550px] bg-[#020617] border-2 border-dashed border-white/5 rounded-[3rem] overflow-hidden shadow-inner cursor-crosshair"
+        className="relative w-full h-[550px] bg-slate-950/40 border-2 border-dashed border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-inner cursor-crosshair backdrop-blur-xl"
         style={{ 
-          backgroundImage: 'radial-gradient(circle, #ffffff05 1px, transparent 1px)', 
-          backgroundSize: '25px 25px' 
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)', 
+          backgroundSize: '24px 24px' 
         }}
       >
         {loading ? (
-          <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-blue-500" /></div>
+          <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-blue-500" size={32} /></div>
         ) : (
           tables.map((table) => (
             <div
@@ -143,20 +147,19 @@ export default function TableLayout() {
                 top: `${table.y_pos}px`,
                 transition: 'transform 0.1s ease'
               }}
-              className="w-24 h-24 bg-white/[0.03] border border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-move hover:border-blue-500 active:scale-90 hover:bg-blue-500/10 shadow-xl backdrop-blur-md group"
+              className="w-24 h-24 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col items-center justify-center cursor-move hover:border-blue-500 active:scale-95 hover:bg-blue-600/10 shadow-lg backdrop-blur-md group"
             >
-              <Layout size={18} className="text-gray-600 mb-2 group-hover:text-blue-500 transition-colors" />
-              <p className="text-[10px] font-black tracking-tighter text-gray-300">{table.name}</p>
+              <Layout size={18} className="text-slate-500 mb-1.5 group-hover:text-blue-400 transition-colors" />
+              <p className="text-xs font-bold tracking-tight text-slate-200">{table.name}</p>
               
               <button 
                 onClick={() => deleteTable(table.id)}
-                className="absolute -top-2 -right-2 bg-red-600 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:scale-110"
+                className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-500 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:scale-105"
               >
-                <Trash2 size={12} />
+                <Trash2 size={12} className="text-white" />
               </button>
               
-              {/* Indikator Status di pojok */}
-              <div className={`absolute bottom-2 right-2 w-1.5 h-1.5 rounded-full ${table.status === 'available' ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
+              <div className={`absolute bottom-2 right-2 w-2 h-2 rounded-full ${table.status === 'available' ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`}></div>
             </div>
           ))
         )}

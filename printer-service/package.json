@@ -1,18 +1,21 @@
 {
-  "name": "printer-service",
+  "name": "disba-printer-bridge",
   "version": "1.0.0",
-  "description": "Service Printer Multi-Channel Disba POS",
-  "main": "PrinterService.js",
+  "description": "Node.js Bridge for Thermal Printers",
+  "main": "PrinterService.ts",
+  "scripts": {
+    "start": "ts-node PrinterService.ts"
+  },
   "dependencies": {
-    "cors": "^2.8.6",
-    "express": "^4.22.1",
-    "jimp": "^1.6.0"
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "nodemailer": "^6.9.0"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.11.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.4",
+    "@types/node": "^18.15.11",
+    "@types/express": "^4.17.17",
+    "@types/cors": "^2.8.13"
   }
 }

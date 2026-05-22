@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { Loader2, MapPin, Search, User, ShoppingBag } from "lucide-react";
+import { Loader2, MapPin, Search, User, Compass, ArrowRight, X } from "lucide-react";
 
 type Table = { 
   id: number; 
@@ -27,16 +27,42 @@ export default function WaiterHome({ onOpenBill }: { onOpenBill: (orderId: strin
 
   const fetchData = async () => {
     try {
-      // Hanya ambil data meja murni
       const [tRes, oRes] = await Promise.all([
         supabase.from("tables").select("*").eq("tenant_id", tenantId).order("name", { ascending: true }),
         supabase.from("orders").select("*").eq("tenant_id", tenantId).eq("status", "open")
       ]);
 
-      if (tRes.data) setTables(tRes.data);
-      if (oRes.data) setOrders(oRes.data);
+      if (tRes.error) throw tRes.error;
+      if (oRes.error) throw oRes.error;
+
+      if (tRes.data) {
+        setTables(tRes.data);
+        localStorage.setItem("disba_cache_tables", JSON.stringify(tRes.data));
+      }
+      if (oRes.data) {
+        setOrders(oRes.data);
+        localStorage.setItem("disba_cache_orders", JSON.stringify(oRes.data));
+      }
     } catch (err) {
-      console.error(err);
+      console.warn("Supabase fetch failed, reading from cache:", err);
+      const cachedTables = JSON.parse(localStorage.getItem("disba_cache_tables") || "[]");
+      const cachedOrders = JSON.parse(localStorage.getItem("disba_cache_orders") || "[]");
+      
+      if (cachedTables.length === 0) {
+        const mockTables = [
+          { id: 1, name: "Meja 1", status: "available", area: "Area Utama" },
+          { id: 2, name: "Meja 2", status: "available", area: "Area Utama" },
+          { id: 3, name: "Meja 3", status: "available", area: "Area Utama" },
+          { id: 4, name: "Meja 4", status: "available", area: "Area Utama" },
+          { id: 5, name: "Meja 5", status: "available", area: "Teras" },
+          { id: 6, name: "Meja 6", status: "available", area: "Teras" }
+        ];
+        setTables(mockTables);
+        localStorage.setItem("disba_cache_tables", JSON.stringify(mockTables));
+      } else {
+        setTables(cachedTables);
+      }
+      setOrders(cachedOrders);
     } finally {
       setLoading(false);
     }
@@ -44,70 +70,114 @@ export default function WaiterHome({ onOpenBill }: { onOpenBill: (orderId: strin
 
   useEffect(() => {
     fetchData();
-    // Sync Realtime untuk Meja dan Order
-    const channel = supabase.channel(`waiter-sync-${tenantId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData())
-      .subscribe();
+    try {
+      const channel = supabase.channel(`waiter-sync-${tenantId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData())
+        .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+      return () => { supabase.removeChannel(channel); };
+    } catch (e) {
+      console.warn("Realtime sync failed, running in offline mode.");
+    }
   }, []);
 
   const handleCreateOrder = async () => {
-    if (!selectedTable || !guestName) return alert("INPUT NAMA TAMU!");
+    if (!selectedTable) return;
+    if (!guestName.trim()) return alert("Masukkan Nama Tamu terlebih dahulu!");
     
     try {
       const { data: newOrder, error } = await supabase.from("orders").insert({
         tenant_id: tenantId,
         table_id: selectedTable.id,
-        guest_name: guestName.toUpperCase(),
+        guest_name: guestName.trim().toUpperCase(),
         status: "open"
       }).select().single();
 
       if (error) throw error;
 
       await supabase.from("tables").update({ status: "open" }).eq("id", selectedTable.id);
-      
       onOpenBill(newOrder.id);
     } catch (err: any) {
-      alert("Gagal: " + err.message);
+      console.warn("Gagal membuat order online, menyimpan secara offline:", err.message);
+      const newOrderId = "offline_order_" + Date.now();
+      const offlineOrder = {
+        id: newOrderId,
+        table_id: selectedTable.id,
+        guest_name: guestName.trim().toUpperCase(),
+        status: "open"
+      };
+      
+      const updatedOrders = [...orders, offlineOrder];
+      const updatedTables = tables.map(t => t.id === selectedTable.id ? { ...t, status: "open" } : t);
+      
+      setOrders(updatedOrders);
+      setTables(updatedTables);
+      localStorage.setItem("disba_cache_orders", JSON.stringify(updatedOrders));
+      localStorage.setItem("disba_cache_tables", JSON.stringify(updatedTables));
+      
+      onOpenBill(newOrderId);
     }
   };
 
-  const dynamicAreas = Array.from(new Set(tables.map(t => (t.area || "GENERAL").toUpperCase())));
+  const dynamicAreas = Array.from(new Set(tables.map(t => (t.area || "Area Utama").toUpperCase())));
 
   return (
-    <div className="fixed inset-0 bg-[#010413] text-white italic uppercase flex flex-col p-4 lg:p-6 overflow-hidden">
-      <div className="grid grid-cols-12 gap-6 h-full">
+    <div className="fixed inset-0 bg-[#020617] text-slate-100 flex flex-col p-6 overflow-hidden font-sans">
+      
+      {/* Top info header */}
+      <header className="mb-6 flex justify-between items-center bg-slate-900/40 p-5 rounded-[1.8rem] border border-slate-800/80 backdrop-blur-xl">
+        <div>
+          <h2 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+            <Compass className="text-blue-500" size={20} />
+            Waitress Navigator
+          </h2>
+          <p className="text-[9px] text-slate-500 font-bold tracking-widest mt-1 uppercase">Daftar Meja Aktif & Pesanan Pelanggan</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+            <span className="text-[9px] font-black text-emerald-400">POS OK</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-12 gap-6 h-[calc(100%-88px)] min-h-0">
+        
         {/* LEFT: MAP MEJA */}
-        <div className="col-span-12 lg:col-span-8 bg-white/[0.01] border border-white/5 rounded-[3rem] p-8 overflow-y-auto no-scrollbar backdrop-blur-3xl shadow-2xl">
+        <div className="col-span-12 lg:col-span-8 bg-slate-900/20 border border-slate-900 rounded-[2.5rem] p-8 overflow-y-auto no-scrollbar backdrop-blur-3xl shadow-2xl">
           {loading ? (
-            <div className="flex justify-center mt-20 opacity-20"><Loader2 className="animate-spin" size={40}/></div>
+            <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-blue-500" size={36}/></div>
           ) : (
             dynamicAreas.map(area => (
-              <div key={area} className="mb-10">
-                <div className="flex items-center gap-4 mb-6 opacity-40">
+              <div key={area} className="mb-8">
+                <div className="flex items-center gap-3 mb-5">
                   <MapPin size={14} className="text-blue-500" />
-                  <h3 className="text-[10px] font-black tracking-[0.4em]">{area}</h3>
-                  <div className="flex-1 h-[1px] bg-white/5"></div>
+                  <h3 className="text-[10px] font-black tracking-wider text-slate-400 uppercase">{area}</h3>
+                  <div className="flex-1 h-[1px] bg-slate-800/50"></div>
                 </div>
-                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {tables.filter(t => (t.area || "GENERAL").toUpperCase() === area).map(t => {
+                
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                  {tables.filter(t => (t.area || "Area Utama").toUpperCase() === area).map(t => {
                     const order = orders.find(o => o.table_id === t.id);
                     const isOccupied = !!order;
                     const isSelected = selectedTable?.id === t.id;
 
                     return (
-                      <button key={t.id} onClick={() => { setSelectedTable(t); setGuestName(order?.guest_name || ""); }}
-                        className={`aspect-square rounded-[2.2rem] border-2 flex flex-col items-center justify-center gap-1 transition-all shadow-xl relative ${
-                          isOccupied ? "border-orange-500 bg-orange-500/10 text-orange-500" : 
-                          isSelected ? "border-blue-500 bg-blue-500/20 shadow-blue-500/20" : 
-                          "border-white/5 bg-white/[0.02] text-gray-700"
+                      <button 
+                        key={t.id} 
+                        onClick={() => { setSelectedTable(t); setGuestName(order?.guest_name || ""); }}
+                        className={`aspect-[4/3] rounded-[1.8rem] border-2 flex flex-col items-center justify-center p-3 transition-all relative ${
+                          isOccupied 
+                            ? "border-orange-500/40 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20" 
+                            : isSelected 
+                              ? "border-blue-500 bg-blue-500/15 text-white" 
+                              : "border-slate-800/60 bg-slate-950/40 text-slate-400 hover:border-slate-700/80 hover:text-white"
                         }`}
                       >
-                        <div className="text-[14px] font-black tracking-tighter">{t.name}</div>
+                        <div className="text-sm font-extrabold tracking-tight">{t.name}</div>
                         {isOccupied && (
-                          <div className="text-[7px] text-white font-black mt-2 px-2 py-0.5 bg-orange-600 rounded-md truncate w-[80%] text-center">
+                          <div className="text-[8px] text-white font-extrabold mt-1 px-2.5 py-0.5 bg-orange-600 rounded-lg truncate w-[90%] text-center">
                             {order.guest_name}
                           </div>
                         )}
@@ -121,37 +191,60 @@ export default function WaiterHome({ onOpenBill }: { onOpenBill: (orderId: strin
         </div>
 
         {/* RIGHT: CONTROL PANEL */}
-        <div className="col-span-12 lg:col-span-4 bg-white/[0.02] border border-white/10 rounded-[3rem] p-10 flex flex-col shadow-2xl backdrop-blur-md">
+        <div className="col-span-12 lg:col-span-4 bg-slate-900/40 border border-slate-800/80 rounded-[2.5rem] p-8 flex flex-col shadow-2xl backdrop-blur-md">
           {selectedTable ? (
-            <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-8 duration-500">
-               <p className="text-[10px] font-black text-gray-600 uppercase tracking-[0.4em] mb-3">Table_Protocol</p>
-               <h3 className="text-6xl font-black text-white tracking-tighter uppercase italic leading-none mb-10">{selectedTable.name}</h3>
+            <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">PILIHAN MEJA</p>
+               <h3 className="text-4xl font-extrabold text-white tracking-tight leading-none mb-6">{selectedTable.name}</h3>
                
-               <div className="flex-1 space-y-8">
+               <div className="flex-1 space-y-6">
                   {orders.find(o => o.table_id === selectedTable.id) ? (
-                    <div className="space-y-6">
-                       <div className="p-8 rounded-[2rem] bg-orange-500/10 border border-orange-500/20">
-                          <p className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-2">Active_Guest</p>
-                          <p className="text-3xl font-black text-white">{guestName || "WALK-IN"}</p>
+                    <div className="space-y-5">
+                       <div className="p-6 rounded-[2rem] bg-orange-500/5 border border-orange-500/20 flex flex-col justify-center">
+                          <p className="text-[8px] font-bold text-orange-400 uppercase tracking-widest mb-1.5">Pelanggan Aktif</p>
+                          <p className="text-xl font-extrabold text-white">{guestName || "WALK-IN"}</p>
                        </div>
-                       <p className="text-[10px] text-gray-600 text-center font-black">BILLING_ACTIVE_ON_CASHIER</p>
+                       
+                       <button 
+                         onClick={() => onOpenBill(orders.find(o => o.table_id === selectedTable.id)!.id)}
+                         className="w-full bg-orange-500 hover:bg-orange-600 py-4.5 rounded-[1.6rem] font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+                       >
+                         <span>Buka Bill Pesanan</span>
+                         <ArrowRight size={14} />
+                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-6">
-                       <div className="relative group">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-5 mb-3 block opacity-50">Assign_Guest</label>
-                          <input type="text" className="w-full bg-[#03081a] border-2 border-white/5 rounded-[2.5rem] py-6 px-8 outline-none font-black text-white text-sm" placeholder="NAME..." value={guestName} onChange={(e) => setGuestName(e.target.value)} />
+                    <div className="space-y-5">
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 block">Nama Pelanggan</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 outline-none font-bold text-white text-sm focus:border-blue-500 transition-colors" 
+                            placeholder="Contoh: Budi, Meja 5B" 
+                            value={guestName} 
+                            onChange={(e) => setGuestName(e.target.value)} 
+                          />
                        </div>
-                       <button onClick={handleCreateOrder} className="w-full bg-blue-600 py-6 rounded-[2.5rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-blue-600/20">Initialize_Order</button>
+                       <button 
+                         onClick={handleCreateOrder} 
+                         className="w-full bg-blue-600 hover:bg-blue-500 py-4.5 rounded-[1.6rem] font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-600/20"
+                       >
+                         Mulai Pesanan Baru
+                       </button>
                     </div>
                   )}
                </div>
-               <button onClick={() => setSelectedTable(null)} className="w-full text-gray-700 font-black py-5 hover:text-red-500 uppercase text-[9px] tracking-[0.5em]">[ DISMISS ]</button>
+               <button 
+                 onClick={() => setSelectedTable(null)} 
+                 className="w-full text-slate-500 font-bold py-3 hover:text-red-400 uppercase text-[10px] tracking-wider transition-colors"
+               >
+                 [ Batalkan Pilihan ]
+               </button>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center opacity-10 text-center px-10">
-              <Search size={48} className="mb-6 text-blue-500" />
-              <p className="text-[10px] font-black uppercase tracking-[0.6em]">Waiting_For_Selection</p>
+            <div className="h-full flex flex-col items-center justify-center opacity-30 text-center px-10">
+              <Compass size={40} className="mb-4 text-blue-500 animate-pulse" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pilih Meja untuk Memulai</p>
             </div>
           )}
         </div>

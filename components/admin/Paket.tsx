@@ -2,11 +2,27 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Package, Plus, Trash2, Save, Loader2, Calculator, TrendingUp, Info } from "lucide-react";
 
+interface MenuItem {
+  id: number;
+  name: string;
+  price: number;
+  hpp: number;
+  category: string;
+}
+
+interface PackageItem {
+  menu_id: number;
+  name: string;
+  quantity: number;
+  price: number;
+  hpp: number;
+}
+
 export default function Paket() {
   const tenantId = localStorage.getItem("tenant_id") || "UNKNOWN_TENANT";
 
-  const [normalMenus, setNormalMenus] = useState<any[]>([]);
-  const [packages, setPackages] = useState<any[]>([]);
+  const [normalMenus, setNormalMenus] = useState<MenuItem[]>([]);
+  const [packages, setPackages] = useState<any[]>([]); // Tetap any karena struktur nested items
   const [packageName, setPackageName] = useState("");
   const [packagePrice, setPackagePrice] = useState("");
   const [bundleItems, setBundleItems] = useState<{ menu_id: number; name: string; quantity: number; price: number; hpp: number }[]>([]);
@@ -17,43 +33,48 @@ export default function Paket() {
   }, []);
 
   const fetchData = async () => {
-    // 1. Ambil Menu Master - Kita ambil HPP dan price
-    const { data: menus } = await supabase
-      .from("menus")
-      .select("id, name, price, hpp, category")
-      .eq("tenant_id", tenantId)
-      .neq("category", "PAKET")
-      .order("name", { ascending: true });
-    
-    if (menus) {
-      // DEBUG: Kapten bisa cek di F12 apakah hpp Nasi Goreng ada isinya
-      console.log("MASTER_MENUS_DATA:", menus); 
-      setNormalMenus(menus);
-    }
+    try {
+      // 1. Ambil Menu Master
+      const { data: menus, error: menuErr } = await supabase
+        .from("menus")
+        .select("id, name, price, hpp, category")
+        .eq("tenant_id", tenantId)
+        .neq("category", "PAKET")
+        .order("name", { ascending: true });
+      
+      if (menuErr) throw menuErr;
+      if (menus) setNormalMenus(menus);
 
-    // 2. Ambil Daftar Paket
-    const { data: pkgs } = await supabase
-      .from("menus")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .eq("category", "PAKET")
-      .order("id", { ascending: false });
+      // 2. Ambil Daftar Paket
+      const { data: pkgs, error: pkgErr } = await supabase
+        .from("menus")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("category", "PAKET")
+        .order("id", { ascending: false });
 
-    if (pkgs && pkgs.length > 0) {
-      const { data: items } = await supabase
-        .from("package_items")
-        .select(`*, menus!package_items_menu_id_fkey ( name, hpp, price )`)
-        .eq("tenant_id", tenantId);
+      if (pkgErr) throw pkgErr;
 
-      const packagesWithItems = pkgs.map(p => ({
-        ...p,
-        items: items?.filter(i => i.package_id === p.id) || []
-      }));
-      setPackages(packagesWithItems);
+      if (pkgs && pkgs.length > 0) {
+        const { data: items, error: itemsErr } = await supabase
+          .from("package_items")
+          .select(`*, menus!package_items_menu_id_fkey ( name, hpp, price )`)
+          .eq("tenant_id", tenantId);
+
+        if (itemsErr) throw itemsErr;
+
+        const packagesWithItems = pkgs.map(p => ({
+          ...p,
+          items: items?.filter(i => i.package_id === p.id) || []
+        }));
+        setPackages(packagesWithItems);
+      }
+    } catch (err: any) {
+      console.error("Fetch Error:", err.message);
     }
   };
 
-  const addMenuToBundle = (menu: any) => {
+  const addMenuToBundle = (menu: MenuItem) => {
     const existing = bundleItems.find((item) => item.menu_id === menu.id);
     
     // 🔥 LOGIKA SAKTI: Pastikan hpp diambil, kalau 0 kita coba tebak atau set minimal 1
@@ -120,7 +141,7 @@ export default function Paket() {
 
   const handleDeletePackage = async (id: number) => {
     if (confirm("Hapus paket?")) {
-      await supabase.from("menus").delete().eq("id", id);
+      await supabase.from("menus").delete().eq("id", id).eq("tenant_id", tenantId);
       fetchData();
     }
   };

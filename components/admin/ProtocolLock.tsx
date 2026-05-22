@@ -1,8 +1,7 @@
 import React from 'react';
 import { ShieldAlert, Globe } from 'lucide-react';
 
-// 🔥 KABEL GAMBAR INI SAYA MATIKAN DENGAN TANDA '//' AGAR TIDAK ERROR
-// import logoDisba from "../../assets/logo-disba.png";
+import logoDisba from "./assets/logo-disba.png"; // 🔥 KABEL GAMBAR DIHIDUPKAN KEMBALI
 
 export default function ProtocolLock() {
   return (
@@ -14,9 +13,9 @@ export default function ProtocolLock() {
       <div className="max-w-md w-full text-center space-y-8">
         
         {/* Logo Grayscale (Diganti Kotak Sementara) */}
-        <div className="flex justify-center opacity-50 grayscale">
-          <div className="w-24 h-24 bg-white/5 flex items-center justify-center rounded-3xl border border-white/10 text-[10px] font-bold tracking-widest text-gray-500">
-            LOGO_DISBA
+        <div className="flex justify-center">
+          <div className="w-24 h-24 rounded-3xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center p-2 grayscale opacity-50">
+            <img src={logoDisba} alt="DISBA Logo" className="w-full h-full object-contain" />
           </div>
         </div>
 

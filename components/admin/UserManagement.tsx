@@ -1,21 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase"; 
-import { UserPlus, Trash2, ShieldCheck, User, Lock, Loader2 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { UserPlus, Shield, Trash2, Key, Loader2, X, Save, User } from "lucide-react";
+
+interface UserProfile {
+  id: string;
+  username: string;
+  pin: string; // 🔥 PENTING: PIN HARUS DI-HASH SEBELUM DISIMPAN DI DATABASE!
+  role: string;
+  tenant_id: string;
+  created_at: string;
+  password?: string;
+}
 
 export default function UserManagement() {
-  const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+  const tenantId = localStorage.getItem("tenant_id");
 
-  // Form State
   const [formData, setFormData] = useState({
     username: "",
-    password: "",
-    full_name: "",
-    role: "waiter"
+    pin: "",
+    role: "kasir"
   });
 
   useEffect(() => {
@@ -24,187 +32,156 @@ export default function UserManagement() {
 
   const fetchUsers = async () => {
     setLoading(true);
-    // 🔥 FILTER: Hanya ambil staff milik toko ini
-    const { data } = await supabase
-      .from("profiles") // PASTIKAN NAMA TABEL BENAR (apakah profiles atau users?)
+    const { data, error } = await supabase
+      .from("users")
       .select("*")
-      .eq("tenant_id", tenantId) 
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
-      
-    setUsers(data || []);
+    if (error) {
+      console.error("Error fetching users:", error.message);
+    } else if (data) {
+      setUsers(data);
+    }
     setLoading(false);
   };
 
-  const handleAddUser = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenantId) return alert("Sesi tidak valid. Harap login ulang.");
-    
+    if (!formData.username || formData.pin.length < 4) return alert("Lengkapi data!");
     setSaving(true);
-    
-    // 🔥 INJEKSI: Paksa user baru menjadi milik toko ini
-    const payload = {
-      ...formData,
-      tenant_id: tenantId 
-    };
-    
-    const { error } = await supabase.from("profiles").insert([payload]);
 
-    if (error) {
-      alert("Gagal menambah user: " + error.message);
-    } else {
-      setFormData({ username: "", password: "", full_name: "", role: "waiter" });
-      fetchUsers();
+    try {
+      // 🔥 PENTING: DI SINI PIN HARUS DI-HASH SEBELUM DISIMPAN KE DATABASE!
+      // Contoh: const hashedPassword = await bcrypt.hash(formData.pin, 10);
+      // Untuk demo, kita simpan langsung, TAPI INI TIDAK AMAN UNTUK PRODUKSI.
+      const { error } = await supabase.from("users").insert([{
+        ...formData,
+        tenant_id: tenantId,
+        password: formData.pin // 🔥 RISIKO KEAMANAN: PIN disimpan langsung. HARUS DI-HASH!
+      }]);
+
+      if (!error) {
+        setModalOpen(false);
+        setFormData({ username: "", pin: "", role: "kasir" });
+        fetchUsers();
+      } else {
+        alert("Gagal: " + error.message);
+      }
+    } catch (err: any) {
+      console.error("Save User Error:", err.message);
+      alert("Terjadi kesalahan saat menyimpan user.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const deleteUser = async (id: string) => {
-    if (confirm("Hapus user ini?")) {
-      // 🔥 FILTER: Amankan penghapusan
-      await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", id)
-        .eq("tenant_id", tenantId); 
-      fetchUsers();
+    if (confirm("Hapus akses user ini?")) {
+      try {
+        const { error } = await supabase.from("users").delete().eq("id", id).eq("tenant_id", tenantId);
+        if (error) throw error;
+        fetchUsers();
+      } catch (err: any) {
+        console.error("Delete User Error:", err.message);
+        alert("Gagal menghapus user: " + err.message);
+      }
     }
   };
 
   return (
-    <div className="space-y-8 font-sans italic">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* FORM INPUT USER */}
-        <div className="lg:col-span-1">
-          <div className="bg-white/[0.02] border border-white/5 rounded-[2rem] p-8 backdrop-blur-md">
-            <h2 className="text-lg font-black uppercase tracking-tighter mb-6 flex items-center gap-3">
-              <UserPlus className="text-blue-500" size={20} /> Registrasi Staff
-            </h2>
-            
-            <form onSubmit={handleAddUser} className="space-y-4 not-italic">
+    <div className="space-y-8 animate-in fade-in duration-700">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white/[0.02] border border-white/5 p-8 rounded-[2.5rem] backdrop-blur-xl">
+        <div>
+          <h1 className="text-3xl font-black italic tracking-tighter uppercase">Operator <span className="text-blue-500">Security</span></h1>
+          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.4em] mt-2">Daftarkan PIN Kasir & Admin Disini</p>
+        </div>
+        <button onClick={() => setModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 flex items-center gap-3 transition-all active:scale-95">
+          <UserPlus size={18}/> Tambah Operator
+        </button>
+      </div>
+
+      {/* USER LIST GRID */}
+      {loading ? (
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500" size={40}/></div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {users.map((user) => (
+            <div key={user.id} className="bg-white/[0.02] border border-white/5 p-6 rounded-[2rem] hover:bg-white/[0.04] transition-all group">
+              <div className="flex justify-between items-start mb-6">
+                <div className={`p-4 rounded-2xl ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                  <Shield size={24} />
+                </div>
+                <button onClick={() => deleteUser(user.id)} className="p-2 text-gray-600 hover:text-red-500 transition-colors">
+                  <Trash2 size={18} />
+                </button>
+              </div>
+              
               <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block">Nama Lengkap</label>
+                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Nama Operator</p>
+                <h3 className="text-xl font-black italic uppercase text-white tracking-tighter">{user.username}</h3>
+                
+                <div className="mt-4 flex items-center gap-4">
+                  <div className="flex-1 bg-black/40 border border-white/5 p-3 rounded-xl flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-600 uppercase">PIN_ACCESS</span>
+                    <span className="font-mono text-blue-500 font-bold tracking-[0.3em]">****</span>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[8px] font-black tracking-widest border ${user.role === 'admin' ? 'border-purple-500 text-purple-400 bg-purple-500/5' : 'border-blue-500 text-blue-400 bg-blue-500/5'}`}>
+                    {user.role.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* MODAL ADD USER */}
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[999] flex items-center justify-center p-6">
+          <div className="bg-[#0b1120] border border-white/10 w-full max-w-md p-10 rounded-[3.5rem] shadow-2xl relative animate-in zoom-in duration-300">
+            <button onClick={() => setModalOpen(false)} className="absolute top-8 right-8 text-gray-600 hover:text-white"><X size={24}/></button>
+            
+            <div className="flex items-center gap-3 mb-10">
+              <div className="p-3 bg-blue-600 rounded-2xl"><Key size={20}/></div>
+              <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">New_Protocol</h2>
+            </div>
+
+            <form onSubmit={handleSave} className="space-y-6">
+              <div>
+                <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest ml-1 mb-2 block">Operator_Name</label>
                 <div className="relative">
-                  <User className="absolute left-4 top-3.5 text-gray-500" size={16} />
-                  <input 
-                    required
-                    type="text" 
-                    placeholder="Contoh: Budi Santoso"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm font-bold focus:border-blue-500 outline-none transition-all text-white"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({...formData, full_name: e.target.value})}
-                  />
+                  <User className="absolute left-4 top-4 text-gray-600" size={16}/>
+                  <input required placeholder="E.G. KASIR_01" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 pl-12 text-sm font-bold uppercase outline-none focus:border-blue-500 transition-all"
+                    value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block">Username</label>
-                  <input 
-                    required
-                    type="text" 
-                    placeholder="budi_pos"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm font-bold focus:border-blue-500 outline-none text-white"
-                    value={formData.username}
-                    onChange={(e) => setFormData({...formData, username: e.target.value.toLowerCase()})}
-                  />
+                  <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest ml-1 mb-2 block">PIN_KEY (Min. 4)</label>
+                  <input required type="number" placeholder="****" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm font-bold outline-none focus:border-blue-500 transition-all text-center tracking-[0.5em]"
+                    value={formData.pin} onChange={e => setFormData({...formData, pin: e.target.value})} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block">Role</label>
-                  <select 
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm font-bold focus:border-blue-500 outline-none appearance-none text-white"
-                    value={formData.role}
-                    onChange={(e) => setFormData({...formData, role: e.target.value})}
-                  >
-                    <option value="waiter" className="bg-slate-900">WAITER</option>
-                    <option value="kasir" className="bg-slate-900">KASIR</option>
-                    <option value="admin" className="bg-slate-900">ADMIN</option>
+                  <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest ml-1 mb-2 block">Access_Role</label>
+                  <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-xs font-black uppercase outline-none appearance-none cursor-pointer"
+                    value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}>
+                    <option value="kasir">KASIR</option>
+                    <option value="waiter">WAITER</option>
+                    <option value="admin">ADMIN_HQ</option>
                   </select>
                 </div>
               </div>
 
-              <div>
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-2 mb-1 block">PIN / Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-3.5 text-gray-500" size={16} />
-                  <input 
-                    required
-                    type="password" 
-                    placeholder="••••••"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm font-bold focus:border-blue-500 outline-none text-white"
-                    value={formData.password}
-                    onChange={(e) => setFormData({...formData, password: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <button 
-                disabled={saving || !tenantId}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-900/20 transition-all uppercase text-xs mt-4 flex justify-center items-center gap-2"
-              >
-                {saving ? <Loader2 className="animate-spin" size={18} /> : "Simpan User Baru"}
+              <button disabled={saving} className="w-full py-5 bg-blue-600 hover:bg-blue-500 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-600/20 flex items-center justify-center gap-3 transition-all mt-4">
+                {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                DEPLOY_USER
               </button>
             </form>
           </div>
         </div>
-
-        {/* DAFTAR USER */}
-        <div className="lg:col-span-2">
-          <div className="bg-white/[0.02] border border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center">
-              <h2 className="text-sm font-black uppercase tracking-widest italic text-white">Staff Terdaftar</h2>
-              <span className="text-[10px] bg-blue-500/10 text-blue-500 px-3 py-1 rounded-full font-black uppercase">{users.length} Total</span>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="text-[10px] text-gray-500 uppercase border-b border-white/5">
-                    <th className="p-6">Nama & Username</th>
-                    <th className="p-6">Role</th>
-                    <th className="p-6">Password</th>
-                    <th className="p-6 text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {loading ? (
-                    <tr><td colSpan={4} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-500" /></td></tr>
-                  ) : users.map((user) => (
-                    <tr key={user.id} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="p-6">
-                        <p className="font-black text-sm uppercase text-white">{user.full_name}</p>
-                        <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">@{user.username}</p>
-                      </td>
-                      <td className="p-6">
-                        <span className={`text-[9px] font-black px-3 py-1 rounded-lg uppercase italic ${
-                          user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 
-                          user.role === 'kasir' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'
-                        }`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="p-6 font-mono text-xs text-gray-500 group-hover:text-white transition-colors">
-                        {user.password.replace(/./g, '*')}
-                      </td>
-                      <td className="p-6 text-center">
-                        <button 
-                          onClick={() => deleteUser(user.id)}
-                          className="p-2 text-gray-500 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {users.length === 0 && !loading && (
-                    <tr><td colSpan={4} className="p-10 text-center text-gray-500 italic text-xs">Belum ada data staff.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

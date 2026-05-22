@@ -1,11 +1,17 @@
 import React from "react";
+import { useTenant } from "../../hooks/useTenant";
 import { LogOut, MonitorSmartphone } from "lucide-react"; 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const activePath = window.location.pathname;
+  // 🔥 PERBAIKAN: Mencegah error 'window is not defined' saat SSR
+  const activePath = typeof window !== "undefined" ? window.location.pathname : "";
 
-  // 🔥 MENGAMBIL NAMA OUTLET DARI MEMORI BROWSER
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : "UNKNOWN_OUTLET";
+  // 🔥 PERBAIKAN: Mengganti nama variabel agar tidak bentrok (shadowing)
+  const storedTenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : "UNKNOWN_OUTLET";
+  const { tenantId } = useTenant();
+  
+  // Gunakan tenantId dari hook, jika kosong gunakan dari localStorage
+  const displayTenantId = tenantId || storedTenantId;
 
   // Daftar Menu Utama
   const menuItems = [
@@ -13,15 +19,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "MENU MASTER", path: "/admin/menu", icon: "🍔" },
     { name: "QR TABLES", path: "/admin/qr", icon: "📱" },
     { name: "INVENTORY", path: "/admin/inventory", icon: "📦" },
-    
-    // 🔥 INI DIA MENU PAKET BARU KITA
     { name: "PAKET", path: "/admin/paket", icon: "🎁" }, 
-    
     { name: "RESEP", path: "/admin/recipes", icon: "⚖️" },
     { name: "KALKULATOR HPP", path: "/admin/hpp-calculator", icon: "🧮" }, 
+    { name: "PELANGGAN (CRM)", path: "/admin/customers", icon: "👥" },
     { name: "HISTORY", path: "/admin/history", icon: "📜" },
     { name: "SHIFT", path: "/admin/shifts", icon: "⏰" },
   ];
+
+  // KDS Shortcut
+  const kdsLink = { name: "KITCHEN DISPLAY (KDS)", path: "/kitchen", icon: "👨‍🍳" };
 
   // Tambahan Menu Pengaturan
   const settingItems = [
@@ -33,7 +40,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "RECEIPT BUILDER", path: "/admin/settings/receipt", icon: "🧾" }, 
   ];
 
-  // 🔥 FUNGSI LOGOUT AMAN (Perbaikan Bug Landing Page)
+  // 🔥 FUNGSI LOGOUT AMAN
   const handleLogOut = () => {
     if (window.confirm("Keluar dari Sistem Backoffice?")) {
       if (typeof window !== "undefined") {
@@ -46,7 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   };
 
-  // 🛡️ FUNGSI GEMBOK PC KASIR (Sekali Klik)
+  // 🛡️ FUNGSI GEMBOK PC KASIR
   const handleLockdown = () => {
     const confirmLock = window.confirm(
       "⚠️ PERINGATAN STRATEGIS!\n\nAnda akan mengunci laptop ini sebagai TERMINAL KASIR. Setelah dikunci, perangkat ini TIDAK AKAN BISA lagi mengakses area Admin/Backoffice.\n\nLanjutkan?"
@@ -67,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* SIDEBAR CONTAINER */}
       <div className="w-64 bg-white/[0.02] border-r border-white/5 flex flex-col shadow-2xl overflow-y-auto">
         
-        {/* LOGO & TENANT INFO (Beri padding di sini) */}
+        {/* LOGO & TENANT INFO */}
         <div className="p-6 pb-2">
           <h1 className="text-xl font-black italic tracking-tighter">
             DISBA <span className="text-blue-500">POS</span>
@@ -77,11 +84,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </p>
           <div className="mt-3 bg-blue-500/10 border border-blue-500/20 px-3 py-2 rounded-lg">
             <p className="text-[7px] text-blue-400 font-black tracking-widest">ACTIVE TENANT:</p>
-            <p className="text-[10px] font-black text-white truncate">{tenantId}</p>
+            {/* 🔥 PERBAIKAN: Gunakan displayTenantId */}
+            <p className="text-[10px] font-black text-white truncate">{displayTenantId}</p>
           </div>
         </div>
 
-        {/* NAVIGATION LIST (Beri padding di sini) */}
+        {/* NAVIGATION LIST */}
         <nav className="flex flex-col gap-1 flex-1 p-6 pt-2">
           <p className="text-[8px] text-blue-500 font-black tracking-widest mb-2 opacity-50">MAIN MENU</p>
           {menuItems.map((item) => (
@@ -100,7 +108,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ))}
 
           {/* SETTINGS SECTION */}
-          <div className="mt-6 flex flex-col gap-1">
+          <div className="mt-4 flex flex-col gap-1">
             <p className="text-[8px] text-blue-500 font-black tracking-widest mb-2 opacity-50">CONFIGURATION</p>
             {settingItems.map((item) => (
               <a
@@ -116,12 +124,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {item.name}
               </a>
             ))}
+            {/* KDS Link */}
+            <a href={kdsLink.path} target="_blank" rel="noreferrer"
+              className="flex items-center gap-4 px-4 py-3 rounded-xl text-[10px] font-black text-orange-400 hover:bg-orange-500/20 border border-orange-500/20 mt-2 transition-all">
+              <span className="text-sm">{kdsLink.icon}</span>
+              {kdsLink.name}
+              <span className="ml-auto text-[7px] bg-orange-500/20 px-1.5 py-0.5 rounded-full">BARU</span>
+            </a>
           </div>
         </nav>
 
         {/* 🔥 AREA AKSI (LOGOUT & GEMBOK) */}
         <div className="mt-auto p-6 border-t border-white/5 space-y-2">
-          {/* Tombol Logout (Asli Letjen) */}
+          {/* Tombol Logout */}
           <button 
             onClick={handleLogOut}
             className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500 border border-red-500/20 hover:border-red-500 text-red-500 hover:text-white py-3 rounded-xl transition-all text-[10px] font-black"
@@ -129,7 +144,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <LogOut size={14} /> LOGOUT
           </button>
 
-          {/* Tombol Gembok Terminal (Fitur Baru) */}
+          {/* Tombol Gembok Terminal */}
           <button 
             onClick={handleLockdown}
             className="w-full flex flex-col items-center justify-center py-3 bg-white/5 hover:bg-orange-500 border border-white/10 hover:border-orange-500 text-gray-400 hover:text-white rounded-xl transition-all group"

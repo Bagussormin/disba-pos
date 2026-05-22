@@ -1,6 +1,7 @@
 const net = require('node:net');
 const express = require('express');
 const cors = require('cors');
+const nodemailer = require('nodemailer');
 
 const app = express();
 
@@ -13,6 +14,11 @@ app.use(cors({
 app.use(express.json());
 
 // --- UTILS & FORMATTING ---
+app.get('/ping', (req, res) => {
+    console.log(`[${new Date().toLocaleTimeString()}] 💓 Connection test from client...`);
+    res.json({ success: true, message: "PONG! DISBA BRIDGE V4.5 IS ALIVE", timestamp: new Date() });
+});
+
 const formatIDR = (val) => "Rp. " + Number(val || 0).toLocaleString('id-ID');
 const line = "--------------------------------\n";
 const center = "\x1b\x61\x01";
@@ -92,8 +98,11 @@ app.post('/print-order', async (req, res) => {
     // Runner mendapatkan rekap seluruh item
     if (d.ip_runner) jobs.push(sendToDevice(d.ip_runner, 9100, generateTicket(d.items, "RUNNER"), "RUNNER", tid));
 
-    await Promise.all(jobs);
-    res.json({ success: true, message: "Order tickets sent" });
+    const results = await Promise.all(jobs);
+    const successCount = results.filter(r => r === true).length;
+    
+    if (jobs.length > 0 && successCount === 0) return res.status(500).json({ success: false, message: "Gagal terhubung ke semua printer produksi" });
+    res.json({ success: true, message: "Order tickets processed", successCount });
 });
 
 /**
@@ -150,8 +159,11 @@ app.post('/print-receipt', async (req, res) => {
         jobs.push(sendToDevice(d.ip_office, 9100, Buffer.concat([officeHeader, contentBuffer]), "OFFICE_COPY", tid));
     }
 
-    await Promise.all(jobs);
-    res.json({ success: true, message: "Receipt printed" });
+    const results = await Promise.all(jobs);
+    const successCount = results.filter(r => r === true).length;
+
+    if (jobs.length > 0 && successCount === 0) return res.status(500).json({ success: false, message: "Gagal terhubung ke printer kasir/kantor" });
+    res.json({ success: true, message: "Receipt printed", successCount });
 });
 
 /**
@@ -187,6 +199,70 @@ app.post('/print-settlement', async (req, res) => {
 
     await Promise.all(jobs);
     res.json({ success: true });
+});
+
+/**
+ * 4. JALUR EMAIL (LAPORAN PDF)
+ */
+app.post('/send-report-email', async (req, res) => {
+    const { email_to, outlet_name, period, summary, pdf_attachment, tenant_id } = req.body;
+
+    if (!email_to || !pdf_attachment) {
+        return res.status(400).json({ success: false, message: "Email atau Lampiran PDF tidak valid" });
+    }
+
+    try {
+        // KONFIGURASI SMTP (Ubah dengan kredensial Gmail / SMTP Anda yang sesungguhnya)
+        // Disarankan menggunakan App Passwords jika menggunakan Gmail.
+        const transporter = nodemailer.createTransport({
+            service: 'gmail', // atau host SMTP lain
+            auth: {
+                user: process.env.SMTP_EMAIL || 'email.disba.pos@gmail.com', // Ganti dengan email pengirim
+                pass: process.env.SMTP_PASS || 'password_app_disini' // Ganti dengan App Password
+            }
+        });
+
+        // Mengubah string base64 dari jsPDF menjadi buffer
+        const base64Data = pdf_attachment.split('base64,')[1];
+        const pdfBuffer = Buffer.from(base64Data, 'base64');
+
+        const mailOptions = {
+            from: `"Disba POS Intelligence" <${process.env.SMTP_EMAIL || 'email.disba.pos@gmail.com'}>`,
+            to: email_to,
+            subject: `Laporan Penjualan - ${outlet_name} (${period})`,
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2 style="color: #0284c7;">Laporan Keuangan & Penjualan</h2>
+                    <p>Halo Tim <strong>${outlet_name}</strong>,</p>
+                    <p>Berikut adalah ringkasan laporan penjualan Anda untuk periode <strong>${period}</strong>:</p>
+                    <ul>
+                        <li><strong>Gross Sales:</strong> Rp ${summary.subtotal.toLocaleString('id-ID')}</li>
+                        <li><strong>Service Charge:</strong> Rp ${summary.service.toLocaleString('id-ID')}</li>
+                        <li><strong>Tax (PB1):</strong> Rp ${summary.tax.toLocaleString('id-ID')}</li>
+                        <li><strong>Net Revenue:</strong> Rp ${summary.total.toLocaleString('id-ID')}</li>
+                    </ul>
+                    <p>Laporan lengkap dalam format PDF telah dilampirkan pada email ini.</p>
+                    <br/>
+                    <p style="font-size: 12px; color: #888;"><i>Email ini dikirim secara otomatis oleh sistem Disba POS.</i></p>
+                </div>
+            `,
+            attachments: [
+                {
+                    filename: `Report_${tenant_id}_${period.replace(/\//g, '-')}.pdf`,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf'
+                }
+            ]
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[${tenant_id}] 📧 EMAIL TERKIRIM KE: ${email_to} (ID: ${info.messageId})`);
+        res.json({ success: true, messageId: info.messageId });
+
+    } catch (error) {
+        console.error(`[${tenant_id}] ❌ GAGAL MENGIRIM EMAIL:`, error);
+        res.status(500).json({ success: false, message: error.message });
+    }
 });
 
 // --- START SERVER ---

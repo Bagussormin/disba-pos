@@ -1,30 +1,74 @@
 import React, { useEffect, useState } from "react";
+import { useTenant } from "../../hooks/useTenant";
 import { supabase } from "../../lib/supabase";
 import { 
   Plus, Package, AlertTriangle, Trash2, X, Cog, 
   ArrowUpCircle, Activity, LayoutGrid, List, Search 
 } from "lucide-react";
 
+interface InventoryItem {
+  id: string;
+  sku_code?: string; // Tambahkan SKU/Barcode
+  item_name: string;
+  unit: string;
+  current_stock: number;
+  min_stock: number;
+  cost_price: number;
+  is_retail: boolean;
+  expiry_date?: string;
+  tenant_id: string;
+}
+
+interface MenuItem {
+  id: number;
+  name: string;
+  category: string;
+  tenant_id: string;
+}
+
+interface InventoryItemWithDetails extends InventoryItem {
+  item_name: string;
+  unit: string;
+}
+
+interface Recipe {
+  id: string;
+  menu_id: number;
+  inventory_id: string;
+  usage_quantity: number;
+  tenant_id: string;
+  inventory?: InventoryItemWithDetails; // Nested inventory details
+}
+
 export default function InventoryApp() {
   const [activeSubMenu, setActiveSubMenu] = useState("DETAIL PRODUK");
-  const [items, setItems] = useState<any[]>([]); 
-  const [menuList, setMenuList] = useState<any[]>([]); 
-  const [recipes, setRecipes] = useState<any[]>([]); 
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [menuList, setMenuList] = useState<MenuItem[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
-  const [modalType, setModalType] = useState<"RECIPE" | "STOCK_IN" | "ADD_MATERIAL" | null>(null);
-  const [selectedMenu, setSelectedMenu] = useState<any>(null);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [modalType, setModalType] = useState<"RECIPE" | "STOCK_IN" | "ADD_MATERIAL" | null>(null); // Type for current modal
+  const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null); // Selected menu for recipe config
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null); // Selected inventory item for stock-in
 
   // 🔥 UPGRADE: Menambahkan `stock` (stok awal) dan `price` (harga modal) ke state
-  const [newMaterial, setNewMaterial] = useState({ name: "", unit: "GRAM", stock: "0", min: "10", price: "0" });
+  const [newMaterial, setNewMaterial] = useState({ 
+    name: "", 
+    sku: "",
+    is_retail: false, // Tambahkan toggle tipe barang
+    unit: "BOTTLE", 
+    stock: "0", 
+    min: "5", 
+    price: "0",
+    expiry: "" 
+  });
   
   const [recipeUsage, setRecipeUsage] = useState("");
   const [selectedInvId, setSelectedInvId] = useState("");
   const [stockAmount, setStockAmount] = useState("");
 
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+  const { tenantId } = useTenant();
 
   useEffect(() => { 
     if (tenantId) loadData(); 
@@ -33,19 +77,27 @@ export default function InventoryApp() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: menus } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).order("category");
-      const { data: inv } = await supabase.from("inventory").select("*").eq("tenant_id", tenantId).order("item_name");
-      const { data: rec } = await supabase.from("recipes").select(`*, inventory:inventory_id (item_name, unit)`).eq("tenant_id", tenantId);
+      const { data: menus, error: menuError } = await supabase.from("menus").select("id, name, category, tenant_id").eq("tenant_id", tenantId).order("category");
+      const { data: inv, error: invError } = await supabase.from("inventory").select("*").eq("tenant_id", tenantId).order("item_name");
+      const { data: rec, error: recError } = await supabase.from("recipes").select(`*, inventory:inventory_id (item_name, unit)`).eq("tenant_id", tenantId);
       
       if (menus) setMenuList(menus);
+      if (menuError) console.error("Error fetching menus:", menuError.message);
+
       if (inv) {
-        const uniqueItems = inv.reduce((acc: any[], current) => {
+        // Ensure unique items by name if there are duplicates (e.g., from different batches)
+        // For inventory, we usually want to see all distinct items, not just unique names.
+        // The previous logic was reducing by item_name, which might hide actual distinct items.
+        // Let's keep all distinct inventory items for now.
+        const uniqueItems = inv.reduce((acc: InventoryItem[], current) => {
           const x = acc.find(item => item.item_name === current.item_name);
           return !x ? acc.concat([current]) : acc;
         }, []);
         setItems(uniqueItems);
       }
       if (rec) setRecipes(rec);
+      if (invError) console.error("Error fetching inventory:", invError.message);
+      if (recError) console.error("Error fetching recipes:", recError.message);
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -56,17 +108,20 @@ export default function InventoryApp() {
     // 🔥 UPGRADE: Memasukkan current_stock dan cost_price ke database saat membuat material baru
     const { error } = await supabase.from("inventory").insert([{ 
       item_name: newMaterial.name.toUpperCase(), 
-      unit: newMaterial.unit.toUpperCase(), 
+      sku_code: newMaterial.sku.toUpperCase(),
+      unit: newMaterial.unit.toUpperCase() || "BOTTLE", 
       current_stock: parseFloat(newMaterial.stock) || 0,
       min_stock: parseFloat(newMaterial.min) || 10,
       cost_price: parseFloat(newMaterial.price) || 0, // Harga modal dimasukkan ke database
+      is_retail: newMaterial.is_retail,
+      expiry_date: newMaterial.expiry || null,
       tenant_id: tenantId
     }]);
     
     if (!error) { 
       setModalType(null); 
       // Reset form
-      setNewMaterial({ name: "", unit: "GRAM", stock: "0", min: "10", price: "0" });
+      setNewMaterial({ name: "", sku: "", unit: "BOTTLE", stock: "0", min: "5", price: "0", expiry: "" });
       loadData(); 
     } else {
       alert("Gagal menambahkan material: " + error.message);
@@ -78,12 +133,21 @@ export default function InventoryApp() {
     const amount = parseFloat(stockAmount);
     if (isNaN(amount) || amount <= 0) return;
     
+    if (!selectedItem) {
+      alert("PILIH BARANG TERLEBIH DAHULU!");
+      return;
+    }
+
     const { error } = await supabase.from("inventory")
       .update({ current_stock: (selectedItem.current_stock || 0) + amount })
       .eq("id", selectedItem.id)
       .eq("tenant_id", tenantId);
       
-    if (!error) { setModalType(null); setStockAmount(""); loadData(); }
+    if (error) {
+      alert("GAGAL UPDATE STOK: " + error.message);
+    } else {
+      setModalType(null); setStockAmount(""); loadData();
+    }
   };
 
   const saveRecipe = async () => {
@@ -108,7 +172,7 @@ export default function InventoryApp() {
   }
 
   const filteredItems = items.filter(i => i.item_name.toLowerCase().includes(searchTerm.toLowerCase()));
-  const groupedMenu = menuList.reduce((acc: any, menu: any) => {
+  const groupedMenu = menuList.reduce((acc: Record<string, MenuItem[]>, menu: MenuItem) => {
     const cat = menu.category || "OTHERS";
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(menu);
@@ -175,7 +239,7 @@ export default function InventoryApp() {
                     <h2 className="text-[11px] font-black text-blue-500 tracking-[0.3em] uppercase">{category}</h2>
                     <div className="h-[1px] flex-1 bg-gradient-to-r from-blue-500/20 to-transparent"></div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {groupedMenu[category].map((menu: any) => {
                       const menuRecipes = recipes.filter(r => r.menu_id === menu.id);
                       return (
@@ -263,7 +327,14 @@ export default function InventoryApp() {
                     <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
                       <td className="px-8 py-4">
                         <p className="text-[12px] font-black text-white italic tracking-tighter">{item.item_name}</p>
-                        <p className="text-[8px] text-slate-600 font-mono">UNIT: {item.unit} | ID: {item.id}</p>
+                        <div className="flex gap-2 mt-1">
+                          <span className={`text-[7px] font-black px-1.5 py-0.5 rounded-full border ${item.is_retail ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                            {item.is_retail ? 'RETAIL_SALE' : 'F&B_RAW'}
+                          </span>
+                          <span className="text-[7px] text-slate-600 font-mono">UNIT: {item.unit}</span>
+                        </div>
+                        {item.expiry_date && <p className="text-[8px] text-red-400 font-mono uppercase">EXP: {item.expiry_date}</p>}
+                        {item.sku_code && <p className="text-[8px] text-blue-500 font-mono">SKU: {item.sku_code}</p>}
                       </td>
                       <td className="px-8 py-4">
                         <div className="flex items-center gap-3 font-mono">
@@ -308,8 +379,28 @@ export default function InventoryApp() {
                 <>
                   <div>
                     <label className="text-[8px] font-bold text-gray-500 tracking-widest uppercase ml-1">Nama Barang</label>
-                    <input type="text" placeholder="Misal: Biji Kopi / Susu" onChange={(e) => setNewMaterial({...newMaterial, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono text-white outline-none focus:border-blue-500" />
+                    <input type="text" placeholder="MISAL: BIJI KOPI / JACK DANIELS" value={newMaterial.name} onChange={(e) => setNewMaterial({...newMaterial, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono text-white outline-none focus:border-blue-500" />
                   </div>
+
+                  {/* TOGGLE TIPE BARANG */}
+                  <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 gap-1">
+                    <button type="button" onClick={() => setNewMaterial({...newMaterial, is_retail: false})}
+                      className={`flex-1 py-2 rounded-lg text-[8px] font-black transition-all ${!newMaterial.is_retail ? 'bg-emerald-600 text-white' : 'text-gray-500'}`}>
+                      F&B RAW MATERIAL
+                    </button>
+                    <button type="button" onClick={() => setNewMaterial({...newMaterial, is_retail: true})}
+                      className={`flex-1 py-2 rounded-lg text-[8px] font-black transition-all ${newMaterial.is_retail ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>
+                      BOTTLE / RETAIL (SKU)
+                    </button>
+                  </div>
+
+                  {/* Input Barcode */}
+                  {newMaterial.is_retail && (
+                    <div className="animate-in fade-in zoom-in duration-200">
+                      <label className="text-[8px] font-bold text-blue-500 tracking-widest uppercase ml-1">Barcode / SKU</label>
+                      <input type="text" placeholder="Scan atau Ketik Barcode..." value={newMaterial.sku} onChange={(e) => setNewMaterial({...newMaterial, sku: e.target.value})} className="w-full bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4 text-[11px] font-mono text-blue-400 outline-none focus:border-blue-500" />
+                    </div>
+                  )}
                   
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -325,6 +416,11 @@ export default function InventoryApp() {
                   <div>
                     <label className="text-[8px] font-bold text-gray-500 tracking-widest uppercase ml-1">Total Harga Beli (Rp)</label>
                     <input type="number" placeholder="Misal: 150000" onChange={(e) => setNewMaterial({...newMaterial, price: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[11px] font-mono outline-none focus:border-blue-500" />
+                  </div>
+
+                  <div>
+                    <label className="text-[8px] font-bold text-red-500 tracking-widest uppercase ml-1">Tanggal Kadaluarsa (Expiry)</label>
+                    <input type="date" onChange={(e) => setNewMaterial({...newMaterial, expiry: e.target.value})} className="w-full bg-red-500/5 border border-red-500/20 rounded-2xl p-4 text-[11px] font-mono text-red-400 outline-none focus:border-red-500" />
                   </div>
                 </>
               )}

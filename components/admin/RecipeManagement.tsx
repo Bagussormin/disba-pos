@@ -1,10 +1,33 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+interface MenuItem {
+  id: number;
+  name: string;
+  price: number;
+  is_package?: boolean;
+  item_name?: string; // For inventory items that might be used as menu items
+}
+
+interface InventoryItem {
+  id: string;
+  item_name: string;
+  name?: string; // For consistency with MenuItem
+}
+
+interface Recipe {
+  id: number;
+  menu_id: number;
+  sub_menu_id?: number; // For package items that are menus
+  inventory_id?: string; // For recipe items that are inventory
+  qty_needed: number;
+  tenant_id: string;
+}
+
 export default function RecipeManagement() {
-  const [menus, setMenus] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [recipes, setRecipes] = useState<any[]>([]);
+  const [menus, setMenus] = useState<MenuItem[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   
   // State Input Paket
   const [packageName, setPackageName] = useState("");
@@ -22,17 +45,17 @@ export default function RecipeManagement() {
 
   const fetchData = async () => {
     // 🔥 FILTER DATA BERDASARKAN OUTLET
-    const { data: m } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).order("name");
-    const { data: inv } = await supabase.from("inventory").select("*").eq("tenant_id", tenantId).order("item_name");
-    setMenus(m || []);
-    setInventory(inv || []);
+    const { data: m, error: menuError } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).order("name");
+    const { data: inv, error: invError } = await supabase.from("inventory").select("*").eq("tenant_id", tenantId).order("item_name");
+    if (m) setMenus(m); else console.error("Error fetching menus:", menuError?.message);
+    if (inv) setInventory(inv); else console.error("Error fetching inventory:", invError?.message);
     fetchRecipes();
   };
 
   const fetchRecipes = async () => {
     // 🔥 FILTER RESEP BERDASARKAN OUTLET
-    const { data } = await supabase.from("recipes").select("*").eq("tenant_id", tenantId).order('id', { ascending: false });
-    setRecipes(data || []);
+    const { data, error } = await supabase.from("recipes").select("*").eq("tenant_id", tenantId).order('id', { ascending: false });
+    if (data) setRecipes(data); else console.error("Error fetching recipes:", error?.message);
   };
 
   // Helper Cari Nama

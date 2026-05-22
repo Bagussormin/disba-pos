@@ -2,29 +2,48 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Calendar, FileText, TrendingUp, Award, Zap, Clock } from "lucide-react";
+import * as XLSX from "xlsx";
+import { Calendar, FileText, TrendingUp, Award, Zap, Clock, Mail, Table, Loader2 } from "lucide-react";
+
+interface SalesTransaction {
+  id: string;
+  created_at: string;
+  receipt_no: string;
+  subtotal: number;
+  service_charge: number;
+  pb1: number;
+  discount: number;
+  total: number;
+  items: any; // Atau interface OrderItem
+  cashier_name: string;
+  tenant_id: string;
+}
+
+interface ProductPerf {
+  name: string;
+  qty: number;
+  revenue: number;
+}
 
 export default function SalesReport() {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<SalesTransaction[]>([]); // Explicitly type transactions
   const [activeShifts, setActiveShifts] = useState<any[]>([]);
-  const [topItems, setTopItems] = useState<any[]>([]);
+  const [topItems, setTopItems] = useState<ProductPerf[]>([]);
   const [loading, setLoading] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   const [summary, setSummary] = useState({ subtotal: 0, service: 0, tax: 0, total: 0, discount: 0 });
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
-  // 1. Fungsi Ambil Data Shift (Realtime Monitor) - DIKUNCI
   const fetchActiveShifts = async () => {
     if(!tenantId) return;
-    const { data } = await supabase.from("shifts").select("*").eq("status", "open").eq("tenant_id", tenantId);
+    const { data, error } = await supabase.from("shifts").select("*").eq("status", "open").eq("tenant_id", tenantId);
     if (data) setActiveShifts(data);
   };
 
-  // 2. Fungsi Utama Ambil Data Laporan - DIKUNCI
   const fetchReportData = useCallback(async () => {
     if(!tenantId) return;
     setLoading(true);
@@ -34,11 +53,11 @@ export default function SalesReport() {
     const { data: trx, error } = await supabase
       .from("transactions")
       .select("*")
-      .eq("tenant_id", tenantId) // 🔥 FILTER OUTLET
+      .eq("tenant_id", tenantId)
       .gte("created_at", start)
       .lte("created_at", end)
       .order("created_at", { ascending: false });
-
+    
     if (error) {
       console.error("Error:", error.message);
       setLoading(false);
@@ -58,7 +77,7 @@ export default function SalesReport() {
       setSummary(totals);
 
       const itemMap: any = {};
-      trx.forEach(t => {
+      trx.forEach((t: SalesTransaction) => {
         const items = typeof t.items === 'string' ? JSON.parse(t.items) : t.items;
         if (Array.isArray(items)) {
           items.forEach((item: any) => {
@@ -91,87 +110,188 @@ export default function SalesReport() {
     return () => clearInterval(interval);
   }, [fetchReportData]);
 
-  // 3. Fungsi Export PDF
-  const exportToPDF = () => {
+  // GENERATE PDF DOC (Digunakan untuk Export dan Email)
+  const generatePDFDoc = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
 
-    // Brand Header
+    // Brand Header yang lebih elegan
     doc.setFillColor(2, 6, 23); // Dark slate
-    doc.rect(0, 0, pageWidth, 25, 'F');
-    doc.setTextColor(6, 182, 212); // Cyan 500
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DISBA POS INTELLIGENCE', 14, 13);
+    doc.rect(0, 0, pageWidth, 30, 'F');
+    doc.setTextColor(56, 189, 248); // Light Blue
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bolditalic');
+    doc.text('DISBA POS INTELLIGENCE', 14, 18);
     
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Tenant: ${tenantId || "STORE"}`, 14, 19);
-    
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Sales Analytics Report', 14, 37);
-    
+    doc.setTextColor(200, 200, 200);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
+    doc.text(`CABANG: ${tenantId || "STORE"}`, 14, 25);
+    
+    // Title
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LAPORAN KEUANGAN & PENJUALAN', 14, 42);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 100, 100);
-    doc.text(`Period: ${startDate} to ${endDate}`, 14, 44);
+    doc.text(`Periode: ${startDate} s/d ${endDate}`, 14, 48);
 
+    // Tabel Ringkasan Keuangan
     autoTable(doc, {
-      startY: 50,
-      head: [["Financial Summary", "Value (IDR)"]],
+      startY: 55,
+      head: [["Ringkasan Finansial", "Nominal (IDR)"]],
       body: [
-        ["Gross Sales", `Rp ${summary.subtotal.toLocaleString()}`],
+        ["Pendapatan Kotor (Gross Sales)", `Rp ${summary.subtotal.toLocaleString()}`],
         ["Service Charge", `Rp ${summary.service.toLocaleString()}`],
-        ["PB1 (Tax)", `Rp ${summary.tax.toLocaleString()}`],
-        ["Discounts", `(Rp ${summary.discount.toLocaleString()})`],
-        ["NET REVENUE", `Rp ${summary.total.toLocaleString()}`],
+        ["Pajak (PB1)", `Rp ${summary.tax.toLocaleString()}`],
+        ["Total Diskon", `(Rp ${summary.discount.toLocaleString()})`],
+        ["PENDAPATAN BERSIH (NET REVENUE)", `Rp ${summary.total.toLocaleString()}`],
       ],
       theme: 'grid',
-      headStyles: { fillColor: [2, 6, 23], textColor: [6, 182, 212], fontStyle: 'bold' },
-      bodyStyles: { textColor: [50, 50, 50] },
+      headStyles: { fillColor: [2, 6, 23], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 11 },
+      bodyStyles: { textColor: [30, 30, 30], fontSize: 10, cellPadding: 6 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      styles: { cellPadding: 5, fontSize: 10 },
-      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+      columnStyles: { 
+        0: { fontStyle: 'bold' },
+        1: { halign: 'right', fontStyle: 'bold', textColor: [2, 100, 50] } 
+      }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY || 50;
+    const finalY = (doc as any).lastAutoTable.finalY || 55;
 
-    doc.setFontSize(12);
+    // Tabel Performa Produk
+    doc.setFontSize(14);
     doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'bold');
-    doc.text('Product Performance (Top Items)', 14, finalY + 15);
+    doc.text('Performa Produk (Terlaris)', 14, finalY + 15);
 
     autoTable(doc, {
       startY: finalY + 20,
-      head: [["Product Name", "Qty Sold", "Total Revenue"]],
-      body: topItems.slice(0, 25).map(i => [i.name, `${i.qty} Pcs`, `Rp ${i.revenue.toLocaleString()}`]),
+      head: [["Nama Produk", "Terjual", "Total Pendapatan"]],
+      body: topItems.slice(0, 30).map(i => [i.name, `${i.qty} Pcs`, `Rp ${i.revenue.toLocaleString()}`]),
       theme: 'striped',
       headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
       bodyStyles: { textColor: [50, 50, 50] },
       alternateRowStyles: { fillColor: [241, 245, 249] },
-      styles: { cellPadding: 4, fontSize: 9 },
+      styles: { cellPadding: 5, fontSize: 9 },
       columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right', fontStyle: 'bold' } }
     });
 
-    // Footer
+    // Footer Tiap Halaman
     const pageCount = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text(`Generated: ${new Date().toLocaleString('id-ID')} | Page ${i} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
+        doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')} | Halaman ${i} dari ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
     }
 
+    return doc;
+  };
+
+  const exportToPDF = () => {
+    const doc = generatePDFDoc();
     doc.save(`${tenantId}_Report_${startDate}_${endDate}.pdf`);
+  };
+
+  const exportToExcel = () => {
+    // 1. Siapkan Sheet Ringkasan Keuangan
+    const summaryData = [
+      { Kategori: "Pendapatan Kotor", Nominal: summary.subtotal },
+      { Kategori: "Service Charge", Nominal: summary.service },
+      { Kategori: "Pajak (PB1)", Nominal: summary.tax },
+      { Kategori: "Diskon", Nominal: -summary.discount },
+      { Kategori: "PENDAPATAN BERSIH", Nominal: summary.total }
+    ];
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+
+    // 2. Siapkan Sheet Penjualan Produk
+    const productData = topItems.map(item => ({
+      "Nama Produk": item.name,
+      "Terjual (Pcs)": item.qty,
+      "Pendapatan (IDR)": item.revenue
+    }));
+    const wsProducts = XLSX.utils.json_to_sheet(productData);
+
+    // 3. Siapkan Sheet History Transaksi
+    const trxData = transactions.map(t => ({
+      "Tanggal & Jam": new Date(t.created_at).toLocaleString('id-ID'),
+      "No Nota": t.receipt_no,
+      "Kasir": t.cashier_name || "-",
+      "Subtotal": t.subtotal,
+      "Diskon": t.discount,
+      "Total": t.total
+    }));
+    const wsTrx = XLSX.utils.json_to_sheet(trxData);
+
+    // Buat Workbook dan gabungkan
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan Finansial");
+    XLSX.utils.book_append_sheet(wb, wsProducts, "Performa Produk");
+    XLSX.utils.book_append_sheet(wb, wsTrx, "Histori Transaksi");
+
+    // Unduh File
+    XLSX.writeFile(wb, `${tenantId}_Report_${startDate}_${endDate}.xlsx`);
+  };
+
+  const sendEmailReport = async () => {
+    setEmailing(true);
+    try {
+      // Dapatkan email tenant dari database
+      const { data: profile } = await supabase.from("outlet_profile").select("email, name").eq("tenant_id", tenantId).single();
+      
+      if (!profile || !profile.email) {
+        alert("Email outlet belum diatur! Silakan atur di menu 'Profil & Pengaturan'.");
+        setEmailing(false);
+        return;
+      }
+
+      // Generate PDF Base64
+      const doc = generatePDFDoc();
+      const pdfBase64 = doc.output('datauristring');
+      
+      // Ambil IP Bridge dari receipt_settings untuk memanggil printer-service lokal
+      const { data: settings } = await supabase.from("receipt_settings").select("bridge_ip").eq("tenant_id", tenantId).maybeSingle();
+      const bridgeIp = settings?.bridge_ip || "127.0.0.1";
+      const baseUrl = bridgeIp.includes("http") ? bridgeIp : `http://${bridgeIp}:4000`;
+
+      console.log(`Attempting to send report to: ${baseUrl}/send-report-email`);
+
+      // Tembak ke Node.js lokal untuk mengirim email
+      const response = await fetch(`${baseUrl}/send-report-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          outlet_name: profile.name || tenantId,
+          email_to: profile.email,
+          period: `${startDate} s/d ${endDate}`,
+          summary: summary,
+          pdf_attachment: pdfBase64
+        })
+      });
+
+      if (response.ok) {
+        alert(`✅ Laporan PDF berhasil dikirim ke email: ${profile.email}`);
+      } else {
+        const err = await response.json();
+        alert(`❌ Gagal mengirim email: ${err.message || 'Cek server bridge'}`);
+      }
+    } catch (error: any) {
+      alert(`❌ KONEKSI GAGAL! Periksa apakah Server Node.js sudah menyala di IP:PORT yang benar.\n\nDetail: ${error.message}`);
+      console.error(error);
+    } finally {
+      setEmailing(false);
+    }
   };
 
   return (
     <div className="p-8 space-y-8 bg-[#020617] text-white min-h-screen font-sans">
       {/* HEADER COMMAND CENTER */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white/[0.02] p-8 rounded-[2.5rem] border border-white/5 shadow-2xl gap-6">
+      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white/[0.02] p-8 rounded-[2.5rem] border border-white/5 shadow-2xl gap-6">
         <div>
           <h2 className="text-4xl font-black italic tracking-tighter uppercase flex items-center gap-3">
             <Zap className="text-blue-500" fill="currentColor" />
@@ -181,16 +301,25 @@ export default function SalesReport() {
         </div>
         
         <div className="flex flex-wrap gap-4 items-center">
-          <button onClick={exportToPDF} className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-2xl text-[11px] font-black transition-all shadow-lg shadow-red-600/30 flex items-center gap-2 uppercase">
-            <FileText size={14} /> Export Report
-          </button>
-          
           <div className="bg-black/40 p-2 rounded-2xl border border-white/10 flex items-center gap-3 px-4">
             <Calendar size={14} className="text-blue-500" />
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[11px] font-black text-white outline-none uppercase" />
             <span className="text-gray-600 font-black">TO</span>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[11px] font-black text-white outline-none uppercase" />
           </div>
+
+          <button onClick={exportToPDF} className="bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/20 px-6 py-3 rounded-2xl text-[11px] font-black transition-all flex items-center gap-2 uppercase">
+            <FileText size={14} /> PDF
+          </button>
+          
+          <button onClick={exportToExcel} className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-500 hover:text-white border border-emerald-500/20 px-6 py-3 rounded-2xl text-[11px] font-black transition-all flex items-center gap-2 uppercase">
+            <Table size={14} /> EXCEL
+          </button>
+
+          <button onClick={sendEmailReport} disabled={emailing} className="bg-blue-600 hover:bg-blue-500 text-white border border-blue-500/50 px-8 py-3 rounded-2xl text-[11px] font-black transition-all shadow-lg shadow-blue-600/30 flex items-center gap-2 uppercase disabled:opacity-50">
+            {emailing ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+            {emailing ? "MENGIRIM..." : "EMAIL REPORT"}
+          </button>
         </div>
       </header>
 

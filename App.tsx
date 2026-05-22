@@ -1,5 +1,6 @@
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import OutletLogin from './components/admin/OutletLogin'; 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 // Import Landing Page
 import LandingPage from "./components/admin/LandingPage"; 
@@ -42,20 +43,15 @@ import ProtocolLock from "./components/admin/ProtocolLock";
 
 export default function App() {
   const [user, setUser] = useState<null | { username: string; role: string }>(null);
-  const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [isLicenseActive, setIsLicenseActive] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // --- SAKLAR KEAMANAN PERANGKAT ---
   const activeTenantId = localStorage.getItem("tenant_id");
   const isTerminalOnly = localStorage.getItem("disba_terminal_only") === "true"; // Gembok PC Kasir
 
   useEffect(() => {
-    const handleLocationChange = () => {
-      setCurrentPath(window.location.pathname);
-    };
-
-    window.addEventListener("popstate", handleLocationChange);
-    
     // Cek Sesi Login Staff & Admin
     const isAdminAuth = localStorage.getItem("is_admin") === "true";
     const savedRole = localStorage.getItem("role");
@@ -63,27 +59,17 @@ export default function App() {
     const licenseStatus = localStorage.getItem("disba_license_active") !== "false";
 
     setIsLicenseActive(licenseStatus);
+    const isSupreme = savedUser === "SUPREME_FOUNDER";
 
-    if (isAdminAuth) {
+    if (isAdminAuth || isSupreme) {
       setUser({ username: savedUser || "Supreme Admin", role: "admin" });
     } else if (savedRole && savedUser) {
       setUser({ username: savedUser, role: savedRole });
     }
-
-    // Auto-lock expired 
-    const expiryDate = new Date("2027-03-03");
-    if (new Date() > expiryDate) {
-      setIsLicenseActive(false);
-      localStorage.setItem("disba_license_active", "false");
-    }
-
-    return () => window.removeEventListener("popstate", handleLocationChange);
   }, []);
 
-  // --- HANDLERS ---
   const handleEnterSystem = () => {
-    window.history.pushState({}, "", "/outlet-login");
-    setCurrentPath("/outlet-login");
+    navigate("/outlet-login");
   };
 
   const handleLoginSuccess = (role: string) => {
@@ -91,87 +77,86 @@ export default function App() {
     setUser({ username: savedUsername, role: role });
     
     if (role === "admin") {
-      window.history.pushState({}, "", "/admin/dashboard");
-      setCurrentPath("/admin/dashboard");
+      navigate("/admin/dashboard");
     } else {
-      window.history.pushState({}, "", "/dashboard");
-      setCurrentPath("/dashboard");
+      navigate("/dashboard");
     }
   };
 
-  const normalizedPath = currentPath.endsWith('/') && currentPath !== '/' 
-    ? currentPath.slice(0, -1) 
-    : currentPath;
-
   // 1. PRIORITAS UTAMA: FOUNDER & LISENSI
-  if (normalizedPath === "/founder-hq" || normalizedPath === "/founder-console") return <FounderHQ />;
-  if (!isLicenseActive) return <ProtocolLock />;
-
-  // 2. AREA PUBLIK (MENU QR)
-  if (normalizedPath.startsWith("/menu")) return <CustomerMenu />;
-
-  // 3. JIKA ALAT BELUM TERDAFTAR (KTP TENANT KOSONG)
-  if (!activeTenantId) {
-    if (normalizedPath === "/outlet-login") return <OutletLogin />;
-    return <LandingPage onEnterSystem={handleEnterSystem} />;
+  const isSupreme = localStorage.getItem("username") === "SUPREME_FOUNDER";
+  
+  // Hanya kunci jika lisensi mati DAN user bukan Supreme Founder DAN bukan di halaman Central
+  if (!isLicenseActive && !isSupreme && location.pathname !== "/founder-hq" && location.pathname !== "/founder-console") {
+    return <ProtocolLock />;
   }
 
-  // 4. AREA ADMIN (OUTLET HQ)
-  if (normalizedPath.startsWith("/admin")) {
-    // PROTEKSI: Jika PC ini diset sebagai Terminal Only, tendang balik ke kasir
-    if (isTerminalOnly) {
-        window.history.pushState({}, "", "/dashboard");
-        setCurrentPath("/dashboard");
-        return null;
-    }
-
-    if (!user || user.role !== "admin") return <AdminLogin />;
-    
+  // 2. JIKA ALAT BELUM TERDAFTAR (KTP TENANT KOSONG)
+  if (!activeTenantId) {
     return (
-      <AdminLayout>
-        {(normalizedPath === "/admin/dashboard" || normalizedPath === "/admin") && <AdminHome />}
-        {normalizedPath === "/admin/qr" && <TableQRManager />}
-        {normalizedPath === "/admin/menu" && <MenuMaster />}
-        {normalizedPath === "/admin/paket" && <Paket />} 
-        {normalizedPath === "/admin/recipes" && <RecipeManagement />}
-        {normalizedPath === "/admin/hpp-calculator" && <HPPCalculator />} 
-        {normalizedPath === "/admin/inventory" && <InventoryApp />}
-        {normalizedPath === "/admin/reports" && <SalesReport />} 
-        {normalizedPath === "/admin/history" && <TransactionHistory />} 
-        {normalizedPath === "/admin/orders" && <OrderHistory />}
-        {normalizedPath === "/admin/shifts" && <ShiftReports />}
-        {normalizedPath === "/admin/settings/users" && <UserManagement />}
-        {normalizedPath === "/admin/settings/tables" && <TableLayout />}
-        {normalizedPath === "/admin/settings/profile" && <OutletProfile />}
-        {normalizedPath === "/admin/settings/payments" && <MerchantBank />}
-        {normalizedPath === "/admin/settings/printer" && <PrinterSettings />}
-        {normalizedPath === "/admin/settings/receipt" && <ReceiptSettings />}
-      </AdminLayout>
+      <Routes>
+        <Route path="/outlet-login" element={<OutletLogin />} />
+        <Route path="/founder-hq" element={<FounderHQ />} />
+        <Route path="/founder-console" element={<FounderHQ />} />
+        <Route path="*" element={<LandingPage onEnterSystem={handleEnterSystem} />} />
+      </Routes>
     );
   }
 
-  // 5. PAKSA MUNCUL LOGIN JIKA BELUM ADA USER ATAU SEDANG DI HALAMAN LOGIN
-  if (!user || normalizedPath === "/login") {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
+  // PROTEKSI ADMIN
+  const requireAdmin = (element: React.ReactNode) => {
+    if (isTerminalOnly) return <Navigate to="/dashboard" />;
+    if (!user || user.role !== "admin") return <AdminLogin />;
+    return <AdminLayout>{element}</AdminLayout>;
+  };
 
-  // 6. DASHBOARD TERMINAL (KASIR & WAITER)
-if (user.role === "kasir" || user.role === "waiter") {
+  // PROTEKSI KASIR/WAITER
+  const requireStaff = (element: React.ReactNode) => {
+    if (!user || (user.role !== "kasir" && user.role !== "waiter" && user.role !== "admin")) {
+      return <Login onLoginSuccess={handleLoginSuccess} />;
+    }
+    return (
+      <div className="min-h-screen bg-[#020617] text-white font-sans italic w-full">
+        {element}
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-[#020617] text-white font-sans italic w-full">
-      {/* LOGIKA PEMISAH HALAMAN */}
-      {normalizedPath === "/admin/history" ? (
-        <TransactionHistory />
-      ) : (
-        <>
-          {user.role === "kasir" && <KasirHome />}
-          {user.role === "waiter" && <WaiterApp />}
-        </>
-      )}
-    </div>
-  );
-}
+    <Routes>
+      <Route path="/founder-hq" element={<FounderHQ />} />
+      <Route path="/founder-console" element={<FounderHQ />} />
+      <Route path="/menu/*" element={<CustomerMenu />} />
 
-  // 7. JARING PENGAMAN TERAKHIR: JIKA ROLE NYANGKUT (Bukan Kasir/Waiter), KEMBALI KE LOGIN
-  return <Login onLoginSuccess={handleLoginSuccess} />;
+      {/* ADMIN ROUTES */}
+      <Route path="/admin/dashboard" element={requireAdmin(<AdminHome />)} />
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" />} />
+      <Route path="/admin/qr" element={requireAdmin(<TableQRManager />)} />
+      <Route path="/admin/menu" element={requireAdmin(<MenuMaster />)} />
+      <Route path="/admin/paket" element={requireAdmin(<Paket />)} />
+      <Route path="/admin/recipes" element={requireAdmin(<RecipeManagement />)} />
+      <Route path="/admin/hpp-calculator" element={requireAdmin(<HPPCalculator />)} />
+      <Route path="/admin/inventory" element={requireAdmin(<InventoryApp />)} />
+      <Route path="/admin/reports" element={requireAdmin(<SalesReport />)} />
+      <Route path="/admin/history" element={requireAdmin(<TransactionHistory />)} />
+      <Route path="/admin/orders" element={requireAdmin(<OrderHistory />)} />
+      <Route path="/admin/shifts" element={requireAdmin(<ShiftReports />)} />
+      <Route path="/admin/settings/users" element={requireAdmin(<UserManagement />)} />
+      <Route path="/admin/settings/tables" element={requireAdmin(<TableLayout />)} />
+      <Route path="/admin/settings/profile" element={requireAdmin(<OutletProfile />)} />
+      <Route path="/admin/settings/payments" element={requireAdmin(<MerchantBank />)} />
+      <Route path="/admin/settings/printer" element={requireAdmin(<PrinterSettings />)} />
+      <Route path="/admin/settings/receipt" element={requireAdmin(<ReceiptSettings />)} />
+
+      {/* STAFF ROUTES */}
+      <Route path="/dashboard" element={requireStaff(
+        user?.role === "kasir" ? <KasirHome /> : <WaiterApp />
+      )} />
+      <Route path="/history" element={requireStaff(<TransactionHistory />)} />
+      
+      {/* OTHER */}
+      <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
+      <Route path="*" element={<Navigate to={user ? (user.role === "admin" ? "/admin/dashboard" : "/dashboard") : "/login"} />} />
+    </Routes>
+  );
 }

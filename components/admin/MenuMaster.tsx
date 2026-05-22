@@ -34,6 +34,8 @@ interface MenuItem {
 
   tenant_id?: string;
 
+  hpp?: number;
+
 }
 
 
@@ -72,6 +74,7 @@ export default function MenuMaster() {
   const [inventory, setInventory] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(false);
+  const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings | null>(null);
 
  
 
@@ -117,6 +120,7 @@ export default function MenuMaster() {
     if (tenantId) {
 
       fetchMenus();
+      fetchReceiptSettings();
 
       fetchCategories();
 
@@ -225,15 +229,14 @@ export default function MenuMaster() {
 
 
   // --- LOGIKA HITUNG HPP FINAL ---
+  const basicCost = currentRecipeItems.reduce((sum, item) => sum + (item.qty_needed * item.unit_price), 0); // Biaya bahan baku
+  // Menggunakan service_charge dari receipt_settings sebagai overhead/market_inc
+  const overheadRate = receiptSettings?.service_charge || 0.05; // Default 5%
+  const taxRate = receiptSettings?.tax_rate || 0.10; // Default 10%
 
-  const basicCost = currentRecipeItems.reduce((sum, item) => sum + (item.qty_needed * item.unit_price), 0);
-
-  const overCostAmount = basicCost * (OVERHEAD_OPS + MARKET_INC);
-
+  const overCostAmount = basicCost * overheadRate;
   const hppBeforeTax = basicCost + overCostAmount;
-
-  const businessTaxAmount = hppBeforeTax * TAX_RATE;
-
+  const businessTaxAmount = hppBeforeTax * taxRate;
   const hppFinal = hppBeforeTax + businessTaxAmount;
 
 

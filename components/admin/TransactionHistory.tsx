@@ -10,17 +10,37 @@ import {
   FileText, 
   Eye, 
   Printer as PrinterIcon, // 🔥 IMPORT ICON PRINTER
+  X, // For closing modal
   Loader2 
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+interface Transaction {
+  id: string;
+  created_at: string;
+  receipt_no: string;
+  cashier_name?: string;
+  cashier?: string; // sometimes just 'cashier'
+  table_name?: string;
+  table_number?: string; // sometimes just 'table_number'
+  total: number;
+  tenant_id: string;
+  // Add other properties as needed for the reprint modal
+  items: any[] | string; // Can be string (JSONB) or parsed array
+  paid: number;
+  change: number;
+  payment_method?: string;
+}
+
 export default function TransactionHistory() {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showReprintModal, setShowReprintModal] = useState(false);
+  const [selectedTrxForReprint, setSelectedTrxForReprint] = useState<any>(null);
 
   // 🔥 KUNCI MASTER MULTI-OUTLET
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : "NES_HOUSE_001";
@@ -36,7 +56,7 @@ export default function TransactionHistory() {
       .lte("created_at", `${endDate}T23:59:59`)
       .order("created_at", { ascending: false });
 
-    if (!error) setTransactions(data || []);
+    if (!error) setTransactions(data as Transaction[] || []);
     setLoading(false);
   };
 
@@ -48,28 +68,6 @@ export default function TransactionHistory() {
     t.receipt_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (t.cashier_name || t.cashier)?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // 🔥 FUNGSI REPRINT (CETAK ULANG KE PRINTER THERMAL)
-  const handleReprint = async (trx: any) => {
-    const reprintData = {
-      receipt_no: trx.receipt_no,
-      tableName: trx.table_name || trx.table_number || "TAKE AWAY",
-      cashierName: trx.cashier || trx.cashier_name || "ADMIN",
-      paymentMethod: trx.payment_method || "CASH",
-      items: trx.items, // Mengambil data JSONB dari Supabase
-      subtotal: trx.subtotal,
-      service_charge: trx.service_charge,
-      tax_pb1: trx.pb1,
-      total: trx.total
-    };
-
-    try {
-      await executePrint(reprintData);
-      alert(`REPRINT COMMAND SENT: ${trx.receipt_no}`);
-    } catch (err) {
-      alert("ERROR: Gagal menghubungi Printer Bridge!");
-    }
-  };
 
   // --- FUNGSI DOWNLOAD PDF (ARSIP DIGITAL) ---
   const downloadPDF = () => {
@@ -195,13 +193,18 @@ export default function TransactionHistory() {
                 <td className="px-8 py-5 text-right flex justify-end gap-3">
                   {/* 🔥 TOMBOL REPRINT */}
                   <button 
-                    onClick={() => handleReprint(trx)}
+                    onClick={() => { setSelectedTrxForReprint(trx); setShowReprintModal(true); }}
                     className="p-3 bg-blue-600/10 hover:bg-blue-600 text-blue-500 hover:text-white rounded-2xl transition-all border border-blue-500/20 group/print"
                     title="Print Ulang"
                   >
                     <PrinterIcon size={14} className="group-hover/print:scale-110 transition-transform" />
                   </button>
-                  <button className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/5">
+                  <button 
+                    onClick={() => {
+                      // Implement view details logic here if needed, or just use the reprint modal for both view/reprint
+                      setSelectedTrxForReprint(trx); setShowReprintModal(true);
+                    }}
+                    className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/5">
                     <Eye size={14} className="text-gray-500 group-hover:text-white" />
                   </button>
                 </td>
@@ -209,6 +212,12 @@ export default function TransactionHistory() {
             ))}
           </tbody>
         </table>
+        {showReprintModal && selectedTrxForReprint && (
+          <ReprintModal 
+            open={showReprintModal} 
+            onClose={() => setShowReprintModal(false)} 
+            trx={selectedTrxForReprint} />
+        )}
       </div>
     </div>
   );

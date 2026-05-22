@@ -1,11 +1,25 @@
 import React, { useEffect, useState } from "react";
+import { useTenant } from "../../hooks/useTenant";
 import { supabase } from "../../lib/supabase";
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 
+interface Transaction {
+  id: string;
+  created_at: string;
+  total: number;
+  tenant_id: string;
+}
+
+interface Menu {
+  category: string;
+  tenant_id: string;
+}
+
 export default function AdminHome() {
   const [activeSubTab, setActiveSubTab] = useState("OVERVIEW");
+  // Stats can be more specific, but for simplicity, keeping it as is for now
   const [stats, setStats] = useState({ totalSales: 0, totalOrders: 0, avgSales: 0 });
   const [trendData, setTrendData] = useState<any[]>([]);
   const [topCategories, setTopCategories] = useState<any[]>([]);
@@ -13,8 +27,7 @@ export default function AdminHome() {
 
   const COLORS = ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+  const { tenantId } = useTenant();
 
   useEffect(() => {
     if (tenantId) fetchAllDashboardData();
@@ -24,27 +37,29 @@ export default function AdminHome() {
     setLoading(true);
     try {
       // 1. Data Transaksi (🔥 DIKUNCI PER OUTLET)
-      const { data: transactions } = await supabase
+      const { data: transactions, error: trxError } = await supabase
         .from("transactions")
         .select("*")
         .eq("tenant_id", tenantId) // <--- KUNCI KEAMANAN
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false });
       
       if (transactions && transactions.length > 0) {
         const total = transactions.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
+        const validTransactions = transactions.filter(t => t.total !== null); // Filter out null totals
         setStats({
           totalSales: total,
-          totalOrders: transactions.length,
-          avgSales: total / transactions.length
+          totalOrders: validTransactions.length,
+          avgSales: validTransactions.length > 0 ? total / validTransactions.length : 0
         });
 
-        const dailyData = transactions.reduce((acc: any, curr: any) => {
+        const dailyData = transactions.reduce((acc: Record<string, number>, curr: Transaction) => {
           const date = new Date(curr.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' });
-          acc[date] = (acc[date] || 0) + Number(curr.total);
+          acc[date] = (acc[date] || 0) + (Number(curr.total) || 0);
           return acc;
         }, {});
         
         setTrendData(Object.keys(dailyData).map(date => ({ date, total: dailyData[date] })));
+        if (trxError) console.error("Error fetching transactions:", trxError.message);
       }
 
       // 2. Data Kategori (🔥 DIKUNCI PER OUTLET)
@@ -53,13 +68,13 @@ export default function AdminHome() {
         .select("category")
         .eq("tenant_id", tenantId); // <--- KUNCI KEAMANAN
 
-      if (menuData) {
-        const counts = menuData.reduce((acc: any, curr: any) => {
+      if (menuData && menuData.length > 0) {
+        const counts = menuData.reduce((acc: Record<string, number>, curr: Menu) => {
           acc[curr.category] = (acc[curr.category] || 0) + 1;
           return acc;
         }, {});
         
-        const formattedCats = Object.keys(counts)
+        const formattedCats: { name: string; count: number }[] = Object.keys(counts)
           .map(cat => ({ name: cat, count: counts[cat] }))
           .sort((a, b) => b.count - a.count);
           
@@ -93,19 +108,18 @@ export default function AdminHome() {
       </div>
 
       {/* STATS CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-white/[0.07] transition-all shadow-2xl">
-          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4">Total Revenue</p>
-          <h3 className="text-3xl font-black italic tracking-tighter text-white">IDR {stats.totalSales.toLocaleString()}</h3>
-        </div>
-        <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-white/[0.07] transition-all shadow-2xl">
-          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4">Completed Orders</p>
-          <h3 className="text-3xl font-black italic tracking-tighter text-white">{stats.totalOrders}</h3>
-        </div>
-        <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-white/[0.07] transition-all border-l-blue-500 shadow-2xl">
-          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-4">Avg Per Ticket</p>
-          <h3 className="text-3xl font-black italic tracking-tighter text-blue-500">IDR {stats.avgSales.toLocaleString()}</h3>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {[
+          { label: "Total Revenue", val: `IDR ${stats.totalSales.toLocaleString()}`, color: "text-blue-500", glow: "shadow-blue-500/10" },
+          { label: "Completed Orders", val: stats.totalOrders, color: "text-white", glow: "shadow-white/5" },
+          { label: "Avg Per Ticket", val: `IDR ${stats.avgSales.toLocaleString()}`, color: "text-cyan-400", glow: "shadow-cyan-400/10" }
+        ].map((item, i) => (
+          <div key={i} className={`bg-white/[0.03] border border-white/10 p-10 rounded-[3rem] hover:bg-white/[0.05] transition-all shadow-2xl ${item.glow} group overflow-hidden relative`}>
+            <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-600/10 rounded-full blur-3xl group-hover:bg-blue-600/20 transition-all"></div>
+            <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] mb-4">{item.label}</p>
+            <h3 className={`text-4xl font-black italic tracking-tighter ${item.color} leading-none`}>{item.val}</h3>
+          </div>
+        ))}
       </div>
 
       {/* DYNAMIC CONTENT */}

@@ -1,47 +1,48 @@
 import { useState, useEffect } from "react";
 import { Printer, Server, Monitor, CheckCircle2, AlertCircle, Save, Wifi, Coffee, ChefHat, MonitorSmartphone, Bluetooth, Play, Loader2 } from "lucide-react";
+import { supabase } from "../../lib/supabase"; // 🔥 Tambahan: Supabase import
 
 // 🔥 PERBAIKAN BUG 2: RenderSlot DIPINDAH KE LUAR AGAR KURSOR TIDAK HILANG SAAT MENGETIK
 const RenderSlot = ({ title, id, icon: Icon, config, setConfig, placeholder, colorClass, bgClass, borderClass, testingSlot, handleTestPrint }: any) => (
   <div className={`p-4 rounded-2xl border transition-all ${bgClass} ${borderClass}`}>
     <div className="flex justify-between items-center mb-3">
       <div className="flex items-center gap-2">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${bgClass}`}><Icon size={16} className={colorClass}/></div>
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${bgClass}`}><Icon size={16} className={colorClass} /></div>
         <label className={`text-[10px] font-black tracking-widest ${colorClass}`}>{title}</label>
       </div>
-      
-      <div className="flex items-center gap-2">
-          {/* 🔥 TOMBOL TEST */}
-          <button 
-              onClick={() => handleTestPrint(id, config)}
-              disabled={testingSlot === id}
-              className={`flex items-center gap-1 px-3 py-1 rounded-lg text-[9px] font-black tracking-widest transition-all border ${config.type === 'off' ? 'hidden' : 'flex'} ${testingSlot === id ? 'bg-gray-500 border-gray-400' : 'bg-white/10 border-white/20 hover:bg-white/20 text-white'}`}
-          >
-              {testingSlot === id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              {testingSlot === id ? "FIRING..." : "TEST"}
-          </button>
 
-          <select 
-              value={config.type} 
-              onChange={(e) => setConfig({ ...config, type: e.target.value })}
-              className={`bg-[#0f172a] border ${borderClass} rounded-lg px-2 py-1 text-[9px] font-black ${colorClass} outline-none cursor-pointer`}
-          >
-              <option value="lan">🌐 LAN IP</option>
-              <option value="browser">🔵 BLUETOOTH / BROWSER</option>
-              <option value="off">❌ MATIKAN</option>
-          </select>
+      <div className="flex items-center gap-2">
+        {/* 🔥 TOMBOL TEST */}
+        <button
+          onClick={() => handleTestPrint(id, config)}
+          disabled={testingSlot === id}
+          className={`flex items-center gap-1 px-3 py-1 rounded-lg text-[9px] font-black tracking-widest transition-all border ${config.type === 'off' ? 'hidden' : 'flex'} ${testingSlot === id ? 'bg-gray-500 border-gray-400' : 'bg-white/10 border-white/20 hover:bg-white/20 text-white'}`}
+        >
+          {testingSlot === id ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+          {testingSlot === id ? "FIRING..." : "TEST"}
+        </button>
+
+        <select
+          value={config.type}
+          onChange={(e) => setConfig({ ...config, type: e.target.value })}
+          className={`bg-[#0f172a] border ${borderClass} rounded-lg px-2 py-1 text-[9px] font-black ${colorClass} outline-none cursor-pointer`}
+        >
+          <option value="lan">🌐 LAN IP</option>
+          <option value="browser">🔵 BLUETOOTH / BROWSER</option>
+          <option value="off">❌ MATIKAN</option>
+        </select>
       </div>
     </div>
-    
+
     {config.type === "lan" && (
       <div className="mt-2 animate-in fade-in slide-in-from-top-1">
-          <input 
-              type="text" 
-              value={config.ip} 
-              onChange={(e) => setConfig({ ...config, ip: e.target.value })} 
-              placeholder={placeholder} 
-              className={`w-full bg-black/40 border ${borderClass} rounded-xl py-3 px-3 text-sm font-mono font-bold text-white focus:border-white outline-none placeholder:text-gray-600`}
-          />
+        <input
+          type="text"
+          value={config.ip}
+          onChange={(e) => setConfig({ ...config, ip: e.target.value })}
+          placeholder={placeholder}
+          className={`w-full bg-black/40 border ${borderClass} rounded-xl py-3 px-3 text-sm font-mono font-bold text-white focus:border-white outline-none placeholder:text-gray-600`}
+        />
       </div>
     )}
   </div>
@@ -53,6 +54,7 @@ export default function PrinterSettings() {
   const [printerType, setPrinterType] = useState("browser");
   const [localPrinterIp, setLocalPrinterIp] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [testingSlot, setTestingSlot] = useState<string | null>(null);
 
   const [kasirConfig, setKasirConfig] = useState({ type: "browser", ip: "" });
@@ -64,39 +66,60 @@ export default function PrinterSettings() {
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "DEFAULT" : "DEFAULT";
 
   useEffect(() => {
+    // 1. Set fallback dari localStorage
     setPaperSize(localStorage.getItem(`disba_printer_size_${tenantId}`) || "58mm");
     setAutoPrint(localStorage.getItem(`disba_printer_auto_${tenantId}`) === "true");
     setPrinterType(localStorage.getItem(`disba_printer_type_${tenantId}`) || "browser");
-    setLocalPrinterIp(localStorage.getItem("printer_ip") || "127.0.0.1"); 
     
-    setKasirConfig({
-        type: localStorage.getItem(`disba_type_kasir_${tenantId}`) || "browser",
-        ip: localStorage.getItem(`disba_ip_kasir_${tenantId}`) || ""
-    });
-    setDapurConfig({
-        type: localStorage.getItem(`disba_type_dapur_${tenantId}`) || "lan",
-        ip: localStorage.getItem(`disba_ip_dapur_${tenantId}`) || ""
-    });
-    setBarConfig({
-        type: localStorage.getItem(`disba_type_bar_${tenantId}`) || "lan",
-        ip: localStorage.getItem(`disba_ip_bar_${tenantId}`) || ""
-    });
-    setSt4Config({
-        type: localStorage.getItem(`disba_type_st4_${tenantId}`) || "lan",
-        ip: localStorage.getItem(`disba_ip_st4_${tenantId}`) || ""
-    });
-    setSt5Config({
-        type: localStorage.getItem(`disba_type_st5_${tenantId}`) || "lan",
-        ip: localStorage.getItem(`disba_ip_st5_${tenantId}`) || ""
-    });
+    // 2. Fetch data aktual dari Supabase
+    const fetchSettings = async () => {
+      const { data, error } = await supabase
+        .from("receipt_settings")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+
+      if (data) {
+        setLocalPrinterIp(data.bridge_ip || localStorage.getItem("printer_ip") || "127.0.0.1");
+        
+        setKasirConfig({
+          type: localStorage.getItem(`disba_type_kasir_${tenantId}`) || (data.cashier_printer_ip ? "lan" : "browser"),
+          ip: data.cashier_printer_ip || localStorage.getItem(`disba_ip_kasir_${tenantId}`) || ""
+        });
+        
+        setDapurConfig({
+          type: localStorage.getItem(`disba_type_dapur_${tenantId}`) || (data.kitchen_printer_ip ? "lan" : "off"),
+          ip: data.kitchen_printer_ip || localStorage.getItem(`disba_ip_dapur_${tenantId}`) || ""
+        });
+        
+        setBarConfig({
+          type: localStorage.getItem(`disba_type_bar_${tenantId}`) || (data.bar_printer_ip ? "lan" : "off"),
+          ip: data.bar_printer_ip || localStorage.getItem(`disba_ip_bar_${tenantId}`) || ""
+        });
+        
+        setSt4Config({
+          type: localStorage.getItem(`disba_type_st4_${tenantId}`) || (data.runner_printer_ip ? "lan" : "off"),
+          ip: data.runner_printer_ip || localStorage.getItem(`disba_ip_st4_${tenantId}`) || ""
+        });
+        
+        setSt5Config({
+          type: localStorage.getItem(`disba_type_st5_${tenantId}`) || (data.office_printer_ip ? "lan" : "off"),
+          ip: data.office_printer_ip || localStorage.getItem(`disba_ip_st5_${tenantId}`) || ""
+        });
+      }
+    };
+    
+    fetchSettings();
   }, [tenantId]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setIsSaving(true);
+    // 1. Simpan fallback ke localStorage
     localStorage.setItem(`disba_printer_size_${tenantId}`, paperSize);
     localStorage.setItem(`disba_printer_auto_${tenantId}`, String(autoPrint));
-    localStorage.setItem(`disba_printer_type_${tenantId}`, printerType); 
-    localStorage.setItem("printer_ip", localPrinterIp); 
-    
+    localStorage.setItem(`disba_printer_type_${tenantId}`, printerType);
+    localStorage.setItem("printer_ip", localPrinterIp);
+
     localStorage.setItem(`disba_type_kasir_${tenantId}`, kasirConfig.type);
     localStorage.setItem(`disba_ip_kasir_${tenantId}`, kasirConfig.ip);
     localStorage.setItem(`disba_type_dapur_${tenantId}`, dapurConfig.type);
@@ -107,7 +130,30 @@ export default function PrinterSettings() {
     localStorage.setItem(`disba_ip_st4_${tenantId}`, st4Config.ip);
     localStorage.setItem(`disba_type_st5_${tenantId}`, st5Config.type);
     localStorage.setItem(`disba_ip_st5_${tenantId}`, st5Config.ip);
-    
+
+    // 2. Simpan ke database Supabase agar terdeteksi oleh mesin print (lib/printer.ts)
+    try {
+      const { error } = await supabase
+        .from("receipt_settings")
+        .upsert({
+          tenant_id: tenantId,
+          bridge_ip: localPrinterIp,
+          cashier_printer_ip: kasirConfig.type === 'lan' ? kasirConfig.ip : null,
+          kitchen_printer_ip: dapurConfig.type === 'lan' ? dapurConfig.ip : null,
+          bar_printer_ip: barConfig.type === 'lan' ? barConfig.ip : null,
+          runner_printer_ip: st4Config.type === 'lan' ? st4Config.ip : null,
+          office_printer_ip: st5Config.type === 'lan' ? st5Config.ip : null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'tenant_id' }); // Upsert jika data tenant_id ini sudah ada
+
+      if (error) {
+        console.error("Gagal menyimpan ke Supabase", error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+
+    setIsSaving(false);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -141,7 +187,7 @@ export default function PrinterSettings() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8 text-white font-sans uppercase italic">
-      
+
       <div className="flex justify-between items-end border-b border-white/10 pb-6">
         <div>
           <h1 className="text-3xl font-black text-blue-500 tracking-tighter flex items-center gap-3">
@@ -149,17 +195,18 @@ export default function PrinterSettings() {
           </h1>
           <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] mt-2">MULTI-STATION PRINTER CONTROL [TENANT: {tenantId}]</p>
         </div>
-        <button 
-          onClick={handleSave} 
-          className="flex items-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-xl text-[11px] font-black border border-blue-500/30 hover:bg-blue-500 transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 tracking-widest"
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="flex items-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-xl text-[11px] font-black border border-blue-500/30 hover:bg-blue-500 transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 tracking-widest disabled:opacity-50"
         >
-          {isSaved ? <CheckCircle2 size={18} /> : <Save size={18} />}
-          {isSaved ? "TERSAVE!" : "SIMPAN KONFIGURASI"}
+          {isSaving ? <Loader2 size={18} className="animate-spin" /> : (isSaved ? <CheckCircle2 size={18} /> : <Save size={18} />)}
+          {isSaving ? "MENYIMPAN..." : (isSaved ? "Tersimpan ke Cloud!" : "SIMPAN KONFIGURASI")}
         </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
+
         <div className="lg:col-span-5 space-y-6">
           <div className="bg-black/40 p-6 rounded-[2rem] border border-white/5 shadow-2xl">
             <div className="flex items-center gap-2 mb-6 border-b border-white/5 pb-4">
@@ -168,7 +215,7 @@ export default function PrinterSettings() {
             </div>
             <div className="space-y-2 bg-orange-500/10 p-5 rounded-2xl border border-orange-500/20">
               <label className="text-[10px] font-black text-orange-400 tracking-widest block text-center mb-2">IP PC KASIR UTAMA (BRIDGE)</label>
-              <input 
+              <input
                 type="text" value={localPrinterIp} onChange={(e) => setLocalPrinterIp(e.target.value)} placeholder="127.0.0.1"
                 className="w-full bg-[#0f172a] border border-orange-500/30 rounded-xl p-4 focus:border-orange-500 outline-none font-mono font-bold text-orange-400 placeholder:text-gray-700 text-sm shadow-inner text-center tracking-widest"
               />
@@ -197,7 +244,6 @@ export default function PrinterSettings() {
           </div>
 
           <div className="space-y-3">
-            {/* 🔥 Props testingSlot dan handleTestPrint dipassing ke komponen anak dengan benar */}
             <RenderSlot id="kasir" title="STATION 1: KASIR UTAMA" icon={MonitorSmartphone} config={kasirConfig} setConfig={setKasirConfig} placeholder="192.168.1.27" colorClass="text-blue-400" bgClass="bg-blue-500/5" borderClass="border-blue-500/20" testingSlot={testingSlot} handleTestPrint={handleTestPrint} />
             <RenderSlot id="dapur" title="STATION 2: DAPUR (KITCHEN)" icon={ChefHat} config={dapurConfig} setConfig={setDapurConfig} placeholder="192.168.1.30" colorClass="text-red-400" bgClass="bg-red-500/5" borderClass="border-red-500/20" testingSlot={testingSlot} handleTestPrint={handleTestPrint} />
             <RenderSlot id="bar" title="STATION 3: BAR (MINUMAN)" icon={Coffee} config={barConfig} setConfig={setBarConfig} placeholder="192.168.1.24" colorClass="text-emerald-400" bgClass="bg-emerald-500/5" borderClass="border-emerald-500/20" testingSlot={testingSlot} handleTestPrint={handleTestPrint} />

@@ -1,12 +1,29 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { useTenant } from "../../hooks/useTenant";
+
+interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+  qty?: number; // sometimes qty is used instead of quantity
+}
+
+interface Transaction {
+  id: string;
+  created_at: string;
+  table_number?: string;
+  table_name?: string;
+  total: number;
+  payment_method?: string;
+  items: OrderItem[] | string; // Can be string (JSONB) or parsed array
+}
 
 export default function OrderHistory() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔥 KUNCI MASTER MULTI-OUTLET
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
+  const { tenantId } = useTenant();
 
   useEffect(() => {
     if (tenantId) fetchOrders();
@@ -26,7 +43,7 @@ export default function OrderHistory() {
         )
       `)
       .eq("tenant_id", tenantId) // <--- PENGUNCI KEAMANAN
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }) as unknown as { data: Transaction[], error: any };
 
     if (!error && data) setOrders(data);
     setLoading(false);

@@ -2,8 +2,17 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Plus, Trash2, Building2, CreditCard, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
+interface MerchantBankItem {
+  id: number;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+  is_active: boolean;
+  tenant_id: string;
+}
+
 export default function MerchantBank() {
-  const [banks, setBanks] = useState<any[]>([]);
+  const [banks, setBanks] = useState<MerchantBankItem[]>([]);
   const [newBank, setNewBank] = useState({ bank_name: "", account_number: "", account_name: "" });
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
