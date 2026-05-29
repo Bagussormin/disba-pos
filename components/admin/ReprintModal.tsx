@@ -34,6 +34,15 @@ interface TransactionDetails {
   table_number?: string;
 }
 
+interface ReceiptSettings {
+  store_name: string;
+  address: string;
+  contact: string;
+  footer_text: string;
+  bridge_ip: string;
+  cashier_printer_ip: string;
+}
+
 export default function ReprintModal({ open, onClose, trx }: Props) {
   if (!open || !trx) return null;
 
@@ -41,15 +50,6 @@ export default function ReprintModal({ open, onClose, trx }: Props) {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
   
-  interface ReceiptSettings {
-    store_name: string;
-    address: string;
-    contact: string;
-    footer_text: string;
-    bridge_ip: string;
-    cashier_printer_ip: string;
-    // Add other properties from receipt_settings as needed
-  }
   
   useEffect(() => {
     if (open && tenantId) {
