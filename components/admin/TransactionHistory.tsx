@@ -43,7 +43,7 @@ export default function TransactionHistory() {
   const [selectedTrxForReprint, setSelectedTrxForReprint] = useState<any>(null);
 
   // 🔥 KUNCI MASTER MULTI-OUTLET
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : "NES_HOUSE_001";
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   const fetchTransactions = async () => {
     if(!tenantId) return;

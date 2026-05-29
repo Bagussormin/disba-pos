@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { UserPlus, Shield, Trash2, Key, Loader2, X, Save, User } from "lucide-react";
+import * as bcrypt from "bcryptjs"; 
 
 interface UserProfile {
   id: string;
@@ -18,7 +19,7 @@ export default function UserManagement() {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const tenantId = localStorage.getItem("tenant_id");
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   const [formData, setFormData] = useState({
     username: "",
@@ -51,13 +52,17 @@ export default function UserManagement() {
     setSaving(true);
 
     try {
-      // 🔥 PENTING: DI SINI PIN HARUS DI-HASH SEBELUM DISIMPAN KE DATABASE!
-      // Contoh: const hashedPassword = await bcrypt.hash(formData.pin, 10);
-      // Untuk demo, kita simpan langsung, TAPI INI TIDAK AMAN UNTUK PRODUKSI.
+      // Hashing PIN sebelum disimpan ke database
+      const salt = await bcrypt.genSalt(10);
+      const hashedPin = await bcrypt.hash(formData.pin, salt);
+
+      // Pastikan tenantId ada sebelum menyimpan
+      if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap login ulang.");
       const { error } = await supabase.from("users").insert([{
-        ...formData,
+        username: formData.username.toUpperCase(),
+        role: formData.role,
         tenant_id: tenantId,
-        password: formData.pin // 🔥 RISIKO KEAMANAN: PIN disimpan langsung. HARUS DI-HASH!
+        pin: hashedPin // Disimpan dengan aman
       }]);
 
       if (!error) {
@@ -65,17 +70,19 @@ export default function UserManagement() {
         setFormData({ username: "", pin: "", role: "kasir" });
         fetchUsers();
       } else {
-        alert("Gagal: " + error.message);
+        alert("Gagal mendaftarkan operator. Periksa koneksi atau duplikasi data.");
       }
     } catch (err: any) {
-      console.error("Save User Error:", err.message);
-      alert("Terjadi kesalahan saat menyimpan user.");
+      console.error("Auth_Error");
+      alert("Terjadi kesalahan sistem keamanan.");
     } finally {
       setSaving(false);
     }
   };
 
   const deleteUser = async (id: string) => {
+    // Pastikan tenantId ada sebelum menghapus
+    if (!tenantId) return alert("Tenant ID tidak ditemukan. Tidak dapat menghapus user.");
     if (confirm("Hapus akses user ini?")) {
       try {
         const { error } = await supabase.from("users").delete().eq("id", id).eq("tenant_id", tenantId);

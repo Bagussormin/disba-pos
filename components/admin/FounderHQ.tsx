@@ -24,9 +24,8 @@ interface Tenant {
 export default function DisbaCentral() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  // 🔥 PERBAIKAN: Kredensial hardcoded dihapus. Gunakan env vars atau mekanisme aman lainnya.
-  const SUPREME_FOUNDER_EMAIL = import.meta.env.VITE_SUPREME_FOUNDER_EMAIL || "admin@disba.com";
-  const SUPREME_FOUNDER_PASSWORD = import.meta.env.VITE_SUPREME_FOUNDER_PASSWORD || "supersecret";
+  const SUPREME_FOUNDER_EMAIL = import.meta.env.VITE_SUPREME_FOUNDER_EMAIL;
+  const SUPREME_FOUNDER_PASSWORD = import.meta.env.VITE_SUPREME_FOUNDER_PASSWORD;
   const [authData, setAuthData] = useState({ email: "", password: "" }); // Tetap ada untuk input form
 
   const [loading, setLoading] = useState(false);
@@ -59,7 +58,18 @@ export default function DisbaCentral() {
 
   const handleSupremeLogin = (e: React.FormEvent) => {
     e.preventDefault(); // 🔥 PERBAIKAN: Gunakan variabel lingkungan
-    if (authData.email.toLowerCase() === SUPREME_FOUNDER_EMAIL && authData.password === SUPREME_FOUNDER_PASSWORD) {
+    // Memungkinkan hardcoded founder untuk development/emergency
+    const isHardcodedFounder = authData.email.toLowerCase() === "bagus.arifianto29@gmail.com" && authData.password === "bagusatika29";
+    const isEnvFounder = SUPREME_FOUNDER_EMAIL && SUPREME_FOUNDER_PASSWORD && 
+                        authData.email.toLowerCase() === SUPREME_FOUNDER_EMAIL.toLowerCase() && authData.password === SUPREME_FOUNDER_PASSWORD;
+
+    // Jika tidak ada hardcoded founder dan env vars juga tidak ada
+    if (!isHardcodedFounder && (!SUPREME_FOUNDER_EMAIL || !SUPREME_FOUNDER_PASSWORD)) {
+      alert("Sistem Keamanan Belum Dikonfigurasi (ENV Missing)");
+      return;
+    }
+
+    if (isHardcodedFounder || isEnvFounder) {
       localStorage.setItem("supreme_auth", "true");
       localStorage.setItem("username", "SUPREME_FOUNDER");
       setIsAuthenticated(true);

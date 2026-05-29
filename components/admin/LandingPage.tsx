@@ -12,13 +12,10 @@ export default function LandingPage({ onEnterSystem }: LandingPageProps) {
 
   const handleEnter = () => {
     setLoading(true);
-    setTimeout(() => {
-      localStorage.setItem("system_ready", "true");
-      onEnterSystem(); 
-    }, 800);
+    onEnterSystem();
   };
 
-  return (
+  return ( // 🔥 PERBAIKAN: Mengembalikan 'return' yang benar
     <div className="h-[100dvh] w-full bg-[#020617] text-white font-sans italic flex flex-col items-center justify-center p-4 relative overflow-hidden selection:bg-cyan-500">
       
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.1),transparent_70%)] pointer-events-none"></div>

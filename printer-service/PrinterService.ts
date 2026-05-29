@@ -51,18 +51,18 @@ app.post('/print-receipt', (req, res) => {
         service_charge, tax_total, total, paid, change, cashier,
         header_title, header_address, header_contact,
         footer_thanks, footer_message, footer_wifi,
-        payment_method 
+        payment_method, paper_size
     } = req.body;
     
     let t = "";
-    const paperWidth = 32; // GANTI JADI 48 JIKA PAKAI PRINTER BESAR (80mm)
+    // Lebar karakter standar: 58mm = 32 chars, 80mm = 48 chars
+    const paperWidth = paper_size === "80mm" ? 48 : 32;
 
     // --- 1. HEADER (Tengah) ---
     t += `\x1b\x61\x01`; // Align Center
-    // Jika tidak ada data, cetak peringatan BELUM DI SET
-    t += `\x1b\x21\x10${header_title || "NAMA OUTLET BELUM DI SET"}\x1b\x21\x00\n`; 
-    t += `${header_address || "ALAMAT BELUM DI SET"}\n`;
-    t += `${header_contact || "KONTAK BELUM DI SET"}\n`;
+    t += `\x1b\x21\x10${header_title || "OUTLET"}\x1b\x21\x00\n`; 
+    t += `${header_address || ""}\n`;
+    t += `${header_contact || ""}\n`;
     t += "-".repeat(paperWidth) + "\n";
     
     // --- 2. INFO TRANSAKSI (Kiri) ---
@@ -109,9 +109,9 @@ app.post('/print-receipt', (req, res) => {
     // --- 5. FOOTER (Tengah) ---
     t += `\x1b\x61\x01`; // Align Center
     // Jika tidak ada data, cetak peringatan BELUM DI SET
-    t += `${footer_thanks || "UCAPAN TERIMA KASIH BELUM DI SET"}\n`;
-    t += `${footer_message || "PESAN FOOTER BELUM DI SET"}\n`;
-    t += `\n${footer_wifi || "INFO WIFI BELUM DI SET"}\n`; 
+    t += `${footer_thanks || "THANK YOU"}\n`; // Ucapan terima kasih
+    t += `${footer_message || "VISIT AGAIN"}\n`; // Pesan tambahan
+    t += `\n${footer_wifi || ""}\n`; // Info WiFi (opsional)
     
     // Cek apakah laci harus dibuka (Buka jika pembayaran CASH atau tidak didefinisikan)
     const shouldOpenDrawer = (!payment_method || payment_method === "CASH");

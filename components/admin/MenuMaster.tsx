@@ -11,21 +11,9 @@ import {
 } from "lucide-react";
 
 
-// --- KONFIGURASI FINANSIAL DINAMIS ---
-
-const OVERHEAD_OPS = 0.15;  
-
-const MARKET_INC = 0.05;    
-
-const TAX_RATE = 0.05;      
-
-
 interface MenuItem {
-
   id: number | null;
-
   name: string;
-
   price: number | string;
 
   category: string;
@@ -230,9 +218,8 @@ export default function MenuMaster() {
 
   // --- LOGIKA HITUNG HPP FINAL ---
   const basicCost = currentRecipeItems.reduce((sum, item) => sum + (item.qty_needed * item.unit_price), 0); // Biaya bahan baku
-  // Menggunakan service_charge dari receipt_settings sebagai overhead/market_inc
-  const overheadRate = receiptSettings?.service_charge || 0.05; // Default 5%
-  const taxRate = receiptSettings?.tax_rate || 0.10; // Default 10%
+  const overheadRate = receiptSettings?.service_charge || 0.05; // Default 5% dari receipt_settings
+  const taxRate = receiptSettings?.tax_rate || 0.10; // Default 10% dari receipt_settings
 
   const overCostAmount = basicCost * overheadRate;
   const hppBeforeTax = basicCost + overCostAmount;

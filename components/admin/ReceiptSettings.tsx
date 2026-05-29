@@ -3,15 +3,15 @@ import { supabase } from "../../lib/supabase";
 import { Save, Printer, Store, MapPin, Phone, AtSign, Wifi, MessageSquare } from "lucide-react";
 
 export default function ReceiptSettings() {
-  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "NES_HOUSE_001" : "NES_HOUSE_001";
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
   
   const [settings, setSettings] = useState({
-    store_name: "NES House Cold Brew",
-    address: "Alamat Outlet Anda",
-    contact: "WA: 08xx-xxxx-xxxx",
-    social_media: "@neshouse.id",
-    wifi_info: "Password WiFi: -",
-    footer_text: "Terima kasih atas kunjungannya!"
+    store_name: "",
+    address: "",
+    contact: "",
+    social_media: "",
+    wifi_info: "",
+    footer_text: ""
   });
 
   const [isLoading, setIsLoading] = useState(true);

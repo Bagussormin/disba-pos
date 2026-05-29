@@ -11,8 +11,14 @@ export default function AdminLogin() {
     if (!username || !password) return alert("Harap isi username dan password!");
     setLoading(true);
 
-    // 🔥 SUPREME FOUNDER SUPERPOWER CHECK
-    if (username.toLowerCase() === "bagus.arifianto29@gmail.com" && password === "bagusatika29") {
+    // 🔥 SUPREME FOUNDER MASTER CHECK
+    const supremeEmail = import.meta.env.VITE_SUPREME_EMAIL;
+    const supremePass = import.meta.env.VITE_SUPREME_PASSWORD;
+    
+    const isHardcodedFounder = username.toLowerCase() === "bagus.arifianto29@gmail.com" && password === "bagusatika29";
+    const isEnvFounder = supremeEmail && supremePass && username.toLowerCase() === supremeEmail.toLowerCase() && password === supremePass;
+
+    if (isHardcodedFounder || isEnvFounder) {
       localStorage.setItem("is_admin", "true");
       localStorage.setItem("role", "admin");
       localStorage.setItem("username", "SUPREME_FOUNDER");
