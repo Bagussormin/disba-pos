@@ -4,7 +4,7 @@ import WaiterOrder from "./WaiterOrder"; // Pastikan nama file sesuai (WaiterOrd
 import { LogOut } from "lucide-react";
 
 export default function WaiterApp() {
-  // 🔥 FIX BUGS 1: Ubah <number> menjadi <string> agar cocok dengan sistem UUID Supabase
+  // UUID system standardized to string format
   const [activeBill, setActiveBill] = useState<string | null>(null);
 
   const handleLogOut = () => {
@@ -31,7 +31,7 @@ export default function WaiterApp() {
       <div className="flex-1">
         {activeBill ? (
           <WaiterOrder
-            orderId={activeBill} // 🔥 FIX BUGS 2: Kabel 'billId' sudah diubah jadi 'orderId'
+            orderId={activeBill} // Order ID mapping complete
             onBack={() => setActiveBill(null)}
           />
         ) : (

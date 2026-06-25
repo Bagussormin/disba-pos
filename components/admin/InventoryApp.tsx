@@ -121,7 +121,7 @@ export default function InventoryApp() {
     if (!error) { 
       setModalType(null); 
       // Reset form
-      setNewMaterial({ name: "", sku: "", unit: "BOTTLE", stock: "0", min: "5", price: "0", expiry: "" });
+      setNewMaterial({ name: "", sku: "", is_retail: false, unit: "BOTTLE", stock: "0", min: "5", price: "0", expiry: "" });
       loadData(); 
     } else {
       alert("Gagal menambahkan material: " + error.message);

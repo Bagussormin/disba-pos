@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "../../lib/printer";
+import { safeJSONParse } from "../../lib/utils";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import jsPDF from "jspdf";
@@ -78,7 +80,7 @@ export default function SalesReport() {
 
       const itemMap: any = {};
       trx.forEach((t: SalesTransaction) => {
-        const items = typeof t.items === 'string' ? JSON.parse(t.items) : t.items;
+        const items = typeof t.items === 'string' ? safeJSONParse(t.items, []) : t.items;
         if (Array.isArray(items)) {
           items.forEach((item: any) => {
             const name = item.name || "Unknown";
@@ -261,7 +263,7 @@ export default function SalesReport() {
       console.log(`Attempting to send report to: ${baseUrl}/send-report-email`);
 
       // Tembak ke Node.js lokal untuk mengirim email
-      const response = await fetch(`${baseUrl}/send-report-email`, {
+      const response = await fetchWithTimeout(`${baseUrl}/send-report-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
         body: JSON.stringify({

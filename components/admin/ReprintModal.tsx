@@ -1,3 +1,4 @@
+import { safeJSONParse } from "../../lib/utils";
 import { useEffect, useState } from "react";
 import { executePrint } from "../../lib/printer";
 import { supabase } from "../../lib/supabase";
@@ -81,7 +82,7 @@ export default function ReprintModal({ open, onClose, trx }: Props) {
       return;
     }
 
-    const itemsParsed = typeof trx.items === 'string' ? JSON.parse(trx.items) : trx.items;
+    const itemsParsed = typeof trx.items === 'string' ? safeJSONParse(trx.items, []) : trx.items;
 
     const receiptData = {
       receipt_no: trx.receipt_no,

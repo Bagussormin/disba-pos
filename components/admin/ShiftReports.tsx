@@ -1,3 +1,4 @@
+import { safeJSONParse } from "../../lib/utils";
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Calendar, ChevronLeft, ChevronRight, Loader2, ShoppingBag, RefreshCcw, Download } from "lucide-react";
@@ -87,7 +88,7 @@ export default function ShiftReports() {
 
       const itemMap: Record<string, { name: string; qty: number; total: number }> = {};
       trxRes.data.forEach((trx: any) => {
-        let items = typeof trx.items === 'string' ? JSON.parse(trx.items) : trx.items;
+        let items = typeof trx.items === 'string' ? safeJSONParse(trx.items, []) : trx.items;
         if (Array.isArray(items)) {
           items.forEach((it: any) => {
             const name = (it.name || "Unknown Item").toUpperCase(); // Gunakan nama item langsung

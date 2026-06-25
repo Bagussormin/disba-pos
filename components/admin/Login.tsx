@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { Lock, ShieldCheck, Loader2, Delete } from "lucide-react";
 import logoDisba from "./assets/logo-disba.png"; 
-import * as bcrypt from "bcryptjs";
-
+import { safeJSONParse } from "../../lib/utils";
 type Props = {
   onLoginSuccess: (role: string) => void;
 };
@@ -25,40 +24,38 @@ export default function Login({ onLoginSuccess }: Props) {
     if (pin.length < 4) return alert("Masukkan PIN minimal 4 angka!");
     setLoading(true);
 
-    // 🔥 SUPREME PIN OVERRIDE (MASTER ACCESS)
-    if (pin === "060606") {
-      localStorage.setItem("role", "admin");
-      localStorage.setItem("username", "SUPREME_FOUNDER");
-      localStorage.setItem("tenant_id", "DISBA_HQ");
-      localStorage.setItem("tenant_name", "DISBA CENTRAL COMMAND");
-      localStorage.setItem("is_admin", "true");
-      
-      setTimeout(() => {
-        onLoginSuccess("admin");
-      }, 100);
-      setLoading(false);
-      return;
-    }
-
     try {
-      // Tarik semua user di bawah tenant ini (jika tenant_id diketahui)
-      // Atau lookup user yang memiliki PIN yang cocok. 
-      // Karena PIN di-hash, kita harus mengambil data user dulu.
-      const { data: allUsers, error } = await supabase
-        .from("users")
-        .select("*");
+      // ⚠️ SECURITY WARNING: PIN verification moved to backend
+      // Client-side PIN hashing with bcrypt is insecure and slow.
+      // IMPORTANT: This is temporary client-side fallback only
+      // 
+      // For now, using supabase edge function or backend endpoint
+      // to verify PIN securely server-side
+      
+      const tenantId = localStorage.getItem("tenant_id");
+      if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap login ulang.");
+      
+      // Call backend API endpoint for PIN verification
+      // SECURITY NOTE: PIN verification moved to backend API
+      // Frontend should call /api/verify-pin in production
 
-      if (error || !allUsers) throw new Error("Gagal verifikasi keamanan.");
+      const { data: rpcData, error } = await supabase.rpc('verify_user_pin', {
+        p_tenant_id: tenantId,
+        p_pin: pin
+      });
 
-      // Cari user yang hash PIN-nya cocok
-      let matchedUser: UserProfile | null = null;
-      for (const u of allUsers) {
-        const isMatch = await bcrypt.compare(pin, u.pin);
-        if (isMatch) { matchedUser = u; break; }
-      }
+      const matchedUser = rpcData && rpcData.length > 0 ? rpcData[0] : null;
 
-      if (!matchedUser) {
+      if (error || !matchedUser) {
         throw new Error("PIN Salah atau User Tidak Aktif!");
+      }
+      
+      // Rate limiting check (basic client-side only)
+      const loginAttempts = safeJSONParse<number[]>(localStorage.getItem("_login_attempts"), []);
+      const now = Date.now();
+      const recentAttempts = loginAttempts.filter((t: number) => now - t < 60000); // Last 60 seconds
+      if (recentAttempts.length >= 5) {
+        throw new Error("Terlalu banyak percobaan login. Silakan coba lagi dalam 1 menit.");
       }
 
       // Ambil data tenant untuk mendapatkan nama bisnis

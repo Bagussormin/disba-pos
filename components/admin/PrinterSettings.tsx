@@ -1,8 +1,9 @@
+import { fetchWithTimeout } from "../../lib/printer";
 import { useState, useEffect } from "react";
 import { Printer, Server, Monitor, CheckCircle2, AlertCircle, Save, Wifi, Coffee, ChefHat, MonitorSmartphone, Bluetooth, Play, Loader2 } from "lucide-react";
 import { supabase } from "../../lib/supabase"; // 🔥 Tambahan: Supabase import
 
-// 🔥 PERBAIKAN BUG 2: RenderSlot DIPINDAH KE LUAR AGAR KURSOR TIDAK HILANG SAAT MENGETIK
+// Input stability: RenderSlot positioned outside to maintain focus
 const RenderSlot = ({ title, id, icon: Icon, config, setConfig, placeholder, colorClass, bgClass, borderClass, testingSlot, handleTestPrint }: any) => (
   <div className={`p-4 rounded-2xl border transition-all ${bgClass} ${borderClass}`}>
     <div className="flex justify-between items-center mb-3">
@@ -164,7 +165,7 @@ export default function PrinterSettings() {
 
     setTestingSlot(slotName);
     try {
-      const response = await fetch(`http://${localPrinterIp}:4000/print-lan`, {
+      const response = await fetchWithTimeout(`http://${localPrinterIp}:4000/print-lan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

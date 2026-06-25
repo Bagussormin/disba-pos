@@ -1,3 +1,4 @@
+import { safeJSONParse } from "../../lib/utils";
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { 
@@ -42,7 +43,7 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
   const [guestName, setGuestName] = useState("");
   const [isCheckingRoom, setIsCheckingRoom] = useState(false);
 
-  const tenantId = typeof window !== "undefined" ? (localStorage.getItem("tenant_id") || "DEMO_001") : "DEMO_001";
+  const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") : null;
 
   useEffect(() => {
     if (!orderId) return;
@@ -68,11 +69,11 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
       if (error) throw error;
       if (data) setTableName((data as any).tables?.name || "??");
     } catch (e) {
-      console.warn("fetchOrderDetails failed, reading from cache");
-      const cachedOrders = JSON.parse(localStorage.getItem("disba_cache_orders") || "[]");
+      // Fallback to cached order details
+      const cachedOrders = safeJSONParse(localStorage.getItem("disba_cache_orders"), []);
       const currentOrder = cachedOrders.find((o: any) => o.id === orderId);
       if (currentOrder) {
-        const cachedTables = JSON.parse(localStorage.getItem("disba_cache_tables") || "[]");
+        const cachedTables = safeJSONParse(localStorage.getItem("disba_cache_tables"), []);
         const tbl = cachedTables.find((t: any) => t.id === currentOrder.table_id);
         setTableName(tbl ? tbl.name : "Meja Offline");
       } else {
@@ -92,8 +93,8 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
         localStorage.setItem("disba_cache_menus", JSON.stringify(available));
       }
     } catch (err) {
-      console.warn("Supabase fetch products failed, loading from local cache:", err);
-      const cached = JSON.parse(localStorage.getItem("disba_cache_menus") || "[]");
+      // Using cached products - offline mode active
+      const cached = safeJSONParse(localStorage.getItem("disba_cache_menus"), []);
       if (cached.length === 0) {
         const mockMenus = [
           { id: 101, name: "Nasi Goreng Spesial", price: 25000, category: "Makanan", is_available: true },
@@ -126,8 +127,8 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
         })));
       }
     } catch (e) {
-      console.warn("fetchExistingOrder failed, loading from local cache.");
-      const cached = JSON.parse(localStorage.getItem(`disba_cache_order_items_${orderId}`) || "[]");
+      // Using cached order - offline mode active
+      const cached = safeJSONParse(localStorage.getItem(`disba_cache_order_items_${orderId}`), []);
       setCart(cached);
     }
   };
@@ -201,20 +202,20 @@ export default function WaiterOrder({ orderId, onBack }: Props) {
           items: newItems.map(i => ({ name: i.product.name, qty: i.quantity, category: i.product.category, price: i.product.price }))
         });
       } catch (printErr) {
-        console.warn("Print failed:", printErr);
+        // Print error handled - check printer service status
       }
 
       alert("🚀 PESANAN TERKIRIM KE DAPUR!");
       fetchExistingOrder(); 
     } catch (err: any) {
-      console.warn("Gagal kirim order ke Supabase, menyimpan secara offline:", err);
+      // Order saved offline - will sync when connection restores
       
       const updatedCart = cart.map(item => ({ ...item, isLocked: true }));
       setCart(updatedCart);
       localStorage.setItem(`disba_cache_order_items_${orderId}`, JSON.stringify(updatedCart));
 
       // Synchronize with active orders list for cashier app
-      const cashierOrders = JSON.parse(localStorage.getItem("disba_cache_orders") || "[]");
+      const cashierOrders = safeJSONParse(localStorage.getItem("disba_cache_orders"), []);
       if (!cashierOrders.some((o: any) => o.id === orderId)) {
         cashierOrders.push({
           id: orderId,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { executePrint } from "../../lib/printer";
+import ReprintModal from "./ReprintModal";
 import { 
   Search, 
   Calendar, 

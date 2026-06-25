@@ -79,7 +79,7 @@ export default function Paket() {
     
     // 🔥 LOGIKA SAKTI: Pastikan hpp diambil, kalau 0 kita coba tebak atau set minimal 1
     // (Banyak sistem F&B menyimpan HPP di kolom 'hpp' atau 'HPP')
-    const rawHpp = menu.hpp || menu.HPP || 0;
+    const rawHpp = menu.hpp || (menu as any).HPP || 0;
 
     if (existing) {
       setBundleItems(bundleItems.map(item => item.menu_id === menu.id ? { ...item, quantity: item.quantity + 1 } : item));

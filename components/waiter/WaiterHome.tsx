@@ -1,3 +1,4 @@
+import { safeJSONParse } from "../../lib/utils";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Loader2, MapPin, Search, User, Compass, ArrowRight, X } from "lucide-react";
@@ -44,9 +45,9 @@ export default function WaiterHome({ onOpenBill }: { onOpenBill: (orderId: strin
         localStorage.setItem("disba_cache_orders", JSON.stringify(oRes.data));
       }
     } catch (err) {
-      console.warn("Supabase fetch failed, reading from cache:", err);
-      const cachedTables = JSON.parse(localStorage.getItem("disba_cache_tables") || "[]");
-      const cachedOrders = JSON.parse(localStorage.getItem("disba_cache_orders") || "[]");
+      // Using cached tables - offline mode active
+      const cachedTables = safeJSONParse(localStorage.getItem("disba_cache_tables"), []);
+      const cachedOrders = safeJSONParse(localStorage.getItem("disba_cache_orders"), []);
       
       if (cachedTables.length === 0) {
         const mockTables = [
@@ -78,7 +79,7 @@ export default function WaiterHome({ onOpenBill }: { onOpenBill: (orderId: strin
 
       return () => { supabase.removeChannel(channel); };
     } catch (e) {
-      console.warn("Realtime sync failed, running in offline mode.");
+      // Realtime sync unavailable - offline mode active
     }
   }, []);
 
@@ -99,7 +100,7 @@ export default function WaiterHome({ onOpenBill }: { onOpenBill: (orderId: strin
       await supabase.from("tables").update({ status: "open" }).eq("id", selectedTable.id);
       onOpenBill(newOrder.id);
     } catch (err: any) {
-      console.warn("Gagal membuat order online, menyimpan secara offline:", err.message);
+      // Order saved offline - will sync when connection restores
       const newOrderId = "offline_order_" + Date.now();
       const offlineOrder = {
         id: newOrderId,

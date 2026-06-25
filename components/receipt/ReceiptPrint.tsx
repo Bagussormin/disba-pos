@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from "../../lib/printer";
 // receipt/ReceiptPrint.tsx
 interface ReceiptItem {
   name: string;
@@ -47,7 +48,7 @@ export const printReceipt = async (data: ReceiptData) => {
     text += `    KUNJUNGAN ANDA \n\n`;
 
     // 2. KIRIM KE PRINTER SERVICE
-    const response = await fetch(`http://${printerIp}:4000/print-receipt`, {
+    const response = await fetchWithTimeout(`http://${printerIp}:4000/print-receipt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text }),
@@ -55,7 +56,7 @@ export const printReceipt = async (data: ReceiptData) => {
 
     if (!response.ok) throw new Error("Printer Service tidak merespon");
     
-    console.log("Struk berhasil dikirim ke printer kasir.");
+    // Receipt printed successfully
     return true;
   } catch (error) {
     console.error("Error Cetak Struk:", error);
@@ -84,7 +85,7 @@ export const printShiftReport = async (reportData: any) => {
     text += `\n\n      DICETAK PADA: \n`;
     text += `   ${new Date().toLocaleString()} \n\n`;
 
-    await fetch(`http://${printerIp}:4000/print-receipt`, {
+    await fetchWithTimeout(`http://${printerIp}:4000/print-receipt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text }),

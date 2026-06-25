@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    // ⚠️ SECURITY: Never expose API keys to client-side bundle!
+    // API calls should go through backend endpoints instead.
     return {
       server: {
         port: 3000,
@@ -11,8 +13,7 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        // Only expose non-sensitive environment variables
       },
       resolve: {
         alias: {

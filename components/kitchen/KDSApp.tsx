@@ -100,7 +100,7 @@ export default function KDSApp() {
       gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
       oscillator.start(ctx.currentTime);
       oscillator.stop(ctx.currentTime + 0.8);
-    } catch (e) { console.log("Audio not available"); }
+    } catch (e) { /* Audio notification unavailable */ }
   };
 
   // --- UPDATE ITEM KDS STATUS ---

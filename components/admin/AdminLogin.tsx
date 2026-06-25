@@ -11,14 +11,14 @@ export default function AdminLogin() {
     if (!username || !password) return alert("Harap isi username dan password!");
     setLoading(true);
 
-    // 🔥 SUPREME FOUNDER MASTER CHECK
+    // 🔥 SUPREME FOUNDER MASTER CHECK (ENVIRONMENT ONLY - NO HARDCODED CREDENTIALS)
     const supremeEmail = import.meta.env.VITE_SUPREME_EMAIL;
     const supremePass = import.meta.env.VITE_SUPREME_PASSWORD;
     
-    const isHardcodedFounder = username.toLowerCase() === "bagus.arifianto29@gmail.com" && password === "bagusatika29";
+    // Check against environment variables only
     const isEnvFounder = supremeEmail && supremePass && username.toLowerCase() === supremeEmail.toLowerCase() && password === supremePass;
 
-    if (isHardcodedFounder || isEnvFounder) {
+    if (isEnvFounder) {
       localStorage.setItem("is_admin", "true");
       localStorage.setItem("role", "admin");
       localStorage.setItem("username", "SUPREME_FOUNDER");
@@ -31,14 +31,13 @@ export default function AdminLogin() {
     }
 
     try {
-      // Cek ke tabel users berdasarkan username & password dan role Admin
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("username", username.toLowerCase())
-        .eq("password", password)
-        .eq("role", "admin") 
-        .single();
+      // Use secure RPC for password verification instead of fetching plaintext
+      const { data: rpcData, error } = await supabase.rpc('verify_admin_password', {
+        p_username: username.toLowerCase(),
+        p_password: password
+      });
+
+      const data = rpcData && rpcData.length > 0 ? rpcData[0] : null;
 
       if (error || !data) {
         alert("Akses Ditolak: Username/Password salah, atau Anda bukan Admin.");

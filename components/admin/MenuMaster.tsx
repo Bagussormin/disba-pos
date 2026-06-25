@@ -62,7 +62,8 @@ export default function MenuMaster() {
   const [inventory, setInventory] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(false);
-  const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings | null>(null);
+  const [receiptSettings, setReceiptSettings] = useState<any>(null);
+
 
  
 
@@ -110,6 +111,7 @@ export default function MenuMaster() {
       fetchMenus();
       fetchReceiptSettings();
 
+
       fetchCategories();
 
       fetchInventory();
@@ -129,6 +131,12 @@ export default function MenuMaster() {
 
     setLoading(false);
 
+  };
+
+
+  const fetchReceiptSettings = async () => {
+    const { data } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
+    if (data) setReceiptSettings(data);
   };
 
 

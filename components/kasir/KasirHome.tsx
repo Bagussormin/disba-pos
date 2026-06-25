@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "../../lib/printer";
+import { safeJSONParse } from "../../lib/utils";
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { executePrint } from "../../lib/printer";
@@ -66,7 +68,7 @@ export default function KasirHome() {
     if (!navigator.onLine || isSyncing) return;
     const queue = localStorage.getItem("disba_offline_transactions");
     if (!queue) return;
-    const transactions = JSON.parse(queue);
+    const transactions = safeJSONParse(queue, []);
     if (transactions.length === 0) return;
 
     setIsSyncing(true);
@@ -154,7 +156,7 @@ export default function KasirHome() {
       const { data } = await supabase.from("receipt_settings").select("tax_rate,service_charge,use_tax,use_service_charge,loyalty_point_rate").eq("tenant_id", tenantId).maybeSingle();
       if (data) setFiscalSettings({ tax_rate: data.tax_rate ?? 0.10, service_charge: data.service_charge ?? 0.05, use_tax: data.use_tax !== false, use_service_charge: data.use_service_charge !== false, loyalty_point_rate: data.loyalty_point_rate ?? 1000 });
     } catch (err) {
-      console.log("Menggunakan pengaturan fiskal default.");
+      // Using default fiscal settings
     }
   };
 
@@ -175,7 +177,7 @@ export default function KasirHome() {
       }
     } catch (err) {
       const cached = localStorage.getItem("disba_cache_banks");
-      if (cached) setBanks(JSON.parse(cached));
+      if (cached) setBanks(safeJSONParse(cached, []));
     }
   };
 
@@ -197,7 +199,7 @@ export default function KasirHome() {
         localStorage.setItem("disba_cache_orders", JSON.stringify(oRes.data));
       }
     } catch (err) {
-      console.log("Menggunakan data cache offline untuk meja & order...");
+      // Using cached table and order data - offline mode
       const cachedTables = localStorage.getItem("disba_cache_tables");
       const cachedOrders = localStorage.getItem("disba_cache_orders");
       
@@ -205,7 +207,7 @@ export default function KasirHome() {
       let finalOrders = [];
 
       if (cachedTables) {
-        finalTables = JSON.parse(cachedTables);
+        finalTables = safeJSONParse(cachedTables, []);
       } else {
         finalTables = [
           { id: 1, name: "Meja 1", status: "available", area: "Area Utama" },
@@ -219,7 +221,7 @@ export default function KasirHome() {
       }
 
       if (cachedOrders) {
-        finalOrders = JSON.parse(cachedOrders);
+        finalOrders = safeJSONParse(cachedOrders, []);
       } else {
         finalOrders = [];
         localStorage.setItem("disba_cache_orders", JSON.stringify(finalOrders));
@@ -246,9 +248,9 @@ export default function KasirHome() {
         localStorage.setItem(`disba_cache_order_items_${orderId}`, JSON.stringify(items));
       } else setOrderItems([]);
     } catch (err) {
-      console.log("Menggunakan cache item order offline...");
+      // Using cached order items - offline mode
       const cachedItems = localStorage.getItem(`disba_cache_order_items_${orderId}`);
-      if (cachedItems) setOrderItems(JSON.parse(cachedItems));
+      if (cachedItems) setOrderItems(safeJSONParse(cachedItems, []));
     }
   };
 
@@ -291,7 +293,7 @@ export default function KasirHome() {
       } else {
         const summary: any = {};
         transactions.forEach((trx: any) => {
-          const items = typeof trx.items === 'string' ? JSON.parse(trx.items) : trx.items;
+          const items = typeof trx.items === 'string' ? safeJSONParse(trx.items, []) : trx.items;
           if (Array.isArray(items)) {
             items.forEach((item: any) => {
               const name = (item.name || "Unknown").toUpperCase();
@@ -355,7 +357,7 @@ export default function KasirHome() {
           .eq("tenant_id", tenantId);
         trxList = data || [];
       } else {
-        const queue = JSON.parse(localStorage.getItem("disba_offline_transactions") || "[]");
+        const queue = safeJSONParse(localStorage.getItem("disba_offline_transactions"), []);
         trxList = queue.map((q: any) => ({
           total: q.data.total,
           payment_method: q.data.payment_method
@@ -577,7 +579,7 @@ export default function KasirHome() {
           data: trxPayload
         };
         
-        const queue = JSON.parse(localStorage.getItem("disba_offline_transactions") || "[]");
+        const queue = safeJSONParse(localStorage.getItem("disba_offline_transactions"), []);
         queue.push(offlineTrx);
         localStorage.setItem("disba_offline_transactions", JSON.stringify(queue));
 
@@ -614,7 +616,7 @@ export default function KasirHome() {
       try { 
         await executePrint(receiptData); 
       } catch (err) { 
-        console.error("Gagal ke Printer lokal:", err); 
+        // Printer connection error 
       }
 
       setOrderItems([]); setPaidAmount(0); setShowPreviewModal(false); setSelectedTable(null);
@@ -627,7 +629,7 @@ export default function KasirHome() {
       }
 
     } catch (e: any) { 
-      console.error(e);
+      // Transaction error occurred
       alert("❌ Gagal: " + e.message); 
     } finally { 
       setLoading(false); 
@@ -639,7 +641,7 @@ export default function KasirHome() {
       const { data } = await supabase.from("shifts").select("*").eq("status", "open").eq("tenant_id", tenantId).maybeSingle();
       if (data) { setCurrentShift(data); setShowStartShiftModal(false); } else { setShowStartShiftModal(true); }
     } catch (e) {
-      console.log("Mode offline: Menggunakan shift kasir aktif lokal.");
+      // Using locally cached shift data
       setCurrentShift({ id: "offline_shift", cashier_name: "KASIR OFFLINE", starting_cash: 0, status: "open", start_time: new Date().toISOString() });
       setShowStartShiftModal(false);
     }
@@ -681,7 +683,7 @@ export default function KasirHome() {
       // 1. Ambil email outlet
       const { data: profile } = await supabase.from("outlet_profile").select("email, name").eq("tenant_id", tenantId).maybeSingle();
       if (!profile || !profile.email) {
-        console.log("Email outlet belum diatur, lewati email otomatis.");
+        // Email configuration incomplete
         return;
       }
 
@@ -746,7 +748,7 @@ export default function KasirHome() {
       const pdfBase64 = doc.output('datauristring');
       
       // Tembak email ke local node bridge
-      await fetch(`${baseUrl}/send-report-email`, {
+      await fetchWithTimeout(`${baseUrl}/send-report-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -763,7 +765,7 @@ export default function KasirHome() {
           pdf_attachment: pdfBase64
         })
       });
-      console.log("Email auto-settlement terkirim.");
+      // Settlement email sent
     } catch (e) {
       console.error("Gagal mengirim email penutupan shift otomatis:", e);
     }
@@ -777,7 +779,7 @@ export default function KasirHome() {
       const { data } = await supabase.from("transactions").select("*").eq("shift_id", currentShift.id).eq("tenant_id", tenantId);
       trxList = data || [];
     } catch (e) {
-      console.log("Menggunakan data transaksi lokal untuk cetak closing.");
+      // Using locally cached transaction data
     }
 
     const summaryData = trxList || [];
@@ -815,7 +817,7 @@ export default function KasirHome() {
     };
 
     try { 
-      await fetch("http://localhost:4000/print-settlement", {
+      await fetchWithTimeout("http://localhost:4000/print-settlement", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(reportData)
@@ -1082,7 +1084,7 @@ export default function KasirHome() {
                         <td className="p-4 text-blue-400 font-bold">{trx.receipt_no}</td>
                         <td className="p-4 text-right text-slate-200">Rp {trx.total.toLocaleString()}</td>
                         <td className="p-4 text-center">
-                          <button onClick={async () => executePrint({...trx, items: typeof trx.items === 'string' ? JSON.parse(trx.items) : trx.items, reprint: true})} className="p-2 bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 rounded-xl transition-colors"><Printer size={14}/></button>
+                          <button onClick={async () => executePrint({...trx, items: typeof trx.items === 'string' ? safeJSONParse(trx.items, []) : trx.items, reprint: true})} className="p-2 bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 rounded-xl transition-colors"><Printer size={14}/></button>
                         </td>
                       </tr>
                     ))}

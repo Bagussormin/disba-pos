@@ -1,3 +1,4 @@
+import { safeJSONParse } from "../../lib/utils";
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useTenant } from "../../hooks/useTenant";
@@ -88,7 +89,7 @@ export default function OrderHistory() {
                 </td>
                 <td className="p-8 text-[10px] text-gray-500 italic max-w-xs truncate">
                   {order.items ? 
-                    (typeof order.items === 'string' ? JSON.parse(order.items) : order.items)
+                    (typeof order.items === 'string' ? safeJSONParse(order.items, []) : order.items)
                       .map((it: any) => `${it.qty || it.quantity}x ${it.name}`).join(", ") 
                     : "No details"}
                 </td>
