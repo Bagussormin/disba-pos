@@ -49,7 +49,7 @@ export default function AdminLogin() {
   const handleLogin = async () => {
     setError(null);
 
-    // Cek client-side rate limit
+    // rate limit tetap aman dipakai
     if (!adminLoginLimiter.isAllowed()) {
       const remaining = Math.ceil(adminLoginLimiter.getRemainingTime() / 1000);
       startCountdown(remaining);
@@ -57,7 +57,6 @@ export default function AdminLogin() {
       return;
     }
 
-    // Validasi input
     const validationError = validateAdminInput(username, password);
     if (validationError) {
       setError(validationError);
@@ -66,56 +65,23 @@ export default function AdminLogin() {
 
     setLoading(true);
 
-    // 🔥 SUPREME FOUNDER MASTER CHECK (ENVIRONMENT ONLY - NO HARDCODED CREDENTIALS)
-    const supremeEmail = import.meta.env.VITE_SUPREME_EMAIL;
-    const supremePass = import.meta.env.VITE_SUPREME_PASSWORD;
-
-    // Check against environment variables only
-    const isEnvFounder = supremeEmail && supremePass &&
-      username.toLowerCase() === supremeEmail.toLowerCase() &&
-      password === supremePass;
-
-    if (isEnvFounder) {
-      localStorage.setItem("is_admin", "true");
-      localStorage.setItem("role", "admin");
-      localStorage.setItem("username", "SUPREME_FOUNDER");
-      const targetTenant = localStorage.getItem("tenant_id") || "DISBA_HQ";
-      localStorage.setItem("tenant_id", targetTenant);
-      setTimeout(() => {
-        window.location.href = "/admin/dashboard";
-      }, 100);
-      return;
-    }
-
     try {
-      // Gunakan RPC verify_admin_password (server-side hashing & rate limiting)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('verify_admin_password', {
-        p_username: username.toLowerCase().trim(),
-        p_password: password
-      });
+      // 🔥 LOGIN BARU (SESUAI DATABASE KAMU)
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("kasir", username.trim())
+        .eq("password", password)
+        .eq("role", "admin")
+        .single();
 
-      // Tangani error dari RPC (termasuk ACCOUNT_LOCKED)
-      if (rpcError) {
-        if (rpcError.message?.includes('ACCOUNT_LOCKED')) {
-          const seconds = parseInt(rpcError.message.split(':')[1] || '900');
-          startCountdown(seconds);
-          setError(`Akun dikunci karena terlalu banyak percobaan. Coba lagi dalam ${Math.ceil(seconds / 60)} menit.`);
-        } else {
-          setError("Akses Ditolak: Username/Password salah, atau Anda bukan Admin.");
-        }
-        setLoading(false);
-        return;
-      }
-
-      const data = rpcData && rpcData.length > 0 ? rpcData[0] : null;
-
-      if (!data) {
+      if (error || !data) {
         setError("Akses Ditolak: Username/Password salah, atau Anda bukan Admin.");
         setLoading(false);
         return;
       }
 
-      // Ambil nama bisnis dari tabel tenants
+      // 🔥 AMBIL TENANT INFO
       const { data: tenantData, error: tenantError } = await supabase
         .from("tenants")
         .select("business_name")
@@ -123,28 +89,26 @@ export default function AdminLogin() {
         .single();
 
       if (tenantError || !tenantData) {
-        setError("Gagal mengambil info outlet. Hubungi administrator.");
+        setError("Gagal mengambil info outlet.");
         setLoading(false);
         return;
       }
 
-      // Simpan session admin ke localStorage
+      // 🔥 SAVE SESSION
       localStorage.setItem("is_admin", "true");
       localStorage.setItem("role", "admin");
-      localStorage.setItem("username", data.username);
+      localStorage.setItem("username", data.kasir);
       localStorage.setItem("tenant_id", data.tenant_id);
       localStorage.setItem("tenant_name", tenantData.business_name);
 
-      setTimeout(() => {
-        window.location.href = "/admin/dashboard";
-      }, 100);
+      window.location.href = "/admin/dashboard";
 
     } catch (err: any) {
       setError("Terjadi kesalahan sistem: " + (err.message || "Unknown error"));
+    } finally {
       setLoading(false);
     }
   };
-
   const isLocked = lockCountdown > 0;
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -171,11 +135,10 @@ export default function AdminLogin() {
 
         {/* Error / Lock Alert */}
         {error && (
-          <div className={`mb-5 p-3 rounded-2xl border flex items-start gap-2 text-sm ${
-            isLocked
+          <div className={`mb-5 p-3 rounded-2xl border flex items-start gap-2 text-sm ${isLocked
               ? 'bg-red-500/10 border-red-500/30 text-red-400'
               : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-          }`}>
+            }`}>
             {isLocked ? <Timer size={16} className="mt-0.5 flex-shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />}
             <span>{error}</span>
           </div>

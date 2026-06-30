@@ -27,16 +27,15 @@ export default function OutletLogin() {
 
     const { data: outletData, error: outletError } = await supabase
       .from('outlet_profiles')
-      .select('tenant_id, name')
+      .select('tenant_id, store_name')
       .eq('email', email)
       .single();
-
     if (outletData) {
       localStorage.setItem('tenant_id', outletData.tenant_id);
-      localStorage.setItem('tenant_name', outletData.name);
+      localStorage.setItem('tenant_name', outletData.store_name);
       localStorage.setItem('system_ready', 'true');
 
-      alert(`Berhasil! Tablet ini sekarang terikat ke Outlet: ${outletData.name}`);
+      alert(`Berhasil! Tablet ini sekarang terikat ke Outlet: ${outletData.store_name}`);
       window.location.href = "/login";
     } else {
       alert('Data Outlet tidak ditemukan di database.');
