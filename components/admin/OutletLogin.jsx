@@ -1,5 +1,5 @@
-import { useState } from 'react'; 
-import { supabase } from "../../lib/supabase"; 
+import { useState } from 'react';
+import { supabase } from "../../lib/supabase";
 import { Mail, Lock, Loader2, ShieldCheck } from "lucide-react";
 
 // 🔥 KABEL LOGO DISBA DIMASUKKAN KE SINI JUGA
@@ -26,7 +26,7 @@ export default function OutletLogin() {
     }
 
     const { data: outletData, error: outletError } = await supabase
-      .from('outlet_profile')
+      .from('outlet_profiles')
       .select('tenant_id, name')
       .eq('email', email)
       .single();
@@ -34,27 +34,27 @@ export default function OutletLogin() {
     if (outletData) {
       localStorage.setItem('tenant_id', outletData.tenant_id);
       localStorage.setItem('tenant_name', outletData.name);
-      localStorage.setItem('system_ready', 'true'); 
-      
+      localStorage.setItem('system_ready', 'true');
+
       alert(`Berhasil! Tablet ini sekarang terikat ke Outlet: ${outletData.name}`);
-      window.location.href = "/login"; 
+      window.location.href = "/login";
     } else {
       alert('Data Outlet tidak ditemukan di database.');
     }
-    
+
     setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 font-sans uppercase relative overflow-hidden italic">
-      
+
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px]"></div>
       </div>
 
       <div className="relative w-full max-w-md bg-white/[0.02] border border-white/10 p-8 md:p-10 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-xl z-10">
-        
+
         {/* HEADER BRANDING (DENGAN LOGO DISBA) */}
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-black border border-cyan-500/20 rounded-[1.5rem] flex items-center justify-center mx-auto mb-5 shadow-[0_0_30px_rgba(6,182,212,0.15)] relative overflow-hidden p-1">
@@ -116,10 +116,10 @@ export default function OutletLogin() {
         </form>
 
         <div className="mt-8 flex justify-center opacity-40">
-           <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10">
-             <ShieldCheck size={10} className="text-gray-400" />
-             <span className="text-[7px] font-bold tracking-[0.2em] text-gray-400 not-italic">END-TO-END ENCRYPTED</span>
-           </div>
+          <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+            <ShieldCheck size={10} className="text-gray-400" />
+            <span className="text-[7px] font-bold tracking-[0.2em] text-gray-400 not-italic">END-TO-END ENCRYPTED</span>
+          </div>
         </div>
       </div>
     </div>

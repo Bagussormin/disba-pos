@@ -1,94 +1,158 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { Lock, ShieldCheck, Loader2, Delete } from "lucide-react";
-import logoDisba from "./assets/logo-disba.png"; 
-import { safeJSONParse } from "../../lib/utils";
+import { Lock, ShieldCheck, Loader2, Delete, AlertTriangle, Timer } from "lucide-react";
+import logoDisba from "./assets/logo-disba.png";
+import { createRateLimiter } from "../../lib/utils";
+
 type Props = {
   onLoginSuccess: (role: string) => void;
 };
 
-interface UserProfile {
-  id: string;
-  username: string;
-  pin: string; // Hashed PIN
-  role: string;
-  tenant_id: string;
-  created_at: string;
-};
+// Client-side rate limiter: 5 percobaan per 15 menit
+const pinLoginLimiter = createRateLimiter(5, 15 * 60 * 1000);
 
 export default function Login({ onLoginSuccess }: Props) {
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lockCountdown, setLockCountdown] = useState(0);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  const startCountdown = (seconds: number) => {
+    setLockCountdown(seconds);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    countdownRef.current = setInterval(() => {
+      setLockCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownRef.current!);
+          setError(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `${s}s`;
+  };
 
   const handleLogin = async () => {
-    if (pin.length < 4) return alert("Masukkan PIN minimal 4 angka!");
+    if (pin.length < 4) return;
+    setError(null);
+
+    // Cek client-side rate limit (mencegah spam request)
+    if (!pinLoginLimiter.isAllowed()) {
+      const remaining = Math.ceil(pinLoginLimiter.getRemainingTime() / 1000);
+      startCountdown(remaining);
+      setError(`Terlalu banyak percobaan. Tunggu ${Math.ceil(remaining / 60)} menit.`);
+      setPin("");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // ⚠️ SECURITY WARNING: PIN verification moved to backend
-      // Client-side PIN hashing with bcrypt is insecure and slow.
-      // IMPORTANT: This is temporary client-side fallback only
-      // 
-      // For now, using supabase edge function or backend endpoint
-      // to verify PIN securely server-side
-      
       const tenantId = localStorage.getItem("tenant_id");
-      if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap login ulang.");
-      
-      // Call backend API endpoint for PIN verification
-      // SECURITY NOTE: PIN verification moved to backend API
-      // Frontend should call /api/verify-pin in production
+      if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap registrasi outlet terlebih dahulu.");
 
-      const { data: rpcData, error } = await supabase.rpc('verify_user_pin', {
+      // Validasi PIN — hanya angka, 4-6 digit
+      if (!/^\d{4,6}$/.test(pin)) {
+        setError("PIN hanya boleh berisi angka (4-6 digit).");
+        setPin("");
+        setLoading(false);
+        return;
+      }
+
+      // Server-side PIN verification via Supabase RPC
+      // RPC verify_user_pin memiliki rate limiting & hashing di server
+      const { data: rpcData, error: rpcError } = await supabase.rpc('verify_user_pin', {
         p_tenant_id: tenantId,
         p_pin: pin
       });
 
+      // Tangani error dari server (termasuk ACCOUNT_LOCKED dan INVALID_PIN_FORMAT)
+      if (rpcError) {
+        if (rpcError.message?.includes('ACCOUNT_LOCKED')) {
+          const seconds = parseInt(rpcError.message.split(':')[1] || '900');
+          startCountdown(seconds);
+          setError(`Akun dikunci. Coba lagi dalam ${Math.ceil(seconds / 60)} menit.`);
+        } else if (rpcError.message?.includes('INVALID_PIN_FORMAT')) {
+          setError("Format PIN tidak valid.");
+        } else {
+          setError("PIN Salah atau User Tidak Aktif!");
+        }
+        setPin("");
+        setLoading(false);
+        return;
+      }
+
       const matchedUser = rpcData && rpcData.length > 0 ? rpcData[0] : null;
 
-      if (error || !matchedUser) {
-        throw new Error("PIN Salah atau User Tidak Aktif!");
-      }
-      
-      // Rate limiting check (basic client-side only)
-      const loginAttempts = safeJSONParse<number[]>(localStorage.getItem("_login_attempts"), []);
-      const now = Date.now();
-      const recentAttempts = loginAttempts.filter((t: number) => now - t < 60000); // Last 60 seconds
-      if (recentAttempts.length >= 5) {
-        throw new Error("Terlalu banyak percobaan login. Silakan coba lagi dalam 1 menit.");
+      if (!matchedUser) {
+        setError("PIN Salah! Silakan coba lagi.");
+        setPin("");
+        setLoading(false);
+        return;
       }
 
       // Ambil data tenant untuk mendapatkan nama bisnis
       const { data: tenantData, error: tenantError } = await supabase
         .from("tenants")
-        .select("business_name") // Hanya ambil nama bisnis
-        .eq("tenant_id", matchedUser.tenant_id) // Filter berdasarkan tenant_id dari user yang cocok
+        .select("business_name")
+        .eq("tenant_id", matchedUser.tenant_id)
         .single();
 
       if (tenantError || !tenantData) {
-        throw new Error("Gagal mengambil informasi outlet.");
+        setError("Gagal mengambil informasi outlet.");
+        setLoading(false);
+        return;
       }
 
+      // Reset rate limiter setelah login sukses
+      pinLoginLimiter.reset();
+
       // Simpan kredensial ke localStorage
-      localStorage.setItem("role", matchedUser.role); // Peran user
-      localStorage.setItem("username", matchedUser.username); // Username user
-      localStorage.setItem("tenant_id", matchedUser.tenant_id); // ID tenant
+      localStorage.setItem("role", matchedUser.role);
+      localStorage.setItem("username", matchedUser.username);
+      localStorage.setItem("tenant_id", matchedUser.tenant_id);
       localStorage.setItem("tenant_name", tenantData.business_name);
 
       setTimeout(() => {
-        onLoginSuccess(matchedUser!.role);
+        onLoginSuccess(matchedUser.role);
       }, 100);
+
     } catch (e: any) {
-      console.error("Login_Error:", e);
-      alert(e.message || "Akses Ditolak! Pastikan koneksi internet stabil.");
+      setError(e.message || "Akses Ditolak! Pastikan koneksi internet stabil.");
+      setPin("");
     } finally {
       setLoading(false);
     }
   };
 
+  // Auto-login saat PIN 6 digit sudah diisi
+  useEffect(() => {
+    if (pin.length === 6 && !loading && lockCountdown === 0) {
+      handleLogin();
+    }
+  }, [pin]);
+
   const addDigit = (digit: string) => {
-    if (pin.length < 6) setPin(prev => prev + digit);
+    if (pin.length < 6 && lockCountdown === 0) {
+      setError(null);
+      setPin(prev => prev + digit);
+    }
   };
+
+  const isLocked = lockCountdown > 0;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-[#020617] font-sans text-slate-100">
@@ -126,30 +190,78 @@ export default function Login({ onLoginSuccess }: Props) {
           </p>
         </div>
 
-        <div className="flex justify-center gap-3 mb-8">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all duration-300 ${i < pin.length ? 'bg-blue-500 border-blue-500 scale-125 shadow-[0_0_10px_#3b82f6]' : 'border-slate-700'}`}></div>
-          ))}
-        </div>
+        {/* Error/Lock Alert */}
+        {error && (
+          <div className={`mb-4 p-3 rounded-2xl border flex items-start gap-2 text-xs ${
+            isLocked
+              ? 'bg-red-500/10 border-red-500/30 text-red-400'
+              : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+          }`}>
+            {isLocked ? <Timer size={14} className="mt-0.5 flex-shrink-0" /> : <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />}
+            <span>{error}</span>
+          </div>
+        )}
 
-        <div className="grid grid-cols-3 gap-4">
+        {/* Countdown saat dikunci */}
+        {isLocked ? (
+          <div className="text-center py-4 mb-4">
+            <div className="text-4xl font-black text-red-500 tabular-nums">{formatTime(lockCountdown)}</div>
+            <p className="text-[9px] text-gray-500 uppercase tracking-widest mt-2">Akun dikunci sementara</p>
+          </div>
+        ) : (
+          <div className="flex justify-center gap-3 mb-8">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all duration-300 ${i < pin.length ? 'bg-blue-500 border-blue-500 scale-125 shadow-[0_0_10px_#3b82f6]' : 'border-slate-700'}`}></div>
+            ))}
+          </div>
+        )}
+
+        <div className={`grid grid-cols-3 gap-4 ${isLocked ? 'opacity-30 pointer-events-none' : ''}`}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-            <button key={num} onClick={() => addDigit(num.toString())} className="h-16 rounded-2xl bg-white/5 border border-white/5 text-xl font-black hover:bg-blue-600 hover:border-blue-500 transition-all active:scale-90">
+            <button
+              key={num}
+              onClick={() => addDigit(num.toString())}
+              disabled={isLocked || loading}
+              className="h-16 rounded-2xl bg-white/5 border border-white/5 text-xl font-black hover:bg-blue-600 hover:border-blue-500 transition-all active:scale-90"
+            >
               {num}
             </button>
           ))}
-          <button onClick={() => setPin("")} className="h-16 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500 hover:text-white transition-all">C</button>
-          <button onClick={() => addDigit("0")} className="h-16 rounded-2xl bg-white/5 text-xl font-black hover:bg-blue-600 transition-all">0</button>
-          <button onClick={() => setPin(prev => prev.slice(0, -1))} className="h-16 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-slate-700 transition-all"><Delete size={20}/></button>
+          <button
+            onClick={() => { setPin(""); setError(null); }}
+            disabled={isLocked || loading}
+            className="h-16 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500 hover:text-white transition-all"
+          >
+            C
+          </button>
+          <button
+            onClick={() => addDigit("0")}
+            disabled={isLocked || loading}
+            className="h-16 rounded-2xl bg-white/5 text-xl font-black hover:bg-blue-600 transition-all"
+          >
+            0
+          </button>
+          <button
+            onClick={() => setPin(prev => prev.slice(0, -1))}
+            disabled={isLocked || loading}
+            className="h-16 rounded-2xl bg-white/5 flex items-center justify-center hover:bg-slate-700 transition-all"
+          >
+            <Delete size={20} />
+          </button>
         </div>
 
-        <button 
+        <button
           onClick={handleLogin}
-          disabled={loading || pin.length < 4}
+          disabled={loading || pin.length < 4 || isLocked}
           className="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest disabled:opacity-30 flex items-center justify-center gap-2"
         >
-          {loading ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-          <span>MASUK SISTEM</span>
+          {loading ? (
+            <><Loader2 className="animate-spin" size={16} /><span>Memverifikasi...</span></>
+          ) : isLocked ? (
+            <><Timer size={16} /><span>TUNGGU {formatTime(lockCountdown)}</span></>
+          ) : (
+            <><ShieldCheck size={16} /><span>MASUK SISTEM</span></>
+          )}
         </button>
       </div>
     </div>
