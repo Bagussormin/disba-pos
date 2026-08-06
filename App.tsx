@@ -1,162 +1,563 @@
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import OutletLogin from './components/admin/OutletLogin'; 
-import React, { useState, useEffect } from "react";
-
-// Import Landing Page
-import LandingPage from "./components/admin/LandingPage"; 
-
-// Import Operasional
-import KasirHome from "./components/kasir/KasirHome";
-import WaiterApp from "./components/waiter/WaiterApp"; 
+import React, { useEffect, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import LandingPage from "./components/admin/LandingPage";
+import OutletLogin from "./components/admin/OutletLogin";
 import Login from "./components/admin/Login";
-
-// Import Admin Area
-import AdminLogin from "./components/admin/AdminLogin";
+import FounderHQ from "./components/admin/FounderHQ";
+import InventoryApp from "./components/admin/InventoryApp";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminHome from "./components/admin/AdminHome";
 import MenuMaster from "./components/admin/MenuMaster";
-import OrderHistory from "./components/admin/OrderHistory"; 
-import ShiftReports from "./components/admin/ShiftReports";
-import InventoryApp from "./components/admin/InventoryApp"; 
-import CustomerMenu from "./components/Customer/CustomerMenu"; 
 import TableQRManager from "./components/admin/TableQRManager";
-
-// 🔥 FITUR: MANAJEMEN PAKET BUNDLING
-import Paket from "./components/admin/Paket";
-
-// IMPORT FITUR SETTINGS & LAPORAN
-import SalesReport from "./components/admin/SalesReport"; 
-import TransactionHistory from "./components/admin/TransactionHistory";
-import RecipeManagement from "./components/admin/RecipeManagement"; 
-import HPPCalculator from "./components/admin/HPPCalculator"; 
-
-import UserManagement from "./components/admin/UserManagement"; 
-import TableLayout from "./components/admin/TableLayout";       
-import OutletProfile from "./components/admin/OutletProfile";   
-import MerchantBank from "./components/admin/MerchantBank"; 
-import PrinterSettings from "./components/admin/PrinterSettings";
-import ReceiptSettings from "./components/admin/ReceiptSettings"; 
-
-// --- IMPORT KOMPONEN KONTROL FOUNDER ---
-import FounderHQ from "./components/admin/FounderHQ"; 
+import KasirHome from "./components/kasir/KasirHome";
+import WaiterApp from "./components/waiter/WaiterApp";
 import ProtocolLock from "./components/admin/ProtocolLock";
+import Paket from "./components/admin/Paket";
+import RecipeManagement from "./components/admin/RecipeManagement";
+import HPPCalculator from "./components/admin/HPPCalculator";
+import MarketingApp from "./components/admin/MarketingApp";
+import OrderHistory from "./components/admin/OrderHistory";
+import ShiftReports from "./components/admin/ShiftReports";
+import UserManagement from "./components/admin/UserManagement";
+import TableLayout from "./components/admin/TableLayout";
+import OutletProfile from "./components/admin/OutletProfile";
+import MerchantBank from "./components/admin/MerchantBank";
+import PrinterSettings from "./components/admin/PrinterSettings";
+import ReceiptSettings from "./components/admin/ReceiptSettings";
 
-export default function App() {
-  const [user, setUser] = useState<null | { username: string; role: string }>(null);
-  const [isLicenseActive, setIsLicenseActive] = useState(true);
-  const navigate = useNavigate();
-  const location = useLocation();
+export default function App(){
 
-  // --- SAKLAR KEAMANAN PERANGKAT ---
-  const activeTenantId = localStorage.getItem("tenant_id");
-  const isTerminalOnly = localStorage.getItem("disba_terminal_only") === "true"; // Gembok PC Kasir
+const [ready,setReady] = useState(false);
 
-  useEffect(() => {
-    // Cek Sesi Login Staff & Admin
-    const isAdminAuth = localStorage.getItem("is_admin") === "true";
-    const savedRole = localStorage.getItem("role");
-    const savedUser = localStorage.getItem("username");
-    const licenseStatus = localStorage.getItem("disba_license_active") !== "false";
 
-    setIsLicenseActive(licenseStatus);
-    const isSupreme = savedUser === "SUPREME_FOUNDER";
+const [auth,setAuth]=useState({
 
-    if (isAdminAuth || isSupreme) {
-      setUser({ username: savedUser || "Supreme Admin", role: "admin" });
-    } else if (savedRole && savedUser) {
-      setUser({ username: savedUser, role: savedRole });
-    }
-  }, []);
+isFounder:false,
+isAdmin:false,
+isKasir:false,
+isWaiter:false,
+hasTenantId:false,
+licenseActive:true,
+defaultRoute:"/outlet-login"
 
-  const handleEnterSystem = () => {
-    navigate("/outlet-login");
-  };
+});
 
-  const handleLoginSuccess = (role: string) => {
-    const savedUsername = localStorage.getItem("username") || "User";
-    setUser({ username: savedUsername, role: role });
-    
-    if (role === "admin") {
-      navigate("/admin/dashboard");
-    } else {
-      navigate("/dashboard");
-    }
-  };
 
-  // 1. PRIORITAS UTAMA: FOUNDER & LISENSI
-  const isSupreme = localStorage.getItem("username") === "SUPREME_FOUNDER";
-  
-  // Hanya kunci jika lisensi mati DAN user bukan Supreme Founder DAN bukan di halaman Central
-  if (!isLicenseActive && !isSupreme && location.pathname !== "/founder-hq" && location.pathname !== "/founder-console") {
-    return <ProtocolLock />;
+
+useEffect(()=>{
+
+
+const username =
+(localStorage.getItem("username") || "")
+.trim()
+.toUpperCase();
+
+
+const role =
+(localStorage.getItem("role") || "")
+.trim()
+.toLowerCase();
+
+
+const supreme =
+      localStorage.getItem("supreme_auth") === "true";
+
+const tenantId =
+localStorage.getItem("tenant_id") || "";
+
+
+
+console.log("AUTH CHECK");
+console.log({
+username,
+role,
+supreme,
+tenantId
+});
+
+
+
+// ========================
+// FOUNDER PRIORITY
+// ========================
+
+const isFounder =
+      supreme ||
+      role === "founder" ||
+      role === "supreme_founder" ||
+      username === "BAGUS";
+
+
+// ========================
+// OTHER USER
+// ========================
+
+const isAdmin =
+role === "admin";
+
+
+const isKasir =
+role === "kasir";
+
+
+const isWaiter =
+role === "waiter";
+
+
+const hasTenantId =
+Boolean(tenantId);
+
+
+
+let defaultRoute="/outlet-login";
+
+
+
+if(isFounder){
+
+defaultRoute="/founder";
+
+}
+else if(isAdmin && hasTenantId){
+
+defaultRoute="/admin/dashboard";
+
+}
+else if(isKasir && hasTenantId){
+
+defaultRoute="/dashboard";
+
+}
+else if(isWaiter && hasTenantId){
+
+defaultRoute="/dashboard";
+
+}
+
+
+
+setAuth({
+
+isFounder,
+isAdmin,
+isKasir,
+isWaiter,
+hasTenantId,
+licenseActive:true,
+defaultRoute
+
+});
+
+
+setReady(true);
+
+
+
+},[]);
+
+
+
+if(!ready){
+
+return null;
+
+}
+
+
+
+
+if(!auth.licenseActive && !auth.isFounder){
+
+return <ProtocolLock/>;
+
+}
+
+
+
+
+return(
+
+<Routes>
+
+
+<Route 
+path="/" 
+element={<LandingPage/>}
+/>
+
+
+
+<Route 
+path="/landing" 
+element={<LandingPage/>}
+/>
+
+
+
+
+
+{/* =========================
+      DISBA CENTRAL FOUNDER
+========================= */}
+
+
+<Route
+path="/founder"
+element={
+<FounderHQ/>
+}
+/>
+
+<Route
+  path="/admin/qr"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <TableQRManager />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
   }
+/>
 
-  // 2. JIKA ALAT BELUM TERDAFTAR (KTP TENANT KOSONG)
-  if (!activeTenantId) {
-    return (
-      <Routes>
-        <Route path="/outlet-login" element={<OutletLogin />} />
-        <Route path="/founder-hq" element={<FounderHQ />} />
-        <Route path="/founder-console" element={<FounderHQ />} />
-        <Route path="*" element={<LandingPage onEnterSystem={handleEnterSystem} />} />
-      </Routes>
-    );
+<Route
+  path="/admin/inventory"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <InventoryApp />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
   }
+/>
 
-  // PROTEKSI ADMIN
-  const requireAdmin = (element: React.ReactNode) => {
-    if (isTerminalOnly) return <Navigate to="/dashboard" />;
-    if (!user || user.role !== "admin") return <AdminLogin />;
-    return <AdminLayout>{element}</AdminLayout>;
-  };
+<Route
+  path="/admin/paket"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <Paket />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
 
-  // PROTEKSI KASIR/WAITER
-  const requireStaff = (element: React.ReactNode) => {
-    if (!user || (user.role !== "kasir" && user.role !== "waiter" && user.role !== "admin")) {
-      return <Login onLoginSuccess={handleLoginSuccess} />;
-    }
-    return (
-      <div className="min-h-screen bg-[#020617] text-white font-sans italic w-full">
-        {element}
-      </div>
-    );
-  };
+<Route
+  path="/admin/recipes"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <RecipeManagement />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
 
-  return (
-    <Routes>
-      <Route path="/founder-hq" element={<FounderHQ />} />
-      <Route path="/founder-console" element={<FounderHQ />} />
-      <Route path="/menu/*" element={<CustomerMenu />} />
+<Route
+  path="/admin/hpp-calculator"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <HPPCalculator />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
 
-      {/* ADMIN ROUTES */}
-      <Route path="/admin/dashboard" element={requireAdmin(<AdminHome />)} />
-      <Route path="/admin" element={<Navigate to="/admin/dashboard" />} />
-      <Route path="/admin/qr" element={requireAdmin(<TableQRManager />)} />
-      <Route path="/admin/menu" element={requireAdmin(<MenuMaster />)} />
-      <Route path="/admin/paket" element={requireAdmin(<Paket />)} />
-      <Route path="/admin/recipes" element={requireAdmin(<RecipeManagement />)} />
-      <Route path="/admin/hpp-calculator" element={requireAdmin(<HPPCalculator />)} />
-      <Route path="/admin/inventory" element={requireAdmin(<InventoryApp />)} />
-      <Route path="/admin/reports" element={requireAdmin(<SalesReport />)} />
-      <Route path="/admin/history" element={requireAdmin(<TransactionHistory />)} />
-      <Route path="/admin/orders" element={requireAdmin(<OrderHistory />)} />
-      <Route path="/admin/shifts" element={requireAdmin(<ShiftReports />)} />
-      <Route path="/admin/settings/users" element={requireAdmin(<UserManagement />)} />
-      <Route path="/admin/settings/tables" element={requireAdmin(<TableLayout />)} />
-      <Route path="/admin/settings/profile" element={requireAdmin(<OutletProfile />)} />
-      <Route path="/admin/settings/payments" element={requireAdmin(<MerchantBank />)} />
-      <Route path="/admin/settings/printer" element={requireAdmin(<PrinterSettings />)} />
-      <Route path="/admin/settings/receipt" element={requireAdmin(<ReceiptSettings />)} />
+<Route
+  path="/admin/customers"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <MarketingApp />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
 
-      {/* STAFF ROUTES */}
-      <Route path="/dashboard" element={requireStaff(
-        user?.role === "kasir" ? <KasirHome /> : <WaiterApp />
-      )} />
-      <Route path="/history" element={requireStaff(<TransactionHistory />)} />
-      
-      {/* OTHER */}
-      <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
-      <Route path="*" element={<Navigate to={user ? (user.role === "admin" ? "/admin/dashboard" : "/dashboard") : "/login"} />} />
-    </Routes>
-  );
+<Route
+  path="/admin/history"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <OrderHistory />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+
+<Route
+  path="/admin/shifts"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <ShiftReports />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+
+
+{/* =========================
+      PENGATURAN 
+========================= */}
+<Route
+  path="/admin/settings/users"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <UserManagement />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+
+<Route
+  path="/admin/settings/tables"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <TableLayout />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+
+<Route
+  path="/admin/settings/profile"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <OutletProfile />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+
+<Route
+  path="/admin/settings/payments"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <MerchantBank />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+
+<Route
+  path="/admin/settings/printer"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <PrinterSettings />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+<Route
+  path="/admin/settings/receipt"
+  element={
+    auth.isAdmin && auth.hasTenantId ? (
+      <AdminLayout>
+        <ReceiptSettings />
+      </AdminLayout>
+    ) : (
+      <Navigate to={auth.defaultRoute} replace />
+    )
+  }
+/>
+
+{/* =========================
+      ADMIN OUTLET
+========================= */}
+
+
+
+<Route
+
+path="/admin"
+
+element={
+
+<Navigate 
+to="/admin/dashboard"
+replace
+/>
+
+}
+
+/>
+
+
+
+<Route
+
+path="/admin/dashboard"
+
+element={
+
+auth.isAdmin && auth.hasTenantId
+
+?
+
+<AdminLayout>
+
+<AdminHome/>
+
+</AdminLayout>
+
+:
+
+<Navigate 
+to={auth.defaultRoute}
+replace
+/>
+
+}
+
+/>
+
+
+
+
+
+<Route
+
+path="/admin/menu"
+
+element={
+
+auth.isAdmin && auth.hasTenantId
+
+?
+
+<AdminLayout>
+
+<MenuMaster/>
+
+</AdminLayout>
+
+:
+
+<Navigate 
+to={auth.defaultRoute}
+replace
+/>
+
+}
+
+/>
+
+
+
+
+
+{/* =========================
+      KASIR / WAITER
+========================= */}
+
+
+
+<Route
+
+path="/dashboard"
+
+element={
+
+
+auth.isKasir && auth.hasTenantId
+
+?
+
+<KasirHome/>
+
+:
+
+auth.isWaiter && auth.hasTenantId
+
+?
+
+<WaiterApp/>
+
+:
+
+<Navigate 
+to={auth.defaultRoute}
+replace
+/>
+
+}
+
+/>
+
+
+
+
+
+<Route
+
+path="/login"
+
+element={<Login/>}
+
+/>
+
+
+
+<Route
+
+path="/outlet-login"
+
+element={<OutletLogin/>}
+
+/>
+
+
+
+<Route
+
+path="*"
+
+element={
+
+<Navigate 
+to={auth.defaultRoute}
+replace
+/>
+
+}
+
+/>
+
+
+</Routes>
+
+)
+
 }

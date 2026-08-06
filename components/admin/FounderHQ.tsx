@@ -26,7 +26,7 @@ export default function DisbaCentral() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const SUPREME_FOUNDER_EMAIL = import.meta.env.VITE_SUPREME_FOUNDER_EMAIL;
   const SUPREME_FOUNDER_PASSWORD = import.meta.env.VITE_SUPREME_FOUNDER_PASSWORD;
-  const [authData, setAuthData] = useState({ email: "", password: "" }); // Tetap ada untuk input form
+  const [authData, setAuthData] = useState({ email: "bagus.arifian", password: "" }); // Tetap ada untuk input form
 
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -49,36 +49,76 @@ export default function DisbaCentral() {
   });
 
   useEffect(() => {
-    if (localStorage.getItem("supreme_auth") === "true") {
-      setIsAuthenticated(true);
-      fetchTenants();
-      fetchGlobalFinancials();
-    }
-  }, []);
 
+  const supreme = localStorage.getItem("supreme_auth");
+  const role = localStorage.getItem("role");
+
+  console.log("FOUNDER SESSION CHECK", {
+    supreme,
+    role
+  });
+
+  if (
+    supreme === "true" &&
+    role === "founder"
+  ) {
+
+    setIsAuthenticated(true);
+
+    fetchTenants();
+    fetchGlobalFinancials();
+
+  }
+
+}, []);
   const handleSupremeLogin = (e: React.FormEvent) => {
-    e.preventDefault(); // 🔥 PERBAIKAN: Gunakan variabel lingkungan
-    // Memungkinkan hardcoded founder untuk development/emergency
-    const isHardcodedFounder = authData.email.toLowerCase() === "bagus.arifianto29@gmail.com" && authData.password === "bagusatika29";
-    const isEnvFounder = SUPREME_FOUNDER_EMAIL && SUPREME_FOUNDER_PASSWORD && 
-                        authData.email.toLowerCase() === SUPREME_FOUNDER_EMAIL.toLowerCase() && authData.password === SUPREME_FOUNDER_PASSWORD;
+  e.preventDefault();
 
-    // Jika tidak ada hardcoded founder dan env vars juga tidak ada
-    if (!isHardcodedFounder && (!SUPREME_FOUNDER_EMAIL || !SUPREME_FOUNDER_PASSWORD)) {
-      alert("Sistem Keamanan Belum Dikonfigurasi (ENV Missing)");
-      return;
-    }
+  const email = authData.email.toLowerCase().trim();
+  const password = authData.password.trim();
 
-    if (isHardcodedFounder || isEnvFounder) {
-      localStorage.setItem("supreme_auth", "true");
-      localStorage.setItem("username", "SUPREME_FOUNDER");
-      setIsAuthenticated(true);
-      fetchTenants();
-      fetchGlobalFinancials();
-    } else {
-      alert("AKSES DITOLAK: Identitas Supreme Founder Tidak Dikenali.");
-    }
-  };
+  // Founder DISBA POS
+  const isFounder =
+    email === "bagus.arifianto29@gmail.com" &&
+    password === "bagusatika29";
+
+  if (isFounder) {
+
+    alert("FOUNDER LOGIN TERDETEKSI");
+
+    localStorage.clear();
+
+localStorage.setItem("supreme_auth","true");
+localStorage.setItem("role","founder");
+localStorage.setItem("username","Bagus");
+localStorage.setItem("supreme_auth", "true");
+localStorage.setItem("role", "founder");
+localStorage.setItem("username", "Bagus");
+
+
+console.log("FOUNDER SAVED", {
+  supreme: localStorage.getItem("supreme_auth"),
+  role: localStorage.getItem("role"),
+  username: localStorage.getItem("username")
+});
+
+
+setIsAuthenticated(true);
+
+
+setTimeout(()=>{
+
+window.location.href="/founder";
+
+},300);
+    return;
+}
+
+
+  alert(
+    "AKSES DITOLAK: Email atau password Founder tidak sesuai."
+  );
+};
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -192,20 +232,26 @@ export default function DisbaCentral() {
       
       // Suntikkan identitas baru
       localStorage.setItem("role", "admin");
-      localStorage.setItem("username", "SUPREME_FOUNDER");
-      localStorage.setItem("tenant_id", tId);
-      localStorage.setItem("tenant_name", targetTenant.business_name); // 🔥 SIMPAN NAMA OUTLET YANG DI-IMPERSONATE
-      localStorage.setItem("is_admin", "true");
-      
+localStorage.setItem("username", "Bagus");
+localStorage.setItem("tenant_id", tId);
+localStorage.setItem("tenant_name", targetTenant.business_name);
+localStorage.setItem("is_admin", "true");
+localStorage.setItem("access_mode", "founder_impersonate");      
       window.location.href = "/admin/dashboard"; 
     }
   };
 
   const handleCentralLogout = () => {
-    localStorage.removeItem("supreme_auth");
-    localStorage.removeItem("username");
-    window.location.reload();
-  };
+  localStorage.removeItem("supreme_auth");
+  localStorage.removeItem("username");
+  localStorage.removeItem("role");
+  localStorage.removeItem("tenant_id");
+  localStorage.removeItem("tenant_name");
+  localStorage.removeItem("is_admin");
+  localStorage.removeItem("access_mode");
+
+  window.location.href = "/outlet-login";
+};
 
   const resetForm = () => {
     setFormData({ 

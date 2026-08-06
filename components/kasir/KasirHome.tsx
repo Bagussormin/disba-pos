@@ -13,6 +13,7 @@ export default function KasirHome() {
   const [tables, setTables] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]); 
   const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [menuItems, setMenuItems] = useState<any[]>([]);
   const [selectedTable, setSelectedTable] = useState<any | null>(null);
   const [activeOrder, setActiveOrder] = useState<any | null>(null); 
   const [currentShift, setCurrentShift] = useState<any>(null);
@@ -33,6 +34,7 @@ export default function KasirHome() {
   // --- SPLIT BILL ---
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [splitQuantities, setSplitQuantities] = useState<Record<string, number>>({});
+  const [tenantType, setTenantType] = useState("RESTAURANT");
 
   const [lastIncomingOrder, setLastIncomingOrder] = useState<number>(0);
   const [showStartShiftModal, setShowStartShiftModal] = useState(false);
@@ -52,6 +54,8 @@ export default function KasirHome() {
   const [discount, setDiscount] = useState(0);
   const [startCash, setStartCash] = useState(0);
   const [endingCash, setEndingCash] = useState(0);
+  const [receiptStoreName, setReceiptStoreName] = useState<string | null>(null);
+  const [outletProfileName, setOutletProfileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
@@ -61,8 +65,12 @@ export default function KasirHome() {
 
   const cashInputRef = useRef<HTMLInputElement>(null);
   const prevTableIdRef = useRef<any>(null);
-  const dynamicAreas = Array.from(new Set(tables.map(t => (t.area || "Area Lainnya").toUpperCase())));
+  const dynamicAreas = Array.from(
+  new Set(tables.map(t => String(t.area || "Area Lainnya").trim().toUpperCase()))
+);
 
+console.log("DYNAMIC AREAS:", dynamicAreas);
+  
   // --- OFFLINE SYNC HANDLERS ---
   const syncOfflineTransactions = async () => {
     if (!navigator.onLine || isSyncing) return;
@@ -99,6 +107,19 @@ export default function KasirHome() {
   };
 
   useEffect(() => {
+    const loadTenantType = async () => {
+  const { data, error } = await supabase
+    .from("tenants")
+    .select("tenant_type")
+    .eq("tenant_id", tenantId)
+    .single();
+
+  if (data) {
+    setTenantType(data.tenant_type);
+  }
+};
+
+loadTenantType();
     const handleOnline = () => {
       setIsOnline(true);
       syncOfflineTransactions();
@@ -117,11 +138,13 @@ export default function KasirHome() {
   }, []);
 
   useEffect(() => {
+    console.log("KASIR HOME MOUNT", tenantId);
     if (!tenantId) return;
     checkActiveShift();
     fetchData();
     fetchBanks();
     fetchFiscalSettings();
+    fetchMenuItems();
 
     // Trigger sync jika online saat load
     if (navigator.onLine) {
@@ -140,6 +163,24 @@ export default function KasirHome() {
   useEffect(() => { if (activeOrder) fetchOrderItems(activeOrder.id); }, [lastIncomingOrder]);
 
   useEffect(() => {
+    if (tenantType === "RETAIL") {
+      const retailOrder = orders.find(order => order.status === "open" && order.waiter_name === "KASIR" && (order.table_id === null || order.table_id === undefined));
+      if (retailOrder) {
+        setActiveOrder(retailOrder);
+        if (prevTableIdRef.current !== retailOrder.id) {
+          setDiscount(0); setPaidAmount(0); setPaymentMethod("CASH"); setSelectedBank(null);
+          prevTableIdRef.current = retailOrder.id; setTimeout(() => cashInputRef.current?.focus(), 100);
+        }
+        fetchOrderItems(retailOrder.id);
+      } else {
+        setActiveOrder(null);
+        setOrderItems([]);
+        setSelectedTable(null);
+        if (!loading) handleCreateRetailOrder();
+      }
+      return;
+    }
+
     if (selectedTable) {
       const o = orders.find(order => order.table_id === selectedTable.id);
       setActiveOrder(o || null);
@@ -149,14 +190,28 @@ export default function KasirHome() {
       }
       if (o) fetchOrderItems(o.id); else setOrderItems([]);
     } else { prevTableIdRef.current = null; setActiveOrder(null); setOrderItems([]); }
-  }, [tables, orders, selectedTable]);
+  }, [tables, orders, selectedTable, tenantType, loading]);
 
   const fetchFiscalSettings = async () => {
+    console.log("fetchFiscalSettings dipanggil, tenantId:", tenantId);
     try {
-      const { data } = await supabase.from("receipt_settings").select("tax_rate,service_charge,use_tax,use_service_charge,loyalty_point_rate").eq("tenant_id", tenantId).maybeSingle();
-      if (data) setFiscalSettings({ tax_rate: data.tax_rate ?? 0.10, service_charge: data.service_charge ?? 0.05, use_tax: data.use_tax !== false, use_service_charge: data.use_service_charge !== false, loyalty_point_rate: data.loyalty_point_rate ?? 1000 });
+      const { data } = await supabase.from("receipt_settings").select("tax_rate,service_charge,use_tax,use_service_charge,loyalty_point_rate,store_name").eq("tenant_id", tenantId).maybeSingle();
+      if (data) {
+        setFiscalSettings({ tax_rate: data.tax_rate ?? 0.10, service_charge: data.service_charge ?? 0.05, use_tax: data.use_tax !== false, use_service_charge: data.use_service_charge !== false, loyalty_point_rate: data.loyalty_point_rate ?? 1000 });
+        if (data.store_name) setReceiptStoreName(data.store_name);
+      }
     } catch (err) {
       // Using default fiscal settings
+    }
+
+    try {
+      console.log("TENANT ID:", tenantId);
+      const { data: outletData, error } = await supabase.from("outlet_profiles").select("store_name").eq("tenant_id", tenantId).maybeSingle();
+      console.log("OUTLET QUERY ERROR:", error);
+      console.log("OUTLET QUERY DATA:", outletData);
+      if (outletData?.store_name) setOutletProfileName(outletData.store_name);
+    } catch (err) {
+      // Outlet profile may not be available
     }
   };
 
@@ -180,6 +235,7 @@ export default function KasirHome() {
       if (cached) setBanks(safeJSONParse(cached, []));
     }
   };
+  
 
   const fetchData = async () => {
     try {
@@ -191,9 +247,10 @@ export default function KasirHome() {
       if (oRes.error) throw oRes.error;
 
       if (tRes.data) {
-        setTables(tRes.data);
-        localStorage.setItem("disba_cache_tables", JSON.stringify(tRes.data));
-      }
+  console.log("DATA TABLE DARI SUPABASE:", tRes.data);
+  setTables(tRes.data);
+  localStorage.setItem("disba_cache_tables", JSON.stringify(tRes.data));
+}
       if (oRes.data) {
         setOrders(oRes.data);
         localStorage.setItem("disba_cache_orders", JSON.stringify(oRes.data));
@@ -244,6 +301,15 @@ export default function KasirHome() {
           price: item.price_at_time || 0,
           category: item.menus?.category || "FOOD" 
         }));
+        const { data: tenantData } = await supabase
+  .from("tenants")
+  .select("tenant_type")
+  .eq("tenant_id", tenantId)
+  .single();
+
+if (tenantData) {
+  setTenantType(tenantData.tenant_type);
+}
         setOrderItems(items);
         localStorage.setItem(`disba_cache_order_items_${orderId}`, JSON.stringify(items));
       } else setOrderItems([]);
@@ -251,6 +317,68 @@ export default function KasirHome() {
       // Using cached order items - offline mode
       const cachedItems = localStorage.getItem(`disba_cache_order_items_${orderId}`);
       if (cachedItems) setOrderItems(safeJSONParse(cachedItems, []));
+    }
+  };
+
+  const fetchMenuItems = async () => {
+    try {
+      const { data } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).eq("is_available", true).order("name", { ascending: true });
+      if (data) {
+        setMenuItems(data);
+        localStorage.setItem("disba_cache_menus", JSON.stringify(data));
+      }
+    } catch (err) {
+      const cachedMenus = localStorage.getItem("disba_cache_menus");
+      if (cachedMenus) setMenuItems(safeJSONParse(cachedMenus, []));
+    }
+  };
+
+  const handleAddMenuToOrder = async (menu: any) => {
+    if (!activeOrder) return;
+    try {
+      const existingItem = orderItems.find((item) => item.id === menu.id);
+      if (existingItem) {
+        const { error } = await supabase.from("order_items").update({ quantity: existingItem.qty + 1 })
+          .eq("id", existingItem.order_item_id)
+          .eq("tenant_id", tenantId);
+        if (error) throw error;
+        setOrderItems((prev) => prev.map((item) => item.order_item_id === existingItem.order_item_id ? { ...item, qty: item.qty + 1 } : item));
+        return;
+      }
+
+      const { error } = await supabase.from("order_items").insert({
+        order_id: activeOrder.id,
+        tenant_id: tenantId,
+        menu_id: menu.id,
+        quantity: 1,
+        price_at_time: menu.price,
+        notes: "CASHIER_ORDER"
+      });
+      if (error) throw error;
+      fetchOrderItems(activeOrder.id);
+    } catch (err: any) {
+      alert("Gagal menambahkan menu: " + err.message);
+    }
+  };
+
+  const handleUpdateOrderItemQty = async (item: any, delta: number) => {
+    if (!activeOrder) return;
+    const newQty = item.qty + delta;
+    try {
+      if (newQty <= 0) {
+        const { error } = await supabase.from("order_items").delete().eq("id", item.order_item_id).eq("tenant_id", tenantId);
+        if (error) throw error;
+        setOrderItems((prev) => prev.filter((row) => row.order_item_id !== item.order_item_id));
+        return;
+      }
+
+      const { error } = await supabase.from("order_items").update({ quantity: newQty })
+        .eq("id", item.order_item_id)
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+      setOrderItems((prev) => prev.map((row) => row.order_item_id === item.order_item_id ? { ...row, qty: newQty } : row));
+    } catch (err: any) {
+      alert("Gagal memperbarui qty: " + err.message);
     }
   };
 
@@ -308,6 +436,39 @@ export default function KasirHome() {
     }
     setLoading(false);
   };
+  
+  const handleCreateRetailOrder = async (table?: any) => {
+  if (table && (table.target || table.currentTarget)) table = undefined;
+  try {
+    setLoading(true);
+
+    const { data: newOrder, error } = await supabase
+      .from("orders")
+      .insert({
+        table_id: table?.id || null,
+        tenant_id: tenantId,
+        status: "open",
+        waiter_name: "KASIR",
+        customer_name: null
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (newOrder) {
+      setActiveOrder(newOrder);
+      setOrderItems([]);
+      setSelectedTable(table ? table : null);
+    }
+    fetchData();
+
+  } catch (err:any) {
+    alert("Gagal membuat transaksi: " + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleStartShift = async () => {
     const username = localStorage.getItem("username") || "KASIR";
@@ -487,6 +648,13 @@ export default function KasirHome() {
   const getGrandTotal = () => getNetSubtotal() + getService() + getTax();
   const getChange = () => Math.max(0, paidAmount - getGrandTotal());
 
+  const menuCategories = menuItems.reduce((acc: Record<string, any[]>, menu) => {
+    const category = (menu.category || "LAINNYA").toUpperCase();
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(menu);
+    return acc;
+  }, {} as Record<string, any[]>);
+
   const processPayment = async () => {
     if (!activeOrder || !currentShift || loading) return;
     if (paymentMethod === "CASH" && paidAmount < getGrandTotal()) return;
@@ -559,9 +727,10 @@ export default function KasirHome() {
 
         await supabase.from("orders").update({ status: "completed" })
           .eq("id", activeOrder.id).eq("tenant_id", tenantId);
-        await supabase.from("tables").update({ status: "available" })
-          .eq("id", selectedTable.id).eq("tenant_id", tenantId);
-          
+        if (selectedTable?.id) {
+          await supabase.from("tables").update({ status: "available" })
+            .eq("id", selectedTable.id).eq("tenant_id", tenantId);
+        }
         if (selectedCustomer?.id) {
           await supabase.rpc('update_customer_points', {
             p_customer_id: selectedCustomer.id,
@@ -575,7 +744,7 @@ export default function KasirHome() {
         const offlineTrx = {
           id: Date.now().toString(),
           order_id: activeOrder.id,
-          table_id: selectedTable.id,
+          table_id: selectedTable?.id || null,
           data: trxPayload
         };
         
@@ -584,7 +753,7 @@ export default function KasirHome() {
         localStorage.setItem("disba_offline_transactions", JSON.stringify(queue));
 
         // Update local memory & cache
-        const localTables = tables.map(t => t.id === selectedTable.id ? { ...t, status: "available" } : t);
+        const localTables = selectedTable?.id ? tables.map(t => t.id === selectedTable.id ? { ...t, status: "available" } : t) : tables;
         const localOrders = orders.filter(o => o.id !== activeOrder.id);
         
         setTables(localTables);
@@ -681,7 +850,7 @@ export default function KasirHome() {
   const handleEmailShiftClosing = async (selisih: number) => {
     try {
       // 1. Ambil email outlet
-      const { data: profile } = await supabase.from("outlet_profile").select("email, name").eq("tenant_id", tenantId).maybeSingle();
+      const { data: profile } = await supabase.from("outlet_profiles").select("email, name").eq("tenant_id", tenantId).maybeSingle();
       if (!profile || !profile.email) {
         // Email configuration incomplete
         return;
@@ -834,8 +1003,23 @@ export default function KasirHome() {
       <header className="flex justify-between items-center bg-slate-900/60 border-b border-slate-800/80 p-3 shadow-2xl backdrop-blur-md">
         <div className="flex items-center gap-3">
           <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse"></span>
-          <h1 className="text-sm font-extrabold tracking-tight text-white uppercase">DISBA POS Terminal</h1>
-          
+          <h1 className="text-sm font-extrabold tracking-tight text-white uppercase">
+DISBA POS Terminal - {tenantType}
+</h1>
+          <div className="flex gap-2">
+            {tenantType === "RETAIL" && (
+  <button
+    onClick={handleCreateRetailOrder}
+    className="h-8 px-3 bg-blue-600 rounded-xl text-[10px] font-bold text-white"
+  >
+    + TRANSAKSI BARU
+  </button>
+)}
+  <button onClick={() => fetchShiftHistory("BILL_LIST")}>ARSIP</button>
+  <button onClick={() => fetchShiftHistory("ITEM_LIST")}>REKAP</button>
+  <button onClick={openCloseShiftModal}>TUTUP SHIFT</button>
+  <button onClick={handleLogOut}>...</button>
+</div>
           {/* STATUS KONEKSI (ONLINE/OFFLINE RESILIENCE INDICATOR) */}
           <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-bold tracking-wider ${isOnline ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
             {isOnline ? <Wifi size={10} /> : <WifiOff size={10} />}
@@ -854,7 +1038,9 @@ export default function KasirHome() {
       <div className="flex-1 flex gap-2 p-2 min-h-0 overflow-hidden bg-slate-950/20">
         
         {/* PANEL MEJA (SIDEBAR) */}
+        {tenantType !== "RETAIL" && (
         <div className="w-52 bg-slate-900/40 rounded-3xl border border-slate-800/80 p-3 overflow-y-auto no-scrollbar flex flex-col gap-5 backdrop-blur-xl">
+          
           {dynamicAreas.map(area => (
             <div key={area} className="flex flex-col gap-2">
               <div className="flex items-center gap-2 px-2 py-0.5 opacity-60">
@@ -862,12 +1048,20 @@ export default function KasirHome() {
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{area}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {tables.filter(t => (t.area || "Area Lainnya").toUpperCase() === area).map(t => {
+                {tables.filter(t => String(t.area || "Area Lainnya").trim().toUpperCase() === area).map(t => {
+              
                    const hasOrder = orders.some(o => o.table_id === t.id); 
+                   console.log("TABLES RENDER:", tables);
                    return (
                     <button 
                       key={t.id} 
-                      onClick={() => setSelectedTable(t)} 
+                      onClick={() => {
+                        if (tenantType === "RETAIL" && !hasOrder) {
+                          handleCreateRetailOrder(t);
+                          return;
+                        }
+                        setSelectedTable(t);
+                      }}
                       className={`h-14 rounded-2xl border transition-all text-xs font-bold flex flex-col items-center justify-center gap-0.5 shadow-md relative ${
                         selectedTable?.id === t.id 
                           ? 'border-blue-500 bg-blue-600/20 text-white' 
@@ -887,6 +1081,7 @@ export default function KasirHome() {
             </div>
           ))}
         </div>
+        )}
 
         {/* ORDER DETAILS PANEL */}
         <div className="flex-1 bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col overflow-hidden backdrop-blur-xl">
@@ -895,14 +1090,48 @@ export default function KasirHome() {
               <div className="p-4 border-b border-slate-800/80 bg-slate-950/20 flex justify-between items-center">
                 <div className="flex items-center gap-2.5">
                   <Receipt size={16} className="text-blue-500"/>
-                  <h2 className="text-sm font-extrabold text-white">Billing {selectedTable?.name}</h2>
+                  <h2 className="text-sm font-extrabold text-white">Billing {tenantType === "RETAIL" ? "RETAIL" : selectedTable?.name}</h2>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => { setSplitQuantities({}); setShowSplitModal(true); }} className="h-8 px-3 bg-orange-500/10 border border-orange-500/30 rounded-xl text-[10px] font-bold text-orange-400 hover:bg-orange-500 hover:text-white transition-all flex items-center gap-1.5"><Scissors size={12}/> PISAH NOTA</button>
                   <button onClick={() => setSelectedTable(null)} className="text-slate-500 hover:text-white transition-colors"><X size={18}/></button>
                 </div>
               </div>
-              
+              {tenantType === "RETAIL" && (
+  <button
+    onClick={() => handleCreateRetailOrder()}
+    className="h-8 px-3 bg-blue-600 rounded-xl text-[10px] font-bold text-white"
+  >
+    + TRANSAKSI BARU
+  </button>
+)}
+              {activeOrder && menuItems.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    <span>Pilih Menu</span>
+                    <span className="text-slate-500">{menuItems.length} item</span>
+                  </div>
+                  <div className="space-y-4 max-h-56 overflow-y-auto no-scrollbar">
+                    {Object.entries(menuCategories as Record<string, any[]>).map(([category, items]) => (
+                      <div key={category}>
+                        <div className="mb-2 text-[9px] font-black uppercase text-slate-500 tracking-wider">{category}</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {items.map(menu => (
+                            <button
+                              key={menu.id}
+                              onClick={() => handleAddMenuToOrder(menu)}
+                              className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-left text-xs font-bold text-slate-200 hover:border-blue-500 hover:bg-slate-900 transition-all"
+                            >
+                              <div className="truncate">{menu.name}</div>
+                              <div className="mt-1 text-[10px] text-slate-500">Rp {Number(menu.price).toLocaleString('id-ID')}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
                 <table className="w-full text-left">
                   <thead className="text-[10px] font-bold text-slate-500 border-b border-slate-800 pb-3 uppercase tracking-wider sticky top-0 bg-[#020617] z-10">
@@ -916,8 +1145,19 @@ export default function KasirHome() {
                   <tbody className="divide-y divide-slate-800/50">
                     {orderItems.map((item, i) => (
                       <tr key={i} className="hover:bg-slate-900/10 transition-colors">
-                        <td className="py-3.5"><span className="text-xs font-semibold text-slate-200">{item.name}</span></td>
-                        <td className="py-3.5 text-center"><span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-lg border border-blue-500/20">{item.qty}x</span></td>
+                        <td className="py-3.5">
+                          <div className="flex flex-col gap-2">
+                            <span className="text-xs font-semibold text-slate-200">{item.name}</span>
+                            <button onClick={() => handleUpdateOrderItemQty(item, -item.qty)} className="text-[9px] text-red-400 hover:text-red-300 transition-colors">Cancel/Hapus</button>
+                          </div>
+                        </td>
+                        <td className="py-3.5 text-center">
+                          <div className="inline-flex items-center gap-1">
+                            <button onClick={() => handleUpdateOrderItemQty(item, -1)} className="w-7 h-7 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900 transition-colors">-</button>
+                            <div className="text-xs font-mono font-bold text-blue-400">{item.qty}</div>
+                            <button onClick={() => handleUpdateOrderItemQty(item, 1)} className="w-7 h-7 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900 transition-colors">+</button>
+                          </div>
+                        </td>
                         <td className="py-3.5 text-right text-xs font-mono text-slate-500">Rp {item.price.toLocaleString('id-ID')}</td>
                         <td className="py-3.5 text-right text-xs font-mono font-bold text-slate-100">Rp {(item.qty * item.price).toLocaleString('id-ID')}</td>
                       </tr>
@@ -1040,7 +1280,7 @@ export default function KasirHome() {
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center px-4 opacity-30 select-none">
               <CheckCircle2 size={28} className="mb-3 text-slate-400"/>
-              <p className="text-xs font-bold text-slate-400 uppercase">Pilih Meja untuk Membayar</p>
+              <p className="text-xs font-bold text-slate-400 uppercase">{tenantType === "RETAIL" ? "Menunggu transaksi RETAIL" : "Pilih Meja untuk Membayar"}</p>
             </div>
           )}
         </div>
@@ -1146,7 +1386,7 @@ export default function KasirHome() {
       {showPreviewModal && (
         <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-[6000] p-4 backdrop-blur-md">
           <div className="bg-white text-slate-900 p-6 rounded-2xl w-full max-w-[320px] font-mono shadow-2xl relative">
-            <h3 className="font-extrabold text-lg text-center border-b-2 border-slate-900 border-double pb-2 mb-4">NES HOUSE COLD BREW</h3>
+            <h3 className="font-extrabold text-lg text-center border-b-2 border-slate-900 border-double pb-2 mb-4">{outletProfileName || receiptStoreName || ""}</h3>
             <div className="text-[10px] space-y-1">
               <div className="flex justify-between"><span>Meja:</span> <span>{selectedTable?.name}</span></div>
               <div className="flex justify-between"><span>Metode:</span> <span className="font-bold">{paymentMethod}</span></div>
