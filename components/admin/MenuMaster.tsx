@@ -20,6 +20,8 @@ interface MenuItem {
 
   image_url: string;
 
+  inventory_id?: string | null;
+
   tenant_id?: string;
 
   hpp?: number;
@@ -79,10 +81,11 @@ export default function MenuMaster() {
 
   const [formData, setFormData] = useState<MenuItem>({
 
-    id: null, name: "", price: "", category: "", image_url: ""
+    id: null, name: "", price: "", category: "", image_url: "", inventory_id: ""
 
   });
 
+  const [tenantType, setTenantType] = useState<string>("");
 
   const [imageFile, setImageFile] = useState<File | null>(null);
 
@@ -115,6 +118,13 @@ export default function MenuMaster() {
       fetchCategories();
 
       fetchInventory();
+
+      const loadTenantType = async () => {
+        const { data } = await supabase.from("tenants").select("tenant_type").eq("tenant_id", tenantId).single();
+        if (data?.tenant_type) setTenantType(data.tenant_type);
+      };
+
+      loadTenantType();
 
     }
 
@@ -204,7 +214,14 @@ export default function MenuMaster() {
 
     }
 
-    const payload = { name: formData.name.toUpperCase(), price: Number(formData.price), category: formData.category.toUpperCase(), image_url: finalImageUrl, tenant_id: tenantId };
+    const payload = {
+      name: formData.name.toUpperCase(),
+      price: Number(formData.price),
+      category: formData.category.toUpperCase(),
+      image_url: finalImageUrl,
+      inventory_id: formData.inventory_id || null,
+      tenant_id: tenantId
+    };
 
     if (formData.id) await supabase.from("menus").update(payload).eq("id", formData.id).eq("tenant_id", tenantId);
 
@@ -217,7 +234,7 @@ export default function MenuMaster() {
 
   const closeModal = () => {
 
-    setIsModalOpen(false); setFormData({ id: null, name: "", price: "", category: "", image_url: "" });
+    setIsModalOpen(false); setFormData({ id: null, name: "", price: "", category: "", image_url: "", inventory_id: "" });
 
     setImageFile(null); setPreviewUrl(null);
 
@@ -694,6 +711,22 @@ export default function MenuMaster() {
                 <div><label className="text-[8px] font-black text-gray-500 block mb-1">KATEGORI</label><input className="w-full bg-white/5 border border-white/10 p-3 rounded-xl outline-none" value={formData.category} onChange={e=>setFormData({...formData, category:e.target.value.toUpperCase()})}/></div>
 
               </div>
+
+              {tenantType === "RETAIL" && (
+                <div>
+                  <label className="text-[8px] font-black text-gray-500 block mb-1">Hubungkan dengan Inventory</label>
+                  <select
+                    className="w-full bg-white/5 border border-white/10 p-3 rounded-xl outline-none"
+                    value={formData.inventory_id || ""}
+                    onChange={e => setFormData({ ...formData, inventory_id: e.target.value || "" })}
+                  >
+                    <option value="">-- Pilih Inventory --</option>
+                    {inventory.map(item => (
+                      <option key={item.id} value={item.id}>{item.item_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <button className="w-full bg-blue-600 py-4 rounded-xl font-black text-xs mt-4">SIMPAN_MENU</button>
 

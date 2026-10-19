@@ -291,7 +291,7 @@ loadTenantType();
 
   const fetchOrderItems = async (orderId: string) => {
     try {
-      const { data: orderData } = await supabase.from("order_items").select(`*, menus(name, category)`).eq("order_id", orderId).eq("tenant_id", tenantId);
+      const { data: orderData } = await supabase.from("order_items").select(`*, menus(name, category, inventory_id)`).eq("order_id", orderId).eq("tenant_id", tenantId);
       if (orderData) {
         const items = orderData.map((item: any) => ({
           id: item.menu_id, 
@@ -299,7 +299,8 @@ loadTenantType();
           name: item.menus?.name || item.name || `Menu ID: ${item.menu_id}`, 
           qty: item.quantity || 1, 
           price: item.price_at_time || 0,
-          category: item.menus?.category || "FOOD" 
+          category: item.menus?.category || "FOOD",
+          inventory_id: item.menus?.inventory_id || null,
         }));
         const { data: tenantData } = await supabase
   .from("tenants")
@@ -334,6 +335,7 @@ if (tenantData) {
   };
 
   const handleAddMenuToOrder = async (menu: any) => {
+  console.log("ACTIVE ORDER:", activeOrder);
     if (!activeOrder) return;
     try {
       const existingItem = orderItems.find((item) => item.id === menu.id);
@@ -355,6 +357,18 @@ if (tenantData) {
         notes: "CASHIER_ORDER"
       });
       if (error) throw error;
+      setOrderItems((prev) => [
+        ...prev,
+        {
+          id: menu.id,
+          order_item_id: null,
+          name: menu.name,
+          qty: 1,
+          price: menu.price,
+          category: menu.category || "FOOD",
+          inventory_id: menu.inventory_id || null,
+        }
+      ]);
       fetchOrderItems(activeOrder.id);
     } catch (err: any) {
       alert("Gagal menambahkan menu: " + err.message);
@@ -656,6 +670,7 @@ if (tenantData) {
   }, {} as Record<string, any[]>);
 
   const processPayment = async () => {
+    console.log("processPayment orderItems:", orderItems);
     if (!activeOrder || !currentShift || loading) return;
     if (paymentMethod === "CASH" && paidAmount < getGrandTotal()) return;
     if (paymentMethod === "TRANSFER" && !selectedBank) return alert("Harap Pilih Bank!");
@@ -715,15 +730,27 @@ if (tenantData) {
         if (trxError) throw trxError;
 
         // Potong stok
-        const stockReductions = orderItems.map(item => 
-          supabase.rpc('reduce_stock_by_recipe', {
-            p_menu_id: item.id, 
-            p_qty_sold: item.qty,
-            p_tenant_id: tenantId,
-            p_sales_order_id: receiptNo
-          })
-        );
-        await Promise.all(stockReductions);
+        if (tenantType === "RETAIL") {
+          const stockUpdates = orderItems.map(item => {
+            if (!item.inventory_id) return Promise.resolve(null);
+            return supabase.rpc('reduce_stock_by_inventory', {
+              p_inventory_id: item.inventory_id,
+              p_qty_sold: item.qty,
+              p_tenant_id: tenantId
+            });
+          });
+          await Promise.all(stockUpdates);
+        } else {
+          const stockReductions = orderItems.map(item => 
+            supabase.rpc('reduce_stock_by_recipe', {
+              p_menu_id: item.id, 
+              p_qty_sold: item.qty,
+              p_tenant_id: tenantId,
+              p_sales_order_id: receiptNo
+            })
+          );
+          await Promise.all(stockReductions);
+        }
 
         await supabase.from("orders").update({ status: "completed" })
           .eq("id", activeOrder.id).eq("tenant_id", tenantId);
@@ -994,7 +1021,7 @@ if (tenantData) {
     } catch (e) { console.error("Gagal print closing:", e); }
   };
 
-  const handleLogOut = () => { if (window.confirm("Keluar dari Terminal Kasir?")) { localStorage.removeItem("role"); localStorage.removeItem("username"); window.location.replace("/"); } };
+  const handleLogOut = () => { if (window.confirm("Keluar dari Terminal Kasir?")) { localStorage.removeItem("role"); localStorage.removeItem("username"); window.location.replace("/login"); } };
 
   return (
     <div className="fixed inset-0 bg-[#020617] text-slate-100 font-sans flex flex-col overflow-hidden">

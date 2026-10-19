@@ -34,6 +34,7 @@ const [auth,setAuth]=useState({
 
 isFounder:false,
 isAdmin:false,
+isManager:false,
 isKasir:false,
 isWaiter:false,
 hasTenantId:false,
@@ -82,27 +83,25 @@ tenantId
 // ========================
 
 const isFounder =
-      supreme ||
-      role === "founder" ||
-      role === "supreme_founder" ||
-      username === "BAGUS";
-
+  supreme ||
+  role === "founder" ||
+  role === "supreme_founder";
 
 // ========================
 // OTHER USER
 // ========================
 
 const isAdmin =
-role === "admin";
+  role === "admin";
 
+const isManager =
+  role === "manager";
 
 const isKasir =
-role === "kasir";
-
+  role === "kasir";
 
 const isWaiter =
-role === "waiter";
-
+  role === "waiter";
 
 const hasTenantId =
 Boolean(tenantId);
@@ -119,6 +118,11 @@ defaultRoute="/founder";
 
 }
 else if(isAdmin && hasTenantId){
+
+defaultRoute="/admin/dashboard";
+
+}
+else if(isManager && hasTenantId){
 
 defaultRoute="/admin/dashboard";
 
@@ -140,6 +144,7 @@ setAuth({
 
 isFounder,
 isAdmin,
+isManager,
 isKasir,
 isWaiter,
 hasTenantId,
@@ -422,8 +427,7 @@ path="/admin/dashboard"
 
 element={
 
-auth.isAdmin && auth.hasTenantId
-
+(auth.isAdmin || auth.isManager) && auth.hasTenantId
 ?
 
 <AdminLayout>
