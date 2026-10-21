@@ -8,6 +8,7 @@ import {
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, Loader2, ShoppingBag, Search,
   Scissors, Users, Star, Compass, QrCode, Wifi, WifiOff
 } from "lucide-react";
+import { testBluetoothPrint } from "../../services/bluetoothPrinter";
 
 export default function KasirHome() {
   const [tables, setTables] = useState<any[]>([]);
@@ -68,6 +69,25 @@ export default function KasirHome() {
   const dynamicAreas = Array.from(
   new Set(tables.map(t => String(t.area || "Area Lainnya").trim().toUpperCase()))
 );
+const [testingBluetooth, setTestingBluetooth] = useState(false);
+
+const handleTestBluetooth = async () => {
+  if (testingBluetooth) return;
+
+  setTestingBluetooth(true);
+  try {
+    const result = await testBluetoothPrint();
+    console.log("Hasil tes Bluetooth:", result);
+    alert("Permintaan tes Bluetooth dikirim. Periksa printer.");
+  } catch (error) {
+    console.error("Tes Bluetooth gagal:", error);
+    const message =
+      error instanceof Error ? error.message : "Kesalahan tidak diketahui";
+    alert(`Tes Bluetooth gagal: ${message}`);
+  } finally {
+    setTestingBluetooth(false);
+  }
+};
 
 console.log("DYNAMIC AREAS:", dynamicAreas);
   
@@ -1300,6 +1320,18 @@ DISBA POS Terminal - {tenantType}
                     )}
                   </div>
                 )}
+                <button
+  type="button"
+  onClick={handleTestBluetooth}
+  disabled={testingBluetooth}
+  className="w-full py-3 mb-2 rounded-2xl font-bold text-xs
+    flex items-center justify-center gap-2
+    bg-green-600 text-white hover:bg-green-500
+    disabled:opacity-50 transition-all"
+>
+  <Printer size={15} />
+  {testingBluetooth ? "MENGUJI BLUETOOTH..." : "TES CETAK BLUETOOTH"}
+</button>
                 
                 <button onClick={() => setShowPreviewModal(true)} disabled={loading || (paymentMethod === "CASH" && paidAmount < getGrandTotal()) || (paymentMethod === "TRANSFER" && !selectedBank)} className={`w-full py-4.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all uppercase tracking-wider ${(paymentMethod === "CASH" ? paidAmount >= getGrandTotal() : (paymentMethod === "QRIS" || !!selectedBank)) ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg' : 'bg-slate-900 text-slate-500 opacity-55 cursor-not-allowed'}`}><Printer size={15}/> PRATINJAU NOTA</button>
               </div>
