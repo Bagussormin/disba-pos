@@ -8,7 +8,10 @@ import {
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, Loader2, ShoppingBag, Search,
   Scissors, Users, Star, Compass, QrCode, Wifi, WifiOff
 } from "lucide-react";
-import { testBluetoothPrint } from "../../services/bluetoothPrinter";
+import {
+  testBluetoothPrint,
+  printBluetoothReceipt,
+} from "../../services/bluetoothPrinter";
 
 export default function KasirHome() {
   const [tables, setTables] = useState<any[]>([]);
@@ -829,11 +832,23 @@ if (tenantData) {
         footerText: tenantConfig?.footer_text || "Terima Kasih"
       };
       
-      try { 
-        await executePrint(receiptData); 
-      } catch (err) { 
-        // Printer connection error 
-      }
+      try {
+  const isAndroidTablet =
+    /Android/i.test(navigator.userAgent) &&
+    navigator.maxTouchPoints > 0;
+
+  if (isAndroidTablet) {
+    await printBluetoothReceipt(receiptData);
+  } else {
+    await executePrint(receiptData);
+  }
+} catch (err) {
+  console.error("Gagal mencetak struk:", err);
+  alert(
+    "Transaksi berhasil, tetapi struk gagal dicetak. " +
+    "Periksa koneksi printer sebelum mencetak ulang."
+  );
+}
 
       setOrderItems([]); setPaidAmount(0); setShowPreviewModal(false); setSelectedTable(null);
       setSelectedCustomer(null); setCustomerSearch(""); fetchData();
