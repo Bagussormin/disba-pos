@@ -344,18 +344,45 @@ if (tenantData) {
     }
   };
 
-  const fetchMenuItems = async () => {
-    try {
-      const { data } = await supabase.from("menus").select("*").eq("tenant_id", tenantId).eq("is_available", true).order("name", { ascending: true });
-      if (data) {
-        setMenuItems(data);
-        localStorage.setItem("disba_cache_menus", JSON.stringify(data));
-      }
-    } catch (err) {
-      const cachedMenus = localStorage.getItem("disba_cache_menus");
-      if (cachedMenus) setMenuItems(safeJSONParse(cachedMenus, []));
+const fetchMenuItems = async () => {
+  const cachedMenus = localStorage.getItem("disba_cache_menus");
+
+  // Tampilkan cache terlebih dahulu.
+  if (cachedMenus) {
+    const parsedMenus = safeJSONParse(cachedMenus, []);
+    if (Array.isArray(parsedMenus) && parsedMenus.length > 0) {
+      setMenuItems(parsedMenus);
     }
-  };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("menus")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("is_available", true)
+      .order("name", { ascending: true });
+
+    console.log("TENANT ID KASIR:", tenantId);
+    console.log("HASIL MENU SUPABASE:", data, "ERROR:", error);
+
+    if (error) {
+      console.error("Gagal mengambil menu:", error);
+      return;
+    }
+
+    if (Array.isArray(data) && data.length > 0) {
+      setMenuItems(data);
+      localStorage.setItem("disba_cache_menus", JSON.stringify(data));
+    } else {
+      console.warn(
+        "Supabase mengembalikan menu kosong. Cache menu dipertahankan."
+      );
+    }
+  } catch (err) {
+    console.error("Kesalahan saat mengambil menu:", err);
+  }
+};
 
   const handleAddMenuToOrder = async (menu: any) => {
   console.log("ACTIVE ORDER:", activeOrder);
