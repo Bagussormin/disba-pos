@@ -88,7 +88,7 @@ export default function AdminHome() {
   };
 
   return (
-    <div className="p-10 space-y-8 animate-in fade-in duration-500 bg-[#020617] min-h-screen text-white">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-8 animate-in fade-in duration-500 bg-[#020617] min-h-screen text-white">
       
       {/* TABS */}
       <div className="flex gap-10 border-b border-white/5 pb-6">
@@ -123,7 +123,7 @@ export default function AdminHome() {
       </div>
 
       {/* DYNAMIC CONTENT */}
-      <div className="bg-black/40 border border-white/5 p-10 rounded-[3rem] shadow-inner">
+      <div className="bg-black/40 border border-white/5 p-4 sm:p-6 lg:p-8 rounded-[3rem] shadow-inner">
         {activeSubTab === "OVERVIEW" && (
           <div className="space-y-10 animate-in fade-in duration-500">
             <div className="flex justify-between items-center">

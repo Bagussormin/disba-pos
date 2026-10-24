@@ -1089,13 +1089,13 @@ const fetchMenuItems = async () => {
     <div className="fixed inset-0 bg-[#020617] text-slate-100 font-sans flex flex-col overflow-hidden">
       
       {/* HEADER CONTROL */}
-      <header className="flex justify-between items-center bg-slate-900/60 border-b border-slate-800/80 p-3 shadow-2xl backdrop-blur-md">
-        <div className="flex items-center gap-3">
+      <header className="shrink-0 flex flex-wrap justify-between items-center gap-2 bg-slate-900/60 border-b border-slate-800/80 p-2 sm:p-3 shadow-2xl backdrop-blur-md">
+        <div className="min-w-0 flex flex-wrap items-center gap-3">
           <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse"></span>
           <h1 className="text-sm font-extrabold tracking-tight text-white uppercase">
 DISBA POS Terminal - {tenantType}
 </h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {tenantType === "RETAIL" && (
   <button
     onClick={handleCreateRetailOrder}
@@ -1104,10 +1104,6 @@ DISBA POS Terminal - {tenantType}
     + TRANSAKSI BARU
   </button>
 )}
-  <button onClick={() => fetchShiftHistory("BILL_LIST")}>ARSIP</button>
-  <button onClick={() => fetchShiftHistory("ITEM_LIST")}>REKAP</button>
-  <button onClick={openCloseShiftModal}>TUTUP SHIFT</button>
-  <button onClick={handleLogOut}>...</button>
 </div>
           {/* STATUS KONEKSI (ONLINE/OFFLINE RESILIENCE INDICATOR) */}
           <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-bold tracking-wider ${isOnline ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
@@ -1124,56 +1120,65 @@ DISBA POS Terminal - {tenantType}
       </header>
 
       {/* CORE BODY */}
-      <div className="flex-1 flex gap-2 p-2 min-h-0 overflow-hidden bg-slate-950/20">
+<div className="flex-1 flex flex-col xl:flex-row gap-2 p-2 min-h-0 overflow-y-auto xl:overflow-hidden bg-slate-950/20">
         
-        {/* PANEL MEJA (SIDEBAR) */}
-        {tenantType !== "RETAIL" && (
-        <div className="w-52 bg-slate-900/40 rounded-3xl border border-slate-800/80 p-3 overflow-y-auto no-scrollbar flex flex-col gap-5 backdrop-blur-xl">
-          
-          {dynamicAreas.map(area => (
-            <div key={area} className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 px-2 py-0.5 opacity-60">
-                <MapPin size={10} className="text-blue-500"/>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{area}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {tables.filter(t => String(t.area || "Area Lainnya").trim().toUpperCase() === area).map(t => {
-              
-                   const hasOrder = orders.some(o => o.table_id === t.id); 
-                   console.log("TABLES RENDER:", tables);
-                   return (
-                    <button 
-                      key={t.id} 
-                      onClick={() => {
-                        if (tenantType === "RETAIL" && !hasOrder) {
-                          handleCreateRetailOrder(t);
-                          return;
-                        }
-                        setSelectedTable(t);
-                      }}
-                      className={`h-14 rounded-2xl border transition-all text-xs font-bold flex flex-col items-center justify-center gap-0.5 shadow-md relative ${
-                        selectedTable?.id === t.id 
-                          ? 'border-blue-500 bg-blue-600/20 text-white' 
-                          : hasOrder 
-                            ? 'border-orange-500/50 bg-orange-500/10 text-orange-400' 
-                            : t.status === 'payment' || t.status === 'closed' 
-                              ? 'border-red-500 bg-red-500/10 text-red-400' 
-                              : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
-                      }`}
-                    >
-                      {(t.status === 'payment' || t.status === 'closed') && <Lock size={8} className="mb-0.5" />}
-                      <span>{t.name}</span>
-                    </button>
-                   );
-                })}
-              </div>
-            </div>
-          ))}
+         {/* PANEL MEJA (SIDEBAR) */}
+  {tenantType !== "RETAIL" && (
+    <div className="w-full xl:w-52 xl:shrink-0 max-h-48 xl:max-h-none bg-slate-900/40 rounded-3xl border border-slate-800/80 p-3 overflow-y-auto no-scrollbar flex flex-col gap-5 backdrop-blur-xl">
+
+      {dynamicAreas.map(area => (
+        <div key={area} className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 px-2 py-0.5 opacity-60">
+            <MapPin size={10} className="text-blue-500" />
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              {area}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-2 gap-2">
+            {tables
+              .filter(
+                t =>
+                  String(t.area || "Area Lainnya").trim().toUpperCase() === area
+              )
+              .map(t => {
+                const hasOrder = orders.some(o => o.table_id === t.id);
+
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      if (tenantType === "RETAIL" && !hasOrder) {
+                        handleCreateRetailOrder(t);
+                        return;
+                      }
+                      setSelectedTable(t);
+                    }}
+                    className={`min-h-14 rounded-2xl border transition-all text-xs font-bold flex flex-col items-center justify-center gap-0.5 shadow-md relative ${
+                      selectedTable?.id === t.id
+                        ? "border-blue-500 bg-blue-600/20 text-white"
+                        : hasOrder
+                          ? "border-orange-500/50 bg-orange-500/10 text-orange-400"
+                          : t.status === "payment" || t.status === "closed"
+                            ? "border-red-500 bg-red-500/10 text-red-400"
+                            : "border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    {(t.status === "payment" || t.status === "closed") && (
+                      <Lock size={8} className="mb-0.5" />
+                    )}
+                    <span>{t.name}</span>
+                  </button>
+                );
+              })}
+          </div>
         </div>
-        )}
+      ))}
+    </div>
+  )}
 
         {/* ORDER DETAILS PANEL */}
-        <div className="flex-1 bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col overflow-hidden backdrop-blur-xl">
+        <div className="min-w-0 min-h-[22rem] xl:min-h-0 flex-none xl:flex-1 bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col overflow-hidden backdrop-blur-xl">
           {activeOrder ? (
             <div className="flex flex-col h-full">
               <div className="p-4 border-b border-slate-800/80 bg-slate-950/20 flex justify-between items-center">
@@ -1200,55 +1205,59 @@ DISBA POS Terminal - {tenantType}
                     <span>Pilih Menu</span>
                     <span className="text-slate-500">{menuItems.length} item</span>
                   </div>
-                  <div className="space-y-4 max-h-56 overflow-y-auto no-scrollbar">
+                  <div className="space-y-2 max-h-32 overflow-y-auto no-scrollbar">
                     {Object.entries(menuCategories as Record<string, any[]>).map(([category, items]) => (
                       <div key={category}>
                         <div className="mb-2 text-[9px] font-black uppercase text-slate-500 tracking-wider">{category}</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {items.map(menu => (
-                            <button
-                              key={menu.id}
-                              onClick={() => handleAddMenuToOrder(menu)}
-                              className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-left text-xs font-bold text-slate-200 hover:border-blue-500 hover:bg-slate-900 transition-all"
-                            >
-                              <div className="truncate">{menu.name}</div>
-                              <div className="mt-1 text-[10px] text-slate-500">Rp {Number(menu.price).toLocaleString('id-ID')}</div>
-                            </button>
-                          ))}
-                        </div>
+
+<div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-1.5">
+  {items.map(menu => (
+    <button
+      key={menu.id}
+      onClick={() => handleAddMenuToOrder(menu)}
+      className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/80 p-1.5 text-left text-[10px] font-bold text-slate-200 hover:border-blue-500 hover:bg-slate-900 transition-all"
+    >
+      <div className="truncate leading-tight">{menu.name}</div>
+      <div className="mt-1 text-[9px] text-slate-500 truncate">
+        Rp {Number(menu.price).toLocaleString('id-ID')}
+      </div>
+    </button>
+  ))}
+</div>
+
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-              <div className="flex-1 overflow-y-auto p-5 no-scrollbar">
-                <table className="w-full text-left">
-                  <thead className="text-[10px] font-bold text-slate-500 border-b border-slate-800 pb-3 uppercase tracking-wider sticky top-0 bg-[#020617] z-10">
+              <div className="flex-1 min-h-0 overflow-auto p-2 sm:p-5 no-scrollbar">
+                <table className="w-full min-w-[34rem] table-fixed text-left text-[10px]">
+                  <thead className="text-[9px] font-bold text-slate-500 border-b border-slate-800 uppercase tracking-wider sticky top-0 bg-[#020617] z-10">
                     <tr>
-                      <th className="pb-3">NAMA PRODUK</th>
-                      <th className="pb-3 text-center">QTY</th>
-                      <th className="pb-3 text-right">HARGA SATUAN</th>
-                      <th className="pb-3 text-right">TOTAL</th>
+                      <th className="w-[40%] pb-2">NAMA PRODUK</th>
+                      <th className="w-[18%] pb-2 text-center">QTY</th>
+                      <th className="w-[21%] pb-2 text-right">HARGA SATUAN</th>
+                      <th className="w-[21%] pb-2 text-right">TOTAL</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
                     {orderItems.map((item, i) => (
                       <tr key={i} className="hover:bg-slate-900/10 transition-colors">
-                        <td className="py-3.5">
-                          <div className="flex flex-col gap-2">
-                            <span className="text-xs font-semibold text-slate-200">{item.name}</span>
-                            <button onClick={() => handleUpdateOrderItemQty(item, -item.qty)} className="text-[9px] text-red-400 hover:text-red-300 transition-colors">Cancel/Hapus</button>
+                        <td className="py-2 pr-2">
+                          <div className="flex flex-col gap-1">
+                            <span className="truncate text-[11px] font-semibold text-slate-200">{item.name}</span>
+                            <button onClick={() => handleUpdateOrderItemQty(item, -item.qty)} className="self-start text-[8px] text-red-400 hover:text-red-300 transition-colors">Cancel/Hapus</button>
                           </div>
                         </td>
-                        <td className="py-3.5 text-center">
+                        <td className="py-2 text-center">
                           <div className="inline-flex items-center gap-1">
-                            <button onClick={() => handleUpdateOrderItemQty(item, -1)} className="w-7 h-7 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900 transition-colors">-</button>
-                            <div className="text-xs font-mono font-bold text-blue-400">{item.qty}</div>
-                            <button onClick={() => handleUpdateOrderItemQty(item, 1)} className="w-7 h-7 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900 transition-colors">+</button>
+                            <button onClick={() => handleUpdateOrderItemQty(item, -1)} className="w-6 h-6 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900 transition-colors">-</button>
+                            <div className="text-[10px] font-mono font-bold text-blue-400">{item.qty}</div>
+                            <button onClick={() => handleUpdateOrderItemQty(item, 1)} className="w-6 h-6 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900 transition-colors">+</button>
                           </div>
                         </td>
-                        <td className="py-3.5 text-right text-xs font-mono text-slate-500">Rp {item.price.toLocaleString('id-ID')}</td>
-                        <td className="py-3.5 text-right text-xs font-mono font-bold text-slate-100">Rp {(item.qty * item.price).toLocaleString('id-ID')}</td>
+                        <td className="py-2 text-right text-[10px] font-mono text-slate-500">Rp {item.price.toLocaleString('id-ID')}</td>
+                        <td className="py-2 text-right text-[10px] font-mono font-bold text-slate-100">Rp {(item.qty * item.price).toLocaleString('id-ID')}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1264,27 +1273,27 @@ DISBA POS Terminal - {tenantType}
         </div>
 
         {/* CHECKOUT PANEL */}
-        <div className="w-80 bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col p-4 shadow-2xl backdrop-blur-xl">
+        <div className="w-full xl:w-96 2xl:w-[26rem] xl:shrink-0 min-h-0 max-h-[70vh] xl:h-full xl:max-h-full overflow-y-auto bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col p-3 sm:p-4 shadow-2xl backdrop-blur-xl">
           {activeOrder ? (
             <div className="flex flex-col min-h-full">
               <h3 className="text-[10px] font-bold text-slate-400 tracking-wider mb-4 border-b border-slate-800 pb-2.5 flex items-center gap-2 uppercase"><CreditCard size={14}/> Ringkasan Pembayaran</h3>
               
-              <div className="space-y-2.5 mb-4 bg-slate-950/40 p-4 rounded-2xl border border-slate-800/60">
-                <div className="flex justify-between items-center text-xs font-bold text-slate-400"><span>SUBTOTAL</span><span className="text-white font-mono">Rp {getSubtotal().toLocaleString('id-ID')}</span></div>
-                <div className="flex justify-between items-center text-xs font-bold text-blue-400">
+              <div className="space-y-2.5 mb-4 bg-slate-950/40 p-3 sm:p-4 rounded-2xl border border-slate-800/60">
+                <div className="flex justify-between items-center gap-3 text-xs font-bold text-slate-400"><span>SUBTOTAL</span><span className="whitespace-nowrap text-white font-mono">Rp {getSubtotal().toLocaleString('id-ID')}</span></div>
+                <div className="flex justify-between items-center gap-3 text-xs font-bold text-blue-400">
                   <span>DISKON</span>
-                  <input type="number" className="w-24 bg-blue-500/10 border border-blue-500/30 rounded-xl px-2.5 py-1 text-right text-blue-300 outline-none font-bold text-xs" value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value))} />
+                  <input type="number" className="w-24 shrink-0 bg-blue-500/10 border border-blue-500/30 rounded-xl px-2.5 py-1 text-right text-blue-300 outline-none font-bold text-xs" value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value))} />
                 </div>
-                {fiscalSettings.use_service_charge && <div className="flex justify-between items-center text-[10px] font-bold text-slate-500"><span>SERVICE ({Math.round(fiscalSettings.service_charge*100)}%)</span><span className="text-slate-300 font-mono">Rp {getService().toLocaleString('id-ID')}</span></div>}
-                {fiscalSettings.use_tax && <div className="flex justify-between items-center text-[10px] font-bold text-slate-500"><span>PAJAK ({Math.round(fiscalSettings.tax_rate*100)}%)</span><span className="text-slate-300 font-mono">Rp {getTax().toLocaleString('id-ID')}</span></div>}
+                {fiscalSettings.use_service_charge && <div className="flex justify-between items-center gap-3 text-[10px] font-bold text-slate-500"><span>SERVICE ({Math.round(fiscalSettings.service_charge*100)}%)</span><span className="whitespace-nowrap text-slate-300 font-mono">Rp {getService().toLocaleString('id-ID')}</span></div>}
+                {fiscalSettings.use_tax && <div className="flex justify-between items-center gap-3 text-[10px] font-bold text-slate-500"><span>PAJAK ({Math.round(fiscalSettings.tax_rate*100)}%)</span><span className="whitespace-nowrap text-slate-300 font-mono">Rp {getTax().toLocaleString('id-ID')}</span></div>}
               </div>
 
               {/* CUSTOMER SELECTOR */}
               <div className="mb-4 relative">
                 <p className="text-[10px] font-bold text-yellow-500 mb-1.5 uppercase">Pelanggan CRM (Opsional)</p>
                 {selectedCustomer ? (
-                  <div className="flex items-center justify-between bg-yellow-500/5 border border-yellow-500/25 rounded-2xl p-3">
-                    <div>
+                  <div className="flex items-center justify-between gap-3 bg-yellow-500/5 border border-yellow-500/25 rounded-2xl p-3">
+                  <div className="min-w-0">
                       <p className="text-xs font-bold text-yellow-400">{selectedCustomer.name}</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">{selectedCustomer.phone} · {selectedCustomer.points || 0} pts</p>
                     </div>
@@ -1312,7 +1321,7 @@ DISBA POS Terminal - {tenantType}
 
               <div className="mt-auto border-t border-slate-800/60 pt-4">
                 <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">TOTAL BAYAR</p>
-                <p className="text-2xl font-black tracking-tight text-white mb-5">Rp {getGrandTotal().toLocaleString('id-ID')}</p>
+                <p className="break-words text-xl sm:text-2xl font-black tracking-tight leading-tight text-white mb-5">Rp {getGrandTotal().toLocaleString('id-ID')}</p>
                 
                 {/* 3-COLUMN PAYMENT METHOD SELECTOR (CASH, BANK, QRIS) */}
                 <div className="grid grid-cols-3 gap-1.5 mb-3">
