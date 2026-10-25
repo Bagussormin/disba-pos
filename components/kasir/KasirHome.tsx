@@ -372,8 +372,32 @@ const fetchMenuItems = async () => {
     }
 
     if (Array.isArray(data) && data.length > 0) {
-      setMenuItems(data);
-      localStorage.setItem("disba_cache_menus", JSON.stringify(data));
+      // Ambil stok Inventory untuk ditampilkan pada setiap kartu Menu yang terhubung.
+      const { data: stockRows, error: stockError } = await supabase
+        .from("inventory")
+        .select("id, item_name, current_stock, stock_quantity, unit")
+        .eq("tenant_id", tenantId);
+
+      if (stockError) {
+        console.error("Gagal mengambil stok Inventory untuk kasir:", stockError);
+      }
+
+      const stockById = new Map(
+        (stockRows || []).map((row: any) => [
+          String(row.id),
+          Number(row.current_stock ?? row.stock_quantity ?? 0)
+        ])
+      );
+
+      const menusWithStock = data.map((menu: any) => ({
+        ...menu,
+        available_stock: menu.inventory_id
+          ? (stockById.get(String(menu.inventory_id)) ?? 0)
+          : null
+      }));
+
+      setMenuItems(menusWithStock);
+      localStorage.setItem("disba_cache_menus", JSON.stringify(menusWithStock));
     } else {
       console.warn(
         "Supabase mengembalikan menu kosong. Cache menu dipertahankan."
@@ -1218,9 +1242,14 @@ DISBA POS Terminal - {tenantType}
       className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/80 p-1.5 text-left text-[10px] font-bold text-slate-200 hover:border-blue-500 hover:bg-slate-900 transition-all"
     >
       <div className="truncate leading-tight">{menu.name}</div>
-      <div className="mt-1 text-[9px] text-slate-500 truncate">
+      <div className="mt-1 text-[9px] text-slate-400 truncate">
         Rp {Number(menu.price).toLocaleString('id-ID')}
       </div>
+      {menu.inventory_id && (
+        <div className={`mt-1 text-[9px] font-extrabold truncate ${Number(menu.available_stock || 0) > 0 ? "text-emerald-400" : "text-red-400"}`}>
+          Stok: {Number(menu.available_stock || 0).toLocaleString('id-ID')} {menu.unit || ""}
+        </div>
+      )}
     </button>
   ))}
 </div>
