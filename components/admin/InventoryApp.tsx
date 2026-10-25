@@ -164,11 +164,63 @@ export default function InventoryApp() {
   };
   
   const deleteInventory = async (id: string) => {
-    if(!tenantId) return;
-    if(confirm("Hapus resource ini?")) {
-      await supabase.from("inventory").delete().eq("id", id).eq("tenant_id", tenantId);
-      loadData();
+    if (!tenantId) {
+      alert("Tenant tidak ditemukan. Silakan login ulang.");
+      return;
     }
+
+    const item = items.find((entry) => entry.id === id);
+    if (!item) {
+      alert("Barang tidak ditemukan. Muat ulang halaman lalu coba lagi.");
+      return;
+    }
+
+    const relatedTables = [
+      { table: "recipes", label: "resep" },
+      { table: "menu_recipes", label: "resep menu" },
+      { table: "menus", label: "menu" },
+      { table: "stock_movements", label: "riwayat pergerakan stok" },
+      { table: "stock_transfers", label: "transfer stok" },
+      { table: "inventory_transactions", label: "riwayat transaksi inventory" },
+    ];
+
+    for (const related of relatedTables) {
+      const { count, error } = await supabase
+        .from(related.table)
+        .select("*", { count: "exact", head: true })
+        .eq("inventory_id", id)
+        .eq("tenant_id", tenantId);
+
+      if (error) {
+        console.error(`Gagal memeriksa ${related.table}:`, error.message);
+        alert(`Barang belum dihapus karena riwayat ${related.label} tidak dapat diverifikasi. Coba lagi atau periksa konfigurasi database.\n\n${error.message}`);
+        return;
+      }
+
+      if ((count ?? 0) > 0) {
+        alert(`Barang "${item.item_name}" tidak bisa dihapus permanen karena masih digunakan pada ${related.label}. Hapus atau ubah keterkaitannya terlebih dahulu agar riwayat tetap aman.`);
+        return;
+      }
+    }
+
+    if (!confirm(`Yakin ingin menghapus barang "${item.item_name}"? Tindakan ini tidak dapat dibatalkan.`)) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("inventory")
+      .delete()
+      .eq("id", id)
+      .eq("tenant_id", tenantId);
+
+    if (error) {
+      console.error("Gagal menghapus inventory:", error.message);
+      alert("Barang gagal dihapus: " + error.message);
+      return;
+    }
+
+    alert("Barang berhasil dihapus.");
+    await loadData();
   }
 
   const filteredItems = items.filter(i => i.item_name.toLowerCase().includes(searchTerm.toLowerCase()));
