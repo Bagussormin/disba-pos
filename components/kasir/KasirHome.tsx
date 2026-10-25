@@ -1147,7 +1147,6 @@ DISBA POS Terminal - {tenantType}
 <div className="flex-1 flex flex-col xl:flex-row gap-2 p-2 min-h-0 overflow-y-auto xl:overflow-hidden bg-slate-950/20">
         
          {/* PANEL MEJA (SIDEBAR) */}
-  {tenantType !== "RETAIL" && (
     <div className="w-full shrink-0 max-h-64 xl:max-h-72 overflow-y-auto no-scrollbar">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
         {tables.map(t => {
@@ -1159,7 +1158,14 @@ DISBA POS Terminal - {tenantType}
           return (
             <button
               key={t.id}
-              onClick={() => setSelectedTable(t)}
+              onClick={() => {
+                const hasOpenOrder = orders.some(o => o.table_id === t.id);
+                if (tenantType === "RETAIL" && !hasOpenOrder) {
+                  handleCreateRetailOrder(t);
+                  return;
+                }
+                setSelectedTable(t);
+              }}
               className={`min-h-[112px] rounded-2xl border-2 transition-all px-2 py-3 text-center font-medium flex flex-col items-center justify-center gap-2 shadow-sm ${
                 isSelected
                   ? "border-blue-600 bg-blue-100 text-blue-900"
@@ -1178,7 +1184,6 @@ DISBA POS Terminal - {tenantType}
         })}
       </div>
     </div>
-  )}
 
         {/* ORDER DETAILS PANEL */}
         <div className="min-w-0 min-h-[22rem] xl:min-h-0 flex-none xl:flex-1 bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col overflow-hidden backdrop-blur-xl">
