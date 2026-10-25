@@ -214,14 +214,46 @@ export default function MenuMaster() {
 
     }
 
+    // Menu wajib berasal dari barang Inventory pada tenant yang sama.
+    if (!tenantId || !formData.inventory_id) {
+      alert("Pilih barang dari Inventory terlebih dahulu sebelum membuat Menu.");
+      setLoading(false);
+      return;
+    }
+
+    const selectedInventory = inventory.find((item) => String(item.id) === String(formData.inventory_id));
+    if (!selectedInventory) {
+      alert("Barang tidak ditemukan di Inventory. Muat ulang halaman lalu pilih barang yang tersedia.");
+      setLoading(false);
+      return;
+    }
+
+    // Nama Menu selalu mengikuti nama barang Inventory, tidak diketik manual.
     const payload = {
-      name: formData.name.toUpperCase(),
+      name: String(selectedInventory.item_name || selectedInventory.name || "").trim(),
       price: Number(formData.price),
       category: formData.category.toUpperCase(),
       image_url: finalImageUrl,
-      inventory_id: formData.inventory_id || null,
+      inventory_id: selectedInventory.id,
       tenant_id: tenantId
     };
+
+    if (!payload.name) {
+      alert("Nama barang di Inventory masih kosong. Lengkapi nama barang terlebih dahulu.");
+      setLoading(false);
+      return;
+    }
+
+    // Satu barang Inventory hanya boleh dibuat menjadi satu Menu.
+    const duplicate = menus.find((menu) =>
+      String(menu.inventory_id || "") === String(selectedInventory.id) &&
+      String(menu.id || "") !== String(formData.id || "")
+    );
+    if (duplicate) {
+      alert(`Barang ini sudah terdaftar sebagai Menu: ${duplicate.name}`);
+      setLoading(false);
+      return;
+    }
 
     if (formData.id) await supabase.from("menus").update(payload).eq("id", formData.id).eq("tenant_id", tenantId);
 
@@ -697,11 +729,8 @@ export default function MenuMaster() {
             <form onSubmit={handleSubmit} className="space-y-4">
 
               <div>
-
-                <label className="text-[8px] font-black text-gray-500 block mb-1">NAMA MENU</label>
-
-                <input required className="w-full bg-white/5 border border-white/10 p-3 rounded-xl outline-none" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value.toUpperCase()})}/>
-
+                <label className="text-[8px] font-black text-gray-500 block mb-1">NAMA MENU (OTOMATIS DARI INVENTORY)</label>
+                <input required readOnly className="w-full bg-white/5 border border-white/10 p-3 rounded-xl outline-none opacity-70 cursor-not-allowed" value={inventory.find(item => String(item.id) === String(formData.inventory_id))?.item_name || inventory.find(item => String(item.id) === String(formData.inventory_id))?.name || ""} placeholder="Pilih barang Inventory terlebih dahulu"/>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -712,21 +741,31 @@ export default function MenuMaster() {
 
               </div>
 
-              {tenantType === "RETAIL" && (
-                <div>
-                  <label className="text-[8px] font-black text-gray-500 block mb-1">Hubungkan dengan Inventory</label>
-                  <select
-                    className="w-full bg-white/5 border border-white/10 p-3 rounded-xl outline-none"
-                    value={formData.inventory_id || ""}
-                    onChange={e => setFormData({ ...formData, inventory_id: e.target.value || "" })}
-                  >
-                    <option value="">-- Pilih Inventory --</option>
-                    {inventory.map(item => (
-                      <option key={item.id} value={item.id}>{item.item_name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="text-[8px] font-black text-gray-500 block mb-1">PILIH BARANG DARI INVENTORY (WAJIB)</label>
+                <select
+                  required
+                  className="w-full bg-white/5 border border-white/10 p-3 rounded-xl outline-none"
+                  value={formData.inventory_id || ""}
+                  onChange={e => {
+                    const inventoryId = e.target.value;
+                    const selected = inventory.find(item => String(item.id) === String(inventoryId));
+                    setFormData({
+                      ...formData,
+                      inventory_id: inventoryId,
+                      name: selected?.item_name || selected?.name || ""
+                    });
+                  }}
+                >
+                  <option value="">-- Pilih barang yang sudah diinput --</option>
+                  {inventory.map(item => (
+                    <option key={item.id} value={item.id}>{item.item_name || item.name}</option>
+                  ))}
+                </select>
+                {inventory.length === 0 && (
+                  <p className="text-amber-400 text-[10px] mt-2">Inventory masih kosong. Input barang di Inventory terlebih dahulu sebelum membuat Menu.</p>
+                )}
+              </div>
 
               <button className="w-full bg-blue-600 py-4 rounded-xl font-black text-xs mt-4">SIMPAN_MENU</button>
 
