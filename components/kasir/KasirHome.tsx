@@ -6,7 +6,7 @@ import { executePrint } from "../../lib/printer";
 import { 
   LogOut, Receipt, MapPin, AlertTriangle, Wallet, Printer, Banknote, X, 
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, Loader2, ShoppingBag, Search,
-  Scissors, Users, Star, Compass, QrCode, Wifi, WifiOff
+  Scissors, Users, Armchair, Star, Compass, QrCode, Wifi, WifiOff
 } from "lucide-react";
 import {
   testBluetoothPrint,
@@ -1148,56 +1148,35 @@ DISBA POS Terminal - {tenantType}
         
          {/* PANEL MEJA (SIDEBAR) */}
   {tenantType !== "RETAIL" && (
-    <div className="w-full xl:w-52 xl:shrink-0 max-h-48 xl:max-h-none bg-slate-900/40 rounded-3xl border border-slate-800/80 p-3 overflow-y-auto no-scrollbar flex flex-col gap-5 backdrop-blur-xl">
+    <div className="w-full shrink-0 max-h-64 xl:max-h-72 overflow-y-auto no-scrollbar">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+        {tables.map(t => {
+          const hasOrder = orders.some(o => o.table_id === t.id);
+          const isSelected = selectedTable?.id === t.id;
+          const isLocked = t.status === "payment" || t.status === "closed";
+          const statusLabel = isSelected ? "Dipilih" : hasOrder ? "Terisi" : isLocked ? "Menunggu pembayaran" : "Kosong";
 
-      {dynamicAreas.map(area => (
-        <div key={area} className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 px-2 py-0.5 opacity-60">
-            <MapPin size={10} className="text-blue-500" />
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-              {area}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-2 gap-2">
-            {tables
-              .filter(
-                t =>
-                  String(t.area || "Area Lainnya").trim().toUpperCase() === area
-              )
-              .map(t => {
-                const hasOrder = orders.some(o => o.table_id === t.id);
-
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      if (tenantType === "RETAIL" && !hasOrder) {
-                        handleCreateRetailOrder(t);
-                        return;
-                      }
-                      setSelectedTable(t);
-                    }}
-                    className={`min-h-14 rounded-2xl border transition-all text-xs font-bold flex flex-col items-center justify-center gap-0.5 shadow-md relative ${
-                      selectedTable?.id === t.id
-                        ? "border-blue-500 bg-blue-600/20 text-white"
-                        : hasOrder
-                          ? "border-orange-500/50 bg-orange-500/10 text-orange-400"
-                          : t.status === "payment" || t.status === "closed"
-                            ? "border-red-500 bg-red-500/10 text-red-400"
-                            : "border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700"
-                    }`}
-                  >
-                    {(t.status === "payment" || t.status === "closed") && (
-                      <Lock size={8} className="mb-0.5" />
-                    )}
-                    <span>{t.name}</span>
-                  </button>
-                );
-              })}
-          </div>
-        </div>
-      ))}
+          return (
+            <button
+              key={t.id}
+              onClick={() => setSelectedTable(t)}
+              className={`min-h-[112px] rounded-2xl border-2 transition-all px-2 py-3 text-center font-medium flex flex-col items-center justify-center gap-2 shadow-sm ${
+                isSelected
+                  ? "border-blue-600 bg-blue-100 text-blue-900"
+                  : hasOrder
+                    ? "border-amber-500 bg-amber-100 text-amber-800"
+                    : isLocked
+                      ? "border-red-400 bg-red-100 text-red-800"
+                      : "border-slate-300 bg-slate-100 text-slate-800 hover:border-slate-400"
+              }`}
+            >
+              <Armchair size={23} strokeWidth={2.2} />
+              <span className="text-base leading-tight">{t.name}</span>
+              <span className="text-xs opacity-80">{statusLabel}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   )}
 
