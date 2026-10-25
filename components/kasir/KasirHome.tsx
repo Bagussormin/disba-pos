@@ -1159,12 +1159,14 @@ DISBA POS Terminal - {tenantType}
             <button
               key={t.id}
               onClick={() => {
-                const hasOpenOrder = orders.some(o => o.table_id === t.id);
-                if (tenantType === "RETAIL" && !hasOpenOrder) {
+                const existingOrder = orders.find(o => o.table_id === t.id && o.status === "open");
+                if (existingOrder) {
+                  setSelectedTable(t);
+                  setActiveOrder(existingOrder);
+                  fetchOrderItems(existingOrder.id);
+                } else {
                   handleCreateRetailOrder(t);
-                  return;
                 }
-                setSelectedTable(t);
               }}
               className={`min-h-[112px] rounded-2xl border-2 transition-all px-2 py-3 text-center font-medium flex flex-col items-center justify-center gap-2 shadow-sm ${
                 isSelected
