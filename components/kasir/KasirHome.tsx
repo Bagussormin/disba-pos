@@ -1184,17 +1184,51 @@ DISBA POS Terminal - {tenantType}
             <button
               key={t.id}
               onClick={async () => {
-                // Samakan alur dengan WaiterHome: pilih meja dahulu, lalu buka/buat pesanan aktif.
+                // Buka meja secara eksplisit dari database agar state lama tidak menghalangi menu.
                 setSelectedTable(t);
-                const existingOrder = orders.find(
-                  o => String(o.table_id) === String(t.id) && String(o.status || "").toLowerCase() === "open"
-                );
-                if (existingOrder) {
-                  setActiveOrder(existingOrder);
-                  await fetchOrderItems(existingOrder.id);
-                  return;
+                setLoading(true);
+                try {
+                  const { data: existing, error: lookupError } = await supabase
+                    .from("orders")
+                    .select("*")
+                    .eq("tenant_id", tenantId)
+                    .eq("table_id", t.id)
+                    .eq("status", "open")
+                    .limit(1)
+                    .maybeSingle();
+                  if (lookupError) throw lookupError;
+
+                  let order = existing;
+                  if (!order) {
+                    const { data: created, error: createError } = await supabase
+                      .from("orders")
+                      .insert({
+                        tenant_id: tenantId,
+                        table_id: t.id,
+                        status: "open",
+                        waiter_name: localStorage.getItem("username") || "KASIR",
+                        customer_name: null,
+                        guest_name: null
+                      })
+                      .select("*")
+                      .single();
+                    if (createError) throw createError;
+                    order = created;
+                  }
+
+                  if (!order) throw new Error("Pesanan meja tidak berhasil dibuka.");
+                  setSelectedTable(t);
+                  setActiveOrder(order);
+                  setOrders(prev => [order, ...prev.filter(o => o.id !== order.id)]);
+                  setOrderItems([]);
+                  await fetchOrderItems(order.id);
+                  if (menuItems.length === 0) await fetchMenuItems();
+                } catch (err: any) {
+                  console.error("GAGAL MEMBUKA MEJA:", err);
+                  alert("Meja gagal dibuka: " + (err?.message || "Kesalahan tidak diketahui"));
+                } finally {
+                  setLoading(false);
                 }
-                await handleCreateRetailOrder(t);
               }}
               className={`min-h-[112px] rounded-2xl border-2 transition-all px-2 py-3 text-center font-medium flex flex-col items-center justify-center gap-2 shadow-sm ${
                 isSelected
