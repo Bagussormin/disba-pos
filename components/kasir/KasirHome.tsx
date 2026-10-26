@@ -382,6 +382,7 @@ const fetchMenuItems = async () => {
 
     if (error) {
       console.error("Gagal mengambil menu:", error);
+      alert("Menu gagal dimuat untuk " + tenantId + ": " + error.message);
       return;
     }
 
@@ -413,12 +414,15 @@ const fetchMenuItems = async () => {
       setMenuItems(menusWithStock);
       localStorage.setItem("disba_cache_menus", JSON.stringify(menusWithStock));
     } else {
-      console.warn(
-        "Supabase mengembalikan menu kosong. Cache menu dipertahankan."
-      );
+      console.warn("Menu kosong dari Supabase untuk tenant:", tenantId);
+      if (!cachedMenus || safeJSONParse(cachedMenus, []).length === 0) {
+        setMenuItems([]);
+        alert("Supabase tidak menemukan menu tersedia untuk tenant " + tenantId);
+      }
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("Kesalahan saat mengambil menu:", err);
+    alert("Kesalahan memuat menu: " + (err?.message || "tidak diketahui"));
   }
 };
 
@@ -1186,6 +1190,8 @@ DISBA POS Terminal - {tenantType}
               onClick={async () => {
                 // Buka meja secara eksplisit dari database agar state lama tidak menghalangi menu.
                 setSelectedTable(t);
+                // Muat menu lagi saat meja dipilih supaya panel tidak bergantung pada state awal.
+                void fetchMenuItems();
                 setLoading(true);
                 try {
                   const { data: existing, error: lookupError } = await supabase
