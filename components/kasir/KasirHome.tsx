@@ -1148,6 +1148,14 @@ DISBA POS Terminal - {tenantType}
         
          {/* PANEL MEJA (SIDEBAR) */}
     <div className="w-full shrink-0 max-h-64 xl:max-h-72 overflow-y-auto no-scrollbar">
+      {tables.length === 0 && (
+        <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
+          <p className="text-sm font-bold">Kursi/meja belum berhasil dimuat.</p>
+          <p className="mt-1 text-xs">Tenant aktif: <span className="font-mono">{tenantId || "(tenant_id kosong)"}</span></p>
+          <p className="mt-1 text-xs">Database memiliki meja untuk tenant tertentu. Pastikan akun kasir memakai tenant yang sama dengan meja di dashboard admin.</p>
+          <button onClick={() => fetchData()} className="mt-3 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950">Coba Muat Ulang Meja</button>
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
         {tables.map(t => {
           const hasOrder = orders.some(o => o.table_id === t.id);
