@@ -1308,9 +1308,26 @@ DISBA POS Terminal - {tenantType}
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center opacity-30 select-none">
-              <ShoppingBag size={80} strokeWidth={1.5} className="text-slate-400"/>
-              <p className="text-xs font-bold mt-4 tracking-widest text-slate-400 uppercase">Pilih Meja untuk Memulai Billing</p>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex items-center gap-2 mb-4 text-slate-300">
+                <ShoppingBag size={24} />
+                <p className="text-sm font-bold">{selectedTable ? "Meja dipilih — menyiapkan pesanan" : "Pilih Meja untuk Memulai Billing"}</p>
+              </div>
+              {menuItems.length > 0 ? (
+                <>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Daftar Menu ({menuItems.length})</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {menuItems.map((menu: any) => (
+                      <button key={menu.id} onClick={() => alert("Menu tersedia, tetapi transaksi meja belum aktif. Klik meja lagi; jika tetap sama, transaksi gagal dibuat.")} className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-left text-xs text-white">
+                        <div className="font-bold">{menu.name}</div>
+                        <div className="mt-1 text-slate-400">Rp {Number(menu.price || 0).toLocaleString("id-ID")}</div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-amber-300">Menu belum berhasil dimuat untuk tenant {tenantId}.</p>
+              )}
             </div>
           )}
         </div>
