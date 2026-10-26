@@ -186,7 +186,9 @@ loadTenantType();
   useEffect(() => { if (activeOrder) fetchOrderItems(activeOrder.id); }, [lastIncomingOrder]);
 
   useEffect(() => {
-    if (tenantType === "RETAIL") {
+    // RETAIL tanpa meja memakai transaksi langsung. Jika tenant memiliki meja,
+    // jangan biarkan alur retail otomatis menghapus pilihan meja kasir.
+    if (tenantType === "RETAIL" && tables.length === 0) {
       const retailOrder = orders.find(order => order.status === "open" && order.waiter_name === "KASIR" && (order.table_id === null || order.table_id === undefined));
       if (retailOrder) {
         setActiveOrder(retailOrder);
