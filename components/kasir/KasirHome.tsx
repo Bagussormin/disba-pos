@@ -6,7 +6,7 @@ import { executePrint } from "../../lib/printer";
 import { 
   LogOut, Receipt, MapPin, AlertTriangle, Wallet, Printer, Banknote, X, 
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, Loader2, ShoppingBag, Search,
-  Scissors, Users, Star, Compass, QrCode, Wifi, WifiOff
+  Scissors, Users, Armchair, Star, Compass, QrCode, Wifi, WifiOff
 } from "lucide-react";
 import {
   testBluetoothPrint,
@@ -23,6 +23,7 @@ export default function KasirHome() {
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [banks, setBanks] = useState<any[]>([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [guestName, setGuestName] = useState("");
 
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "" : "";
 
@@ -186,7 +187,31 @@ loadTenantType();
   useEffect(() => { if (activeOrder) fetchOrderItems(activeOrder.id); }, [lastIncomingOrder]);
 
   useEffect(() => {
-    if (tenantType === "RETAIL") {
+    // Jika kasir sedang memilih meja, jangan biarkan alur transaksi retail
+    // tanpa meja menimpa pesanan meja yang baru dibuka.
+    console.log("CEK PANEL:", {
+  tenantType,
+  jumlahMeja: tables.length,
+  selectedTable: selectedTable?.id,
+  activeOrderId: activeOrder?.id,
+  orderAktifDiDaftar: orders.find(
+    order => String(order.table_id) === String(selectedTable?.id)
+      && String(order.status || "").toLowerCase() === "open"
+  )?.id
+});
+    if (selectedTable) {
+      const tableOrder = orders.find(
+        order => String(order.table_id) === String(selectedTable.id) && String(order.status || "").toLowerCase() === "open"
+      );
+      if (tableOrder) {
+        setActiveOrder(tableOrder);
+        fetchOrderItems(tableOrder.id);
+      }
+      return;
+    }
+
+    // RETAIL tanpa meja memakai transaksi langsung.
+    if (tenantType === "RETAIL" && tables.length === 0) {
       const retailOrder = orders.find(order => order.status === "open" && order.waiter_name === "KASIR" && (order.table_id === null || order.table_id === undefined));
       if (retailOrder) {
         setActiveOrder(retailOrder);
@@ -269,11 +294,21 @@ loadTenantType();
       if (tRes.error) throw tRes.error;
       if (oRes.error) throw oRes.error;
 
-      if (tRes.data) {
-  console.log("DATA TABLE DARI SUPABASE:", tRes.data);
-  setTables(tRes.data);
-  localStorage.setItem("disba_cache_tables", JSON.stringify(tRes.data));
-}
+      if (Array.isArray(tRes.data) && tRes.data.length > 0) {
+        console.log("DATA TABLE DARI SUPABASE:", tRes.data);
+        setTables(tRes.data);
+        localStorage.setItem("disba_cache_tables", JSON.stringify(tRes.data));
+      } else {
+        // Jangan hapus meja yang sudah tersimpan jika query sementara mengembalikan array kosong.
+        const cachedTables = safeJSONParse(
+          localStorage.getItem("disba_cache_tables") || "[]",
+          []
+        );
+        setTables((currentTables) => {
+          const preservedTables = currentTables.length > 0 ? currentTables : cachedTables;
+          return preservedTables;
+        });
+      }
       if (oRes.data) {
         setOrders(oRes.data);
         localStorage.setItem("disba_cache_orders", JSON.stringify(oRes.data));
@@ -345,14 +380,12 @@ if (tenantData) {
   };
 
 const fetchMenuItems = async () => {
-  const cachedMenus = localStorage.getItem("disba_cache_menus");
-
-  // Tampilkan cache terlebih dahulu.
+  // Cache dipisahkan per tenant agar menu outlet lain tidak tertukar.
+  const cacheKey = `disba_cache_menus_${tenantId}`;
+  const cachedMenus = localStorage.getItem(cacheKey);
   if (cachedMenus) {
     const parsedMenus = safeJSONParse(cachedMenus, []);
-    if (Array.isArray(parsedMenus) && parsedMenus.length > 0) {
-      setMenuItems(parsedMenus);
-    }
+    if (Array.isArray(parsedMenus)) setMenuItems(parsedMenus);
   }
 
   try {
@@ -366,21 +399,54 @@ const fetchMenuItems = async () => {
     console.log("TENANT ID KASIR:", tenantId);
     console.log("HASIL MENU SUPABASE:", data, "ERROR:", error);
 
-    if (error) {
-      console.error("Gagal mengambil menu:", error);
-      return;
+    if (error) throw error;
+
+    // Jika filter is_available=true tidak mengembalikan menu, coba ambil menu tenant
+    // lalu tampilkan yang tidak secara eksplisit dinonaktifkan.
+    let resolvedMenus = Array.isArray(data) ? data : [];
+    if (resolvedMenus.length === 0) {
+      const { data: tenantMenus, error: tenantMenusError } = await supabase
+        .from("menus")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("name", { ascending: true });
+
+      if (tenantMenusError) throw tenantMenusError;
+      resolvedMenus = (tenantMenus || []).filter(
+        (menu: any) => menu.is_available !== false
+      );
+      console.log("MENU FALLBACK TENANT:", resolvedMenus);
     }
 
-    if (Array.isArray(data) && data.length > 0) {
-      setMenuItems(data);
-      localStorage.setItem("disba_cache_menus", JSON.stringify(data));
-    } else {
-      console.warn(
-        "Supabase mengembalikan menu kosong. Cache menu dipertahankan."
+    if (Array.isArray(resolvedMenus)) {
+      const { data: stockRows, error: stockError } = await supabase
+        .from("inventory")
+        .select("id, item_name, current_stock, stock_quantity, unit")
+        .eq("tenant_id", tenantId);
+
+      if (stockError) console.error("Gagal mengambil stok Inventory untuk kasir:", stockError);
+
+      const stockById = new Map(
+        (stockRows || []).map((row: any) => [
+          String(row.id),
+          Number(row.current_stock ?? row.stock_quantity ?? 0)
+        ])
       );
+      const menusWithStock = resolvedMenus.map((menu: any) => ({
+        ...menu,
+        available_stock: menu.inventory_id
+          ? (stockById.get(String(menu.inventory_id)) ?? 0)
+          : null
+      }));
+
+      setMenuItems(menusWithStock);
+      localStorage.setItem(cacheKey, JSON.stringify(menusWithStock));
+      // Backward-compatible cache for older screens.
+      localStorage.setItem("disba_cache_menus", JSON.stringify(menusWithStock));
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("Kesalahan saat mengambil menu:", err);
+    alert("Menu gagal dimuat untuk " + tenantId + ": " + (err?.message || "Kesalahan tidak diketahui"));
   }
 };
 
@@ -512,8 +578,9 @@ const fetchMenuItems = async () => {
         table_id: table?.id || null,
         tenant_id: tenantId,
         status: "open",
-        waiter_name: "KASIR",
-        customer_name: null
+        waiter_name: localStorage.getItem("username") || "KASIR",
+        customer_name: null,
+        guest_name: null
       })
       .select()
       .single();
@@ -521,6 +588,8 @@ const fetchMenuItems = async () => {
     if (error) throw error;
 
     if (newOrder) {
+      // Update state immediately so the order-sync effect can find this table's new order.
+      setOrders((prev) => [newOrder, ...prev.filter((o) => o.id !== newOrder.id)]);
       setActiveOrder(newOrder);
       setOrderItems([]);
       setSelectedTable(table ? table : null);
@@ -1086,6 +1155,7 @@ const fetchMenuItems = async () => {
   const handleLogOut = () => { if (window.confirm("Keluar dari Terminal Kasir?")) { localStorage.removeItem("role"); localStorage.removeItem("username"); window.location.replace("/login"); } };
 
   return (
+    
     <div className="fixed inset-0 bg-[#020617] text-slate-100 font-sans flex flex-col overflow-hidden">
       
       {/* HEADER CONTROL */}
@@ -1123,74 +1193,183 @@ DISBA POS Terminal - {tenantType}
 <div className="flex-1 flex flex-col xl:flex-row gap-2 p-2 min-h-0 overflow-y-auto xl:overflow-hidden bg-slate-950/20">
         
          {/* PANEL MEJA (SIDEBAR) */}
-  {tenantType !== "RETAIL" && (
-    <div className="w-full xl:w-52 xl:shrink-0 max-h-48 xl:max-h-none bg-slate-900/40 rounded-3xl border border-slate-800/80 p-3 overflow-y-auto no-scrollbar flex flex-col gap-5 backdrop-blur-xl">
-
-      {dynamicAreas.map(area => (
-        <div key={area} className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 px-2 py-0.5 opacity-60">
-            <MapPin size={10} className="text-blue-500" />
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-              {area}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-2 gap-2">
-            {tables
-              .filter(
-                t =>
-                  String(t.area || "Area Lainnya").trim().toUpperCase() === area
-              )
-              .map(t => {
-                const hasOrder = orders.some(o => o.table_id === t.id);
-
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      if (tenantType === "RETAIL" && !hasOrder) {
-                        handleCreateRetailOrder(t);
-                        return;
-                      }
-                      setSelectedTable(t);
-                    }}
-                    className={`min-h-14 rounded-2xl border transition-all text-xs font-bold flex flex-col items-center justify-center gap-0.5 shadow-md relative ${
-                      selectedTable?.id === t.id
-                        ? "border-blue-500 bg-blue-600/20 text-white"
-                        : hasOrder
-                          ? "border-orange-500/50 bg-orange-500/10 text-orange-400"
-                          : t.status === "payment" || t.status === "closed"
-                            ? "border-red-500 bg-red-500/10 text-red-400"
-                            : "border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700"
-                    }`}
-                  >
-                    {(t.status === "payment" || t.status === "closed") && (
-                      <Lock size={8} className="mb-0.5" />
-                    )}
-                    <span>{t.name}</span>
-                  </button>
-                );
-              })}
-          </div>
+    <div className="w-full xl:w-64 xl:shrink-0 max-h-64 xl:max-h-72 overflow-y-auto no-scrollbar">
+      {tables.length === 0 && (
+        <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
+          <p className="text-sm font-bold">Kursi/meja belum berhasil dimuat.</p>
+          <p className="mt-1 text-xs">Tenant aktif: <span className="font-mono">{tenantId || "(tenant_id kosong)"}</span></p>
+          <p className="mt-1 text-xs">Database memiliki meja untuk tenant tertentu. Pastikan akun kasir memakai tenant yang sama dengan meja di dashboard admin.</p>
+          <button onClick={() => fetchData()} className="mt-3 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950">Coba Muat Ulang Meja</button>
         </div>
-      ))}
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {tables.map(t => {
+          const hasOrder = orders.some(o => o.table_id === t.id);
+          const isSelected = selectedTable?.id === t.id;
+          const isLocked = t.status === "payment" || t.status === "closed";
+          const statusLabel = isSelected ? "Dipilih" : hasOrder ? "Terisi" : isLocked ? "Menunggu pembayaran" : "Kosong";
+
+          return (
+            <button
+              key={t.id}
+              onClick={async () => {
+                // Buka meja secara eksplisit dari database agar state lama tidak menghalangi menu.
+                setSelectedTable(t);
+                // Muat menu lagi saat meja dipilih supaya panel tidak bergantung pada state awal.
+                void fetchMenuItems();
+                setLoading(true);
+                try {
+                  const { data: existing, error: lookupError } = await supabase
+                    .from("orders")
+                    .select("*")
+                    .eq("tenant_id", tenantId)
+                    .eq("table_id", t.id)
+                    .eq("status", "open")
+                    .limit(1)
+                    .maybeSingle();
+                  if (lookupError) throw lookupError;
+
+                  let order = existing;
+                  if (!order) {
+                    const { data: created, error: createError } = await supabase
+                      .from("orders")
+                      .insert({
+                        tenant_id: tenantId,
+                        table_id: t.id,
+                        status: "open",
+                        waiter_name: localStorage.getItem("username") || "KASIR",
+                        customer_name: guestName.trim() || null,
+guest_name: guestName.trim() || null
+                      })
+                      .select("*")
+                      .single();
+                    if (createError) throw createError;
+                    order = created;
+                  }
+
+                  if (!order) throw new Error("Pesanan meja tidak berhasil dibuka.");
+                  // Tampilkan panel billing segera setelah pesanan ditemukan/dibuat.
+                  // Pemuatan detail item dan menu berjalan terpisah agar tidak menghalangi panel.
+                  setSelectedTable(t);
+                  setActiveOrder(order);
+                  console.log("TES PANEL BILLING:", order.id, order.table_id);
+                  setOrders(prev => [order, ...prev.filter(o => o.id !== order.id)]);
+                  setOrderItems([]);
+                  setLoading(false);
+                  void fetchOrderItems(order.id);
+                  void fetchMenuItems();
+                } catch (err: any) {
+                  console.error("GAGAL MEMBUKA MEJA:", err);
+                  alert("Meja gagal dibuka: " + (err?.message || "Kesalahan tidak diketahui"));
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className={`min-h-[88px] rounded-xl border-2 transition-all px-1.5 py-2 text-center font-medium flex flex-col items-center justify-center gap-1 shadow-sm ${
+                isSelected
+                  ? "border-blue-600 bg-blue-100 text-blue-900"
+                  : hasOrder
+                    ? "border-amber-500 bg-amber-100 text-amber-800"
+                    : isLocked
+                      ? "border-red-400 bg-red-100 text-red-800"
+                      : "border-blue-400 bg-blue-100 text-blue-800 hover:border-blue-500"
+              }`}
+            >
+              <Armchair size={18} strokeWidth={2} />
+              <span className="text-sm leading-tight">{t.name}</span>
+              <span className="text-xs opacity-80">
+  {hasOrder
+    ? (orders.find(o => o.table_id === t.id)?.guest_name ||
+       orders.find(o => o.table_id === t.id)?.customer_name ||
+       "Terisi")
+    : isLocked
+      ? "Menunggu pembayaran"
+      : "KOSONG"}
+</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
-  )}
 
         {/* ORDER DETAILS PANEL */}
-        <div className="min-w-0 min-h-[22rem] xl:min-h-0 flex-none xl:flex-1 bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col overflow-hidden backdrop-blur-xl">
+        
+        <div className="flex-1 min-w-0 min-h-[22rem] bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col overflow-hidden relative">
+          
           {activeOrder ? (
-            <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-slate-800/80 bg-slate-950/20 flex justify-between items-center">
-                <div className="flex items-center gap-2.5">
-                  <Receipt size={16} className="text-blue-500"/>
-                  <h2 className="text-sm font-extrabold text-white">Billing {tenantType === "RETAIL" ? "RETAIL" : selectedTable?.name}</h2>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => { setSplitQuantities({}); setShowSplitModal(true); }} className="h-8 px-3 bg-orange-500/10 border border-orange-500/30 rounded-xl text-[10px] font-bold text-orange-400 hover:bg-orange-500 hover:text-white transition-all flex items-center gap-1.5"><Scissors size={12}/> PISAH NOTA</button>
-                  <button onClick={() => setSelectedTable(null)} className="text-slate-500 hover:text-white transition-colors"><X size={18}/></button>
-                </div>
-              </div>
+  <div className="flex flex-col h-full">
+    <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-3">
+  <label className="text-xs font-bold text-slate-400 whitespace-nowrap">
+    NAMA TAMU
+  </label>
+  <input
+    type="text"
+    value={guestName}
+    onChange={(e) => setGuestName(e.target.value)}
+    placeholder="Masukkan nama tamu..."
+    className="flex-1 min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+  />
+</div>
+              
+<div className="p-4 border-b border-slate-800/80 bg-slate-950/20 flex justify-between items-center">
+  <div className="flex items-center gap-2.5">
+    <Receipt size={16} className="text-blue-500"/>
+    <h2 className="text-sm font-extrabold text-white">
+      Billing {tenantType === "RETAIL" ? "RETAIL" : selectedTable?.name}
+    </h2>
+  </div>
+
+  <div className="flex gap-2">
+    <button
+      onClick={async () => {
+        if (!activeOrder) return;
+        const name = guestName.trim();
+
+        const { data, error } = await supabase
+  .from("orders")
+  .update({
+    customer_name: name || null,
+    guest_name: name || null
+  })
+  .eq("id", activeOrder.id)
+  .eq("tenant_id", tenantId)
+  .eq("status", "open")
+  .select("*")
+  .single();
+        if (error) {
+      alert("Gagal menyimpan pesanan: " + error.message);
+      return;
+    }
+
+    setActiveOrder(null);
+    setSelectedTable(null);
+    setGuestName("");
+    setOrders(prev =>
+      prev.map(o => o.id === data.id ? data : o)
+    );
+
+    alert("Pesanan berhasil disimpan. Meja belum dibayar.");
+  }}
+  className="h-8 px-3 bg-emerald-600 rounded-xl text-[10px] font-bold text-white"
+>
+  SIMPAN MEJA
+</button>
+    <button
+      onClick={() => { setSplitQuantities({}); setShowSplitModal(true); }}
+      className="h-8 px-3 bg-orange-500/10 border border-orange-500/30 rounded-xl text-[10px] font-bold text-orange-400"
+    >
+      <Scissors size={12}/> PISAH NOTA
+    </button>
+
+    <button
+      onClick={() => setSelectedTable(null)}
+      className="text-slate-500 hover:text-white"
+    >
+      <X size={18}/>
+    </button>
+  </div>
+</div>
+
               {tenantType === "RETAIL" && (
   <button
     onClick={() => handleCreateRetailOrder()}
@@ -1218,9 +1397,14 @@ DISBA POS Terminal - {tenantType}
       className="min-w-0 rounded-lg border border-slate-800 bg-slate-950/80 p-1.5 text-left text-[10px] font-bold text-slate-200 hover:border-blue-500 hover:bg-slate-900 transition-all"
     >
       <div className="truncate leading-tight">{menu.name}</div>
-      <div className="mt-1 text-[9px] text-slate-500 truncate">
+      <div className="mt-1 text-[9px] text-slate-400 truncate">
         Rp {Number(menu.price).toLocaleString('id-ID')}
       </div>
+      {menu.inventory_id && (
+        <div className={`mt-1 text-[9px] font-extrabold truncate ${Number(menu.available_stock || 0) > 0 ? "text-emerald-400" : "text-red-400"}`}>
+          Stok: {Number(menu.available_stock || 0).toLocaleString('id-ID')} {menu.unit || ""}
+        </div>
+      )}
     </button>
   ))}
 </div>
@@ -1265,9 +1449,54 @@ DISBA POS Terminal - {tenantType}
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center opacity-30 select-none">
-              <ShoppingBag size={80} strokeWidth={1.5} className="text-slate-400"/>
-              <p className="text-xs font-bold mt-4 tracking-widest text-slate-400 uppercase">Pilih Meja untuk Memulai Billing</p>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex items-center gap-2 mb-4 text-slate-300">
+                <ShoppingBag size={24} />
+                <p className="text-sm font-bold">{selectedTable ? "Meja dipilih — menyiapkan pesanan" : "Pilih Meja untuk Memulai Billing"}</p>
+              </div>
+              {menuItems.length > 0 ? (
+                <>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Daftar Menu ({menuItems.length})</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {menuItems.map((menu: any) => (
+                      <button key={menu.id} onClick={async () => {
+                        try {
+                          let order = activeOrder;
+                          if (!order && selectedTable) {
+                            const { data, error } = await supabase.from("orders").insert({
+                              tenant_id: tenantId, table_id: selectedTable.id, status: "open",
+                              waiter_name: localStorage.getItem("username") || "KASIR",
+                              customer_name: null, guest_name: null
+                            }).select("*").single();
+                            if (error) throw error;
+                            order = data;
+                            setActiveOrder(order);
+                            setOrders(prev => [order, ...prev.filter(o => o.id !== order.id)]);
+                          }
+                          if (!order) {
+                            alert("Pilih MEJA 01 terlebih dahulu, lalu klik menu lagi.");
+                            return;
+                          }
+                          const { error } = await supabase.from("order_items").insert({
+                            order_id: order.id, tenant_id: tenantId, menu_id: menu.id,
+                            quantity: 1, price_at_time: menu.price, notes: "CASHIER_ORDER"
+                          });
+                          if (error) throw error;
+                          await fetchOrderItems(order.id);
+                        } catch (err: any) {
+                          console.error("GAGAL TAMBAH MENU:", err);
+                          alert("Menu gagal ditambahkan: " + (err?.message || "Kesalahan tidak diketahui"));
+                        }
+                      }} className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-left text-xs text-white">
+                        <div className="font-bold">{menu.name}</div>
+                        <div className="mt-1 text-slate-400">Rp {Number(menu.price || 0).toLocaleString("id-ID")}</div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-amber-300">Menu belum berhasil dimuat untuk tenant {tenantId}.</p>
+              )}
             </div>
           )}
         </div>
@@ -1468,29 +1697,58 @@ DISBA POS Terminal - {tenantType}
         </div>
       )}
 
+      
       {/* CLOSE SHIFT MODAL */}
       {showCloseShiftModal && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[7000] p-4 backdrop-blur-sm">
           <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-orange-500/20 w-full max-w-sm text-center shadow-2xl">
             <AlertTriangle className="text-orange-500 mx-auto mb-4" size={40} />
-            <h2 className="text-lg font-bold text-white uppercase tracking-wider mb-6">Penutupan Shift Kasir</h2>
+            <h2 className="text-lg font-bold text-white uppercase tracking-wider mb-6">
+              Penutupan Shift Kasir
+            </h2>
+
             <div className="space-y-4 mb-6 text-left text-xs uppercase">
               <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-800/60">
-                <p className="text-[9px] text-slate-500 font-bold">Total Omzet Penjualan</p>
-                <p className="text-xl font-bold text-white font-mono mt-1">Rp {shiftSummary.totalSales.toLocaleString()}</p>
+                <p className="text-[9px] text-slate-500 font-bold">
+                  Total Omzet Penjualan
+                </p>
+                <p className="text-xl font-bold text-white font-mono mt-1">
+                  Rp {shiftSummary.totalSales.toLocaleString()}
+                </p>
               </div>
+
               <div className="space-y-2">
-                <p className="text-[9px] text-orange-400 font-bold ml-1">Uang Tunai Aktual di Laci:</p>
-                <input type="number" className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 text-center text-2xl text-orange-400 outline-none font-bold font-mono focus:border-orange-500 transition-colors" placeholder="Rp 0" onChange={(e) => setEndingCash(Number(e.target.value))} />
+                <p className="text-[9px] text-orange-400 font-bold ml-1">
+                  Uang Tunai Aktual di Laci:
+                </p>
+                <input
+                  type="number"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 text-center text-2xl text-orange-400 outline-none font-bold font-mono focus:border-orange-500 transition-colors"
+                  placeholder="Rp 0"
+                  onChange={(e) => setEndingCash(Number(e.target.value))}
+                />
               </div>
             </div>
+
             <div className="flex gap-2">
-              <button onClick={() => setShowCloseShiftModal(false)} className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl uppercase font-bold text-xs">Batal</button>
-              <button onClick={handleCloseShift} className="flex-[2] py-4 bg-orange-600 hover:bg-orange-500 rounded-2xl text-white uppercase font-bold text-xs">Akhiri Shift</button>
+              <button
+                onClick={() => setShowCloseShiftModal(false)}
+                className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl uppercase font-bold text-xs"
+              >
+                Batal
+              </button>
+
+              <button
+                onClick={handleCloseShift}
+                className="flex-[2] py-4 bg-orange-600 hover:bg-orange-500 rounded-2xl text-white uppercase font-bold text-xs"
+              >
+                Akhiri Shift
+              </button>
             </div>
           </div>
         </div>
       )}
+
 
       {/* BILL PREVIEW PAPER NOTA */}
       {showPreviewModal && (
