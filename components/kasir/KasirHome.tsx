@@ -1236,12 +1236,15 @@ DISBA POS Terminal - {tenantType}
                   }
 
                   if (!order) throw new Error("Pesanan meja tidak berhasil dibuka.");
+                  // Tampilkan panel billing segera setelah pesanan ditemukan/dibuat.
+                  // Pemuatan detail item dan menu berjalan terpisah agar tidak menghalangi panel.
                   setSelectedTable(t);
                   setActiveOrder(order);
                   setOrders(prev => [order, ...prev.filter(o => o.id !== order.id)]);
                   setOrderItems([]);
-                  await fetchOrderItems(order.id);
-                  if (menuItems.length === 0) await fetchMenuItems();
+                  setLoading(false);
+                  void fetchOrderItems(order.id);
+                  void fetchMenuItems();
                 } catch (err: any) {
                   console.error("GAGAL MEMBUKA MEJA:", err);
                   alert("Meja gagal dibuka: " + (err?.message || "Kesalahan tidak diketahui"));
