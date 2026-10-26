@@ -390,7 +390,24 @@ const fetchMenuItems = async () => {
 
     if (error) throw error;
 
-    if (Array.isArray(data)) {
+    // Jika filter is_available=true tidak mengembalikan menu, coba ambil menu tenant
+    // lalu tampilkan yang tidak secara eksplisit dinonaktifkan.
+    let resolvedMenus = Array.isArray(data) ? data : [];
+    if (resolvedMenus.length === 0) {
+      const { data: tenantMenus, error: tenantMenusError } = await supabase
+        .from("menus")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("name", { ascending: true });
+
+      if (tenantMenusError) throw tenantMenusError;
+      resolvedMenus = (tenantMenus || []).filter(
+        (menu: any) => menu.is_available !== false
+      );
+      console.log("MENU FALLBACK TENANT:", resolvedMenus);
+    }
+
+    if (Array.isArray(resolvedMenus)) {
       const { data: stockRows, error: stockError } = await supabase
         .from("inventory")
         .select("id, item_name, current_stock, stock_quantity, unit")
@@ -404,7 +421,7 @@ const fetchMenuItems = async () => {
           Number(row.current_stock ?? row.stock_quantity ?? 0)
         ])
       );
-      const menusWithStock = data.map((menu: any) => ({
+      const menusWithStock = resolvedMenus.map((menu: any) => ({
         ...menu,
         available_stock: menu.inventory_id
           ? (stockById.get(String(menu.inventory_id)) ?? 0)
