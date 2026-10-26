@@ -1352,7 +1352,35 @@ DISBA POS Terminal - {tenantType}
                   <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Daftar Menu ({menuItems.length})</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {menuItems.map((menu: any) => (
-                      <button key={menu.id} onClick={() => alert("Menu tersedia, tetapi transaksi meja belum aktif. Klik meja lagi; jika tetap sama, transaksi gagal dibuat.")} className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-left text-xs text-white">
+                      <button key={menu.id} onClick={async () => {
+                        try {
+                          let order = activeOrder;
+                          if (!order && selectedTable) {
+                            const { data, error } = await supabase.from("orders").insert({
+                              tenant_id: tenantId, table_id: selectedTable.id, status: "open",
+                              waiter_name: localStorage.getItem("username") || "KASIR",
+                              customer_name: null, guest_name: null
+                            }).select("*").single();
+                            if (error) throw error;
+                            order = data;
+                            setActiveOrder(order);
+                            setOrders(prev => [order, ...prev.filter(o => o.id !== order.id)]);
+                          }
+                          if (!order) {
+                            alert("Pilih MEJA 01 terlebih dahulu, lalu klik menu lagi.");
+                            return;
+                          }
+                          const { error } = await supabase.from("order_items").insert({
+                            order_id: order.id, tenant_id: tenantId, menu_id: menu.id,
+                            quantity: 1, price_at_time: menu.price, notes: "CASHIER_ORDER"
+                          });
+                          if (error) throw error;
+                          await fetchOrderItems(order.id);
+                        } catch (err: any) {
+                          console.error("GAGAL TAMBAH MENU:", err);
+                          alert("Menu gagal ditambahkan: " + (err?.message || "Kesalahan tidak diketahui"));
+                        }
+                      }} className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-left text-xs text-white">
                         <div className="font-bold">{menu.name}</div>
                         <div className="mt-1 text-slate-400">Rp {Number(menu.price || 0).toLocaleString("id-ID")}</div>
                       </button>
