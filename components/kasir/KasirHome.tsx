@@ -536,8 +536,9 @@ const fetchMenuItems = async () => {
         table_id: table?.id || null,
         tenant_id: tenantId,
         status: "open",
-        waiter_name: "KASIR",
-        customer_name: null
+        waiter_name: localStorage.getItem("username") || "KASIR",
+        customer_name: null,
+        guest_name: null
       })
       .select()
       .single();
@@ -1166,15 +1167,18 @@ DISBA POS Terminal - {tenantType}
           return (
             <button
               key={t.id}
-              onClick={() => {
-                const existingOrder = orders.find(o => o.table_id === t.id && o.status === "open");
+              onClick={async () => {
+                // Samakan alur dengan WaiterHome: pilih meja dahulu, lalu buka/buat pesanan aktif.
+                setSelectedTable(t);
+                const existingOrder = orders.find(
+                  o => String(o.table_id) === String(t.id) && String(o.status || "").toLowerCase() === "open"
+                );
                 if (existingOrder) {
-                  setSelectedTable(t);
                   setActiveOrder(existingOrder);
-                  fetchOrderItems(existingOrder.id);
-                } else {
-                  handleCreateRetailOrder(t);
+                  await fetchOrderItems(existingOrder.id);
+                  return;
                 }
+                await handleCreateRetailOrder(t);
               }}
               className={`min-h-[112px] rounded-2xl border-2 transition-all px-2 py-3 text-center font-medium flex flex-col items-center justify-center gap-2 shadow-sm ${
                 isSelected
