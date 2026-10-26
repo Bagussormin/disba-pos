@@ -283,11 +283,21 @@ loadTenantType();
       if (tRes.error) throw tRes.error;
       if (oRes.error) throw oRes.error;
 
-      if (tRes.data) {
-  console.log("DATA TABLE DARI SUPABASE:", tRes.data);
-  setTables(tRes.data);
-  localStorage.setItem("disba_cache_tables", JSON.stringify(tRes.data));
-}
+      if (Array.isArray(tRes.data) && tRes.data.length > 0) {
+        console.log("DATA TABLE DARI SUPABASE:", tRes.data);
+        setTables(tRes.data);
+        localStorage.setItem("disba_cache_tables", JSON.stringify(tRes.data));
+      } else {
+        // Jangan hapus meja yang sudah tersimpan jika query sementara mengembalikan array kosong.
+        const cachedTables = safeJSONParse(
+          localStorage.getItem("disba_cache_tables") || "[]",
+          []
+        );
+        setTables((currentTables) => {
+          const preservedTables = currentTables.length > 0 ? currentTables : cachedTables;
+          return preservedTables;
+        });
+      }
       if (oRes.data) {
         setOrders(oRes.data);
         localStorage.setItem("disba_cache_orders", JSON.stringify(oRes.data));
