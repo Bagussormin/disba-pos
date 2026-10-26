@@ -186,8 +186,20 @@ loadTenantType();
   useEffect(() => { if (activeOrder) fetchOrderItems(activeOrder.id); }, [lastIncomingOrder]);
 
   useEffect(() => {
-    // RETAIL tanpa meja memakai transaksi langsung. Jika tenant memiliki meja,
-    // jangan biarkan alur retail otomatis menghapus pilihan meja kasir.
+    // Jika kasir sedang memilih meja, jangan biarkan alur transaksi retail
+    // tanpa meja menimpa pesanan meja yang baru dibuka.
+    if (selectedTable) {
+      const tableOrder = orders.find(
+        order => String(order.table_id) === String(selectedTable.id) && String(order.status || "").toLowerCase() === "open"
+      );
+      if (tableOrder) {
+        setActiveOrder(tableOrder);
+        fetchOrderItems(tableOrder.id);
+      }
+      return;
+    }
+
+    // RETAIL tanpa meja memakai transaksi langsung.
     if (tenantType === "RETAIL" && tables.length === 0) {
       const retailOrder = orders.find(order => order.status === "open" && order.waiter_name === "KASIR" && (order.table_id === null || order.table_id === undefined));
       if (retailOrder) {
