@@ -548,6 +548,8 @@ const fetchMenuItems = async () => {
     if (error) throw error;
 
     if (newOrder) {
+      // Update state immediately so the order-sync effect can find this table's new order.
+      setOrders((prev) => [newOrder, ...prev.filter((o) => o.id !== newOrder.id)]);
       setActiveOrder(newOrder);
       setOrderItems([]);
       setSelectedTable(table ? table : null);
