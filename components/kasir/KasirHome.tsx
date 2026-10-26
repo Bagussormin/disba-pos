@@ -359,14 +359,12 @@ if (tenantData) {
   };
 
 const fetchMenuItems = async () => {
-  const cachedMenus = localStorage.getItem("disba_cache_menus");
-
-  // Tampilkan cache terlebih dahulu.
+  // Cache dipisahkan per tenant agar menu outlet lain tidak tertukar.
+  const cacheKey = `disba_cache_menus_${tenantId}`;
+  const cachedMenus = localStorage.getItem(cacheKey);
   if (cachedMenus) {
     const parsedMenus = safeJSONParse(cachedMenus, []);
-    if (Array.isArray(parsedMenus) && parsedMenus.length > 0) {
-      setMenuItems(parsedMenus);
-    }
+    if (Array.isArray(parsedMenus)) setMenuItems(parsedMenus);
   }
 
   try {
@@ -380,22 +378,15 @@ const fetchMenuItems = async () => {
     console.log("TENANT ID KASIR:", tenantId);
     console.log("HASIL MENU SUPABASE:", data, "ERROR:", error);
 
-    if (error) {
-      console.error("Gagal mengambil menu:", error);
-      alert("Menu gagal dimuat untuk " + tenantId + ": " + error.message);
-      return;
-    }
+    if (error) throw error;
 
-    if (Array.isArray(data) && data.length > 0) {
-      // Ambil stok Inventory untuk ditampilkan pada setiap kartu Menu yang terhubung.
+    if (Array.isArray(data)) {
       const { data: stockRows, error: stockError } = await supabase
         .from("inventory")
         .select("id, item_name, current_stock, stock_quantity, unit")
         .eq("tenant_id", tenantId);
 
-      if (stockError) {
-        console.error("Gagal mengambil stok Inventory untuk kasir:", stockError);
-      }
+      if (stockError) console.error("Gagal mengambil stok Inventory untuk kasir:", stockError);
 
       const stockById = new Map(
         (stockRows || []).map((row: any) => [
@@ -403,7 +394,6 @@ const fetchMenuItems = async () => {
           Number(row.current_stock ?? row.stock_quantity ?? 0)
         ])
       );
-
       const menusWithStock = data.map((menu: any) => ({
         ...menu,
         available_stock: menu.inventory_id
@@ -412,17 +402,13 @@ const fetchMenuItems = async () => {
       }));
 
       setMenuItems(menusWithStock);
+      localStorage.setItem(cacheKey, JSON.stringify(menusWithStock));
+      // Backward-compatible cache for older screens.
       localStorage.setItem("disba_cache_menus", JSON.stringify(menusWithStock));
-    } else {
-      console.warn("Menu kosong dari Supabase untuk tenant:", tenantId);
-      if (!cachedMenus || safeJSONParse(cachedMenus, []).length === 0) {
-        setMenuItems([]);
-        alert("Supabase tidak menemukan menu tersedia untuk tenant " + tenantId);
-      }
     }
   } catch (err: any) {
     console.error("Kesalahan saat mengambil menu:", err);
-    alert("Kesalahan memuat menu: " + (err?.message || "tidak diketahui"));
+    alert("Menu gagal dimuat untuk " + tenantId + ": " + (err?.message || "Kesalahan tidak diketahui"));
   }
 };
 
