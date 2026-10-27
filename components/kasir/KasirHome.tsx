@@ -27,7 +27,7 @@ export default function KasirHome() {
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "" : "";
 
   // --- DYNAMIC FISCAL SETTINGS ---
-  const [fiscalSettings, setFiscalSettings] = useState({ tax_rate: 0.10, service_charge: 0.05, use_tax: true, use_service_charge: true, loyalty_point_rate: 1000 });
+  const [fiscalSettings, setFiscalSettings] = useState({ tax_rate: 0.10, service_charge: 0, use_tax: true, use_service_charge: false, loyalty_point_rate: 1000 });
 
   // --- CUSTOMER / CRM ---
   const [customerSearch, setCustomerSearch] = useState("");
@@ -765,9 +765,9 @@ const fetchMenuItems = async () => {
   const getSubtotal = () => orderItems.reduce((a, b) => a + (b.qty * b.price), 0);
   const safeDiscount = Math.min(discount, getSubtotal());
   const getNetSubtotal = () => getSubtotal() - safeDiscount;
-  const getService = () => fiscalSettings.use_service_charge ? Math.round(getNetSubtotal() * fiscalSettings.service_charge) : 0;
-  const getTax = () => fiscalSettings.use_tax ? Math.round((getNetSubtotal() + getService()) * fiscalSettings.tax_rate) : 0;
-  const getGrandTotal = () => getNetSubtotal() + getService() + getTax();
+  const getService = () => 0;
+  const getTax = () => fiscalSettings.use_tax ? Math.round(getNetSubtotal() * 0.10) : 0;
+  const getGrandTotal = () => getNetSubtotal() + getTax();
   const getChange = () => Math.max(0, paidAmount - getGrandTotal());
 
   const menuCategories = menuItems.reduce((acc: Record<string, any[]>, menu) => {
@@ -822,7 +822,7 @@ const fetchMenuItems = async () => {
         items: orderItems, 
         subtotal: getSubtotal(), 
         discount: safeDiscount, 
-        service_charge: getService(), 
+        service_charge: 0, 
         pb1: getTax(), 
         table_name: selectedTable?.name, 
         payment_method: paymentMethod, 
@@ -905,7 +905,7 @@ const fetchMenuItems = async () => {
         items: orderItems, 
         subtotal: getSubtotal(), 
         discount: safeDiscount, 
-        serviceCharge: getService(), 
+        serviceCharge: 0, 
         tax: getTax(), 
         total: getGrandTotal(), 
         paymentMethod: paymentMethod, 

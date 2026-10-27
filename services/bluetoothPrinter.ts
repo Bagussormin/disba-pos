@@ -78,7 +78,7 @@ export async function printBluetoothReceipt(data: ReceiptData) {
     "--------------------------------",
     `Subtotal: ${money(data.subtotal)}`,
     `Diskon: ${money(data.discount)}`,
-    `Servis: ${money(data.serviceCharge)}`,
+
     `Pajak: ${money(data.tax)}`,
     `TOTAL: ${money(data.total)}`,
     `Bayar: ${data.paymentMethod}`,
@@ -88,11 +88,27 @@ export async function printBluetoothReceipt(data: ReceiptData) {
     data.footerText || "Terima Kasih",
   ].filter((line) => line !== "");
 
+  const headerLines = [data.storeName, data.address || "", data.contact || ""].filter(Boolean);
+  const footerLine = data.footerText || "Terima Kasih";
+  const bodyLines = lines.slice(headerLines.length, -1);
+
   return sendBluetoothPrint([
     {
       type: "text",
-      text: lines.join("\n"),
+      text: headerLines.join("\n"),
+      align: "center",
+      bold: true,
+    },
+    {
+      type: "text",
+      text: bodyLines.join("\n"),
       align: "left",
+    },
+    {
+      type: "text",
+      text: footerLine.toUpperCase(),
+      align: "center",
+      bold: true,
     },
     { type: "feed", lines: 3 },
   ]);
