@@ -2,7 +2,7 @@ import { fetchWithTimeout } from "../../lib/printer";
 import { safeJSONParse } from "../../lib/utils";
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { executePrint } from "../../lib/printer";
+import { executePrint, executeShiftClosingPrint } from "../../lib/printer";
 import { 
   LogOut, Receipt, MapPin, AlertTriangle, Wallet, Printer, Banknote, X, 
   BarChart3, FileText, Lock, CreditCard, ChevronRight, CheckCircle2, Loader2, ShoppingBag, Search,
@@ -977,8 +977,14 @@ const fetchMenuItems = async () => {
         if (error) throw error; 
       }
 
-      // Print closing settlement
-      await handlePrintShiftClosing(selisih);
+      // Cetak laporan setelah shift berhasil ditutup.
+      // Jika printer gagal, status shift tetap tertutup dan proses logout tetap berjalan.
+      try {
+        await handlePrintShiftClosing(selisih);
+      } catch (printError: any) {
+        console.error("Laporan shift gagal dicetak:", printError);
+        alert("Shift berhasil ditutup, tetapi laporan gagal dicetak. Periksa printer lalu cetak ulang dari arsip jika tersedia.");
+      }
       
       // Auto-email closing settlement
       if (isOnline) {
@@ -1088,57 +1094,83 @@ const fetchMenuItems = async () => {
   };
 
   const handlePrintShiftClosing = async (selisih: number) => {
-    const { data: printSettings } = await supabase.from("receipt_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
-    
-    let trxList = [];
-    try {
-      const { data } = await supabase.from("transactions").select("*").eq("shift_id", currentShift.id).eq("tenant_id", tenantId);
-      trxList = data || [];
-    } catch (e) {
-      // Using locally cached transaction data
+    const closedAt = new Date();
+    const { data: transactions, error } = await supabase
+      .from("transactions")
+      .select("items, subtotal, discount, service_charge, total, payment_method")
+      .eq("shift_id", currentShift.id)
+      .eq("tenant_id", tenantId);
+
+    if (error) {
+      throw new Error("Gagal mengambil transaksi untuk laporan shift: " + error.message);
     }
 
-    const summaryData = trxList || [];
-    const subtotal = summaryData.reduce((a, b) => a + (Number(b.subtotal) || 0), 0);
-    const diskonBill = summaryData.reduce((a, b) => a + (Number(b.discount) || 0), 0);
-    const serviceCharge = summaryData.reduce((a, b) => a + (Number(b.service_charge) || 0), 0);
-    const totalPenjualan = summaryData.reduce((a, b) => a + (Number(b.total) || 0), 0);
-    
-    const cashSalesOnly = summaryData
-      .filter(t => t.payment_method === "CASH")
-      .reduce((a, b) => a + (Number(b.total) || 0), 0);
-    
-    const kasDiharapkan = Number(currentShift?.starting_cash || 0) + cashSalesOnly;
+    // Gabungkan item dengan ID/nama yang sama, hitung qty dan total nilai jual.
+    const salesByItem = new Map<string, { name: string; qty: number; price: number; total: number }>();
+    (transactions || []).forEach((trx: any) => {
+      const rawItems = typeof trx.items === "string"
+        ? safeJSONParse(trx.items, [])
+        : trx.items;
+      if (!Array.isArray(rawItems)) return;
 
-    const reportData = {
-        storeName: printSettings?.store_name || "NES HOUSE COLD BREW",
-        cashierName: currentShift.cashier_name || "KASIR",
-        closingData: {
-          startTime: new Date(currentShift.start_time).toLocaleString('id-ID'),
-          endTime: new Date().toLocaleString('id-ID'),
-          totalPenjualan,
-          subtotal,
-          diskonBill,
-          service: serviceCharge,
-          pembulatan: 0,
-          kasDiharapkan,
-          awalLaci: Number(currentShift?.starting_cash || 0),
-          kasPenjualan: cashSalesOnly,
-          kasAktual: Number(endingCash),
-          kasSelisih: selisih,
-          totalDiharapkan: totalPenjualan,
-          totalAktual: (totalPenjualan - cashSalesOnly) + Number(endingCash),
-          totalSelisih: selisih
+      rawItems.forEach((item: any) => {
+        const name = String(item.name || item.menu_name || "Barang").trim();
+        const qty = Number(item.qty ?? item.quantity ?? 0);
+        const price = Number(item.price ?? item.price_at_time ?? 0);
+        if (!qty || qty <= 0) return;
+
+        const key = String(item.id ?? item.menu_id ?? name).toLowerCase();
+        const existing = salesByItem.get(key);
+        if (existing) {
+          existing.qty += qty;
+          existing.total += qty * price;
+        } else {
+          salesByItem.set(key, { name, qty, price, total: qty * price });
         }
-    };
-
-    try { 
-      await fetchWithTimeout("http://localhost:4000/print-settlement", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reportData)
       });
-    } catch (e) { console.error("Gagal print closing:", e); }
+    });
+
+    const items = Array.from(salesByItem.values())
+      .sort((a, b) => a.name.localeCompare(b.name, "id"))
+      .map(item => ({
+        name: item.name,
+        qty: item.qty,
+        price: item.price,
+        total: item.total,
+      }));
+
+    const trxList = transactions || [];
+    const subtotal = trxList.reduce((sum: number, trx: any) => sum + Number(trx.subtotal || 0), 0);
+    const diskonBill = trxList.reduce((sum: number, trx: any) => sum + Number(trx.discount || 0), 0);
+    const serviceCharge = trxList.reduce((sum: number, trx: any) => sum + Number(trx.service_charge || 0), 0);
+    const totalPenjualan = trxList.reduce((sum: number, trx: any) => sum + Number(trx.total || 0), 0);
+    const cashSales = trxList
+      .filter((trx: any) => trx.payment_method === "CASH")
+      .reduce((sum: number, trx: any) => sum + Number(trx.total || 0), 0);
+    const kasDiharapkan = Number(currentShift?.starting_cash || 0) + cashSales;
+
+    await executeShiftClosingPrint({
+      storeName: receiptStoreName || outletProfileName || "DISBA POS",
+      cashierName: currentShift?.cashier_name || localStorage.getItem("username") || "KASIR",
+      items,
+      closingData: {
+        date: closedAt.toLocaleDateString("id-ID", {
+          day: "2-digit", month: "long", year: "numeric"
+        }),
+        startTime: new Date(currentShift.start_time).toLocaleString("id-ID"),
+        endTime: closedAt.toLocaleString("id-ID"),
+        totalPenjualan,
+        subtotal,
+        diskonBill,
+        service: serviceCharge,
+        kasDiharapkan,
+        kasAktual: Number(endingCash),
+        kasSelisih: Number(selisih),
+        awalLaci: Number(currentShift?.starting_cash || 0),
+        kasPenjualan: cashSales,
+        totalItemTerjual: items.reduce((sum, item) => sum + item.qty, 0),
+      },
+    });
   };
 
   const handleLogOut = () => { if (window.confirm("Keluar dari Terminal Kasir?")) { localStorage.removeItem("role"); localStorage.removeItem("username"); window.location.replace("/login"); } };

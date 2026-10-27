@@ -9,7 +9,7 @@ export const fetchWithTimeout = (
   url: string,
   options: RequestInit = {},
   timeout = PRINT_REQUEST_TIMEOUT
-) => {
+): Promise<Response> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -46,7 +46,10 @@ const getTenantSettings = async () => {
   } catch (err) {
     console.error("Error fetching printer settings:", err);
 
-    if (err instanceof Error && err.message.includes("belum tersedia")) {
+    if (
+      err instanceof Error &&
+      err.message.includes("belum tersedia")
+    ) {
       throw err;
     }
 
@@ -57,8 +60,10 @@ const getTenantSettings = async () => {
 };
 
 // Membuat URL printer bridge
-const getBridgeUrl = (bridgeIp: string | null | undefined) => {
-  const address = bridgeIp || "127.0.0.1";
+const getBridgeUrl = (
+  bridgeIp: string | null | undefined
+): string => {
+  const address = (bridgeIp || "127.0.0.1").trim();
 
   if (/^https?:\/\//i.test(address)) {
     return address.replace(/\/+$/, "");
@@ -71,7 +76,7 @@ const getBridgeUrl = (bridgeIp: string | null | undefined) => {
 const getResponseError = async (
   response: Response,
   defaultMessage: string
-) => {
+): Promise<string> => {
   try {
     const result = await response.json();
 
@@ -90,14 +95,14 @@ const sendToBridge = async (
   endpoint: string,
   payload: Record<string, any>,
   defaultErrorMessage: string
-) => {
-  const settings = await getTenantSettings();
+): Promise<Response> => {
   const tenantId = localStorage.getItem("tenant_id");
 
   if (!tenantId) {
     throw new Error("Tenant ID tidak ditemukan. Harap login ulang.");
   }
 
+  const settings = await getTenantSettings();
   const baseUrl = getBridgeUrl(settings.bridge_ip);
 
   const response = await fetchWithTimeout(`${baseUrl}${endpoint}`, {
@@ -120,6 +125,18 @@ const sendToBridge = async (
   return response;
 };
 
+// Membuat pesan error yang konsisten
+const getPrintErrorMessage = (
+  err: unknown,
+  fallback: string
+): string => {
+  if (err instanceof Error && err.name === "AbortError") {
+    return "Timeout: Printer tidak merespons dalam 8 detik";
+  }
+
+  return err instanceof Error ? err.message : fallback;
+};
+
 // 1. CETAK STRUK KASIR / BILL CHECKER
 export const executePrint = async (receiptData: any) => {
   try {
@@ -138,30 +155,21 @@ export const executePrint = async (receiptData: any) => {
       {
         ip_kasir: settings.cashier_printer_ip,
         ip_office: settings.office_printer_ip,
-
-        // Gunakan pengaturan tenant sebagai sumber nama toko.
         storeName: settings.store_name,
         address: settings.address,
         contact: settings.contact,
         footerText: settings.footer_text,
-
-        // BILL_CHECKER atau PAYMENT_RECEIPT
-        // Default tetap struk pembayaran agar kompatibel.
         documentType:
           receiptData.documentType || "PAYMENT_RECEIPT",
-
         receipt_no: receiptData.receipt_no,
         tableName: receiptData.tableName,
         cashierName: receiptData.cashierName,
-
         items: receiptData.items,
         subtotal: receiptData.subtotal,
         discount: receiptData.discount ?? 0,
         serviceCharge: receiptData.serviceCharge ?? 0,
         tax: receiptData.tax ?? 0,
         total: receiptData.total,
-
-        // Informasi pembayaran
         paid: receiptData.paid,
         change: receiptData.change,
         paymentMethod: receiptData.paymentMethod,
@@ -174,12 +182,10 @@ export const executePrint = async (receiptData: any) => {
       message: "Dokumen berhasil dikirim ke printer",
     };
   } catch (err: unknown) {
-    const errorMsg =
-      err instanceof Error && err.name === "AbortError"
-        ? "Timeout: Printer tidak merespons dalam 8 detik"
-        : err instanceof Error
-          ? err.message
-          : "Gagal koneksi ke DISBA BRIDGE";
+    const errorMsg = getPrintErrorMessage(
+      err,
+      "Gagal koneksi ke DISBA BRIDGE"
+    );
 
     console.error("Print error:", errorMsg);
     throw new Error(errorMsg);
@@ -205,7 +211,6 @@ export const executeKitchenPrint = async (receiptData: any) => {
         ip_dapur: settings.kitchen_printer_ip,
         ip_bar: settings.bar_printer_ip,
         ip_runner: settings.runner_printer_ip,
-
         table_name: receiptData.tableName,
         items: receiptData.items,
       },
@@ -217,14 +222,53 @@ export const executeKitchenPrint = async (receiptData: any) => {
       message: "Pesanan berhasil dikirim ke dapur/bar",
     };
   } catch (err: unknown) {
-    const errorMsg =
-      err instanceof Error && err.name === "AbortError"
-        ? "Timeout: Dapur/Bar printer tidak merespons dalam 8 detik"
-        : err instanceof Error
-          ? err.message
-          : "Gagal kirim order ke dapur/bar";
+    const errorMsg = getPrintErrorMessage(
+      err,
+      "Gagal kirim order ke dapur/bar"
+    );
 
     console.error("Kitchen print error:", errorMsg);
+    throw new Error(errorMsg);
+  }
+};
+
+// 3. CETAK LAPORAN TUTUP SHIFT
+export const executeShiftClosingPrint = async (data: any) => {
+  try {
+    if (!data || !data.closingData) {
+      throw new Error("Data tutup shift tidak tersedia.");
+    }
+
+    const settings = await getTenantSettings();
+
+    await sendToBridge(
+      "/print-settlement",
+      {
+        ip_kasir: settings.cashier_printer_ip,
+        ip_office: settings.office_printer_ip,
+        storeName:
+          data.storeName || settings.store_name || "DISBA POS",
+        address: settings.address,
+        contact: settings.contact,
+        footerText: settings.footer_text,
+        cashierName: data.cashierName || "KASIR",
+        items: Array.isArray(data.items) ? data.items : [],
+        closingData: data.closingData,
+      },
+      "Gagal mencetak laporan tutup shift"
+    );
+
+    return {
+      success: true,
+      message: "Laporan tutup shift berhasil dikirim ke printer",
+    };
+  } catch (err: unknown) {
+    const errorMsg = getPrintErrorMessage(
+      err,
+      "Gagal mencetak laporan tutup shift"
+    );
+
+    console.error("Shift closing print error:", errorMsg);
     throw new Error(errorMsg);
   }
 };
