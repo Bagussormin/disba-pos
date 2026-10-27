@@ -129,13 +129,13 @@ const CartPanel: React.FC<Props> = ({ cartItems, subtotal }) => {
   const grandTotal = subtotal - discount + Math.round(subtotal * 0.1);
 
   return (
-    <div className="flex flex-col h-full bg-white text-black p-4 relative">
+    <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-white text-black p-3 md:p-4 relative">
       <h2 className="font-bold text-xl mb-4 border-b pb-2">
         Keranjang Kasir
       </h2>
 
       {/* DAFTAR MENU */}
-      <div className="flex-1 overflow-y-auto mb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto mb-3">
         {cartItems.map((item, idx) => (
           <div
             key={`${item.name}-${idx}`}
