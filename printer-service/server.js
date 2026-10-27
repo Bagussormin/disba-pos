@@ -170,35 +170,71 @@ app.post('/print-receipt', async (req, res) => {
  * 3. JALUR LAPORAN SETTLEMENT (SHIFT CLOSE)
  */
 app.post('/print-settlement', async (req, res) => {
-    const d = req.body;
-    const c = d.closingData;
+    const d = req.body || {};
+    const c = d.closingData || {};
     const tid = d.tenant_id || 'UNKNOWN_TENANT';
+    const soldItems = Array.isArray(d.items) ? d.items : [];
+    const printedAt = new Date();
+    const reportDate = c.date || printedAt.toLocaleDateString('id-ID', {
+        day: '2-digit', month: 'long', year: 'numeric'
+    });
 
-    let h = `${center}${boldOn}${d.storeName}${boldOff}\n`;
-    h += `LAPORAN PENUTUPAN SHIFT\n\n`;
-    h += `${left}Kasir          : ${d.cashierName || '-'}\n`;
-    h += `Mulai Shift    : ${c.startTime}\n`;
-    h += `Shift Berakhir : ${c.endTime}\n`;
+    let h = `${center}${boldOn}${d.storeName || 'DISBA POS'}${boldOff}\\n`;
+    if (d.address) h += `${d.address}\\n`;
+    if (d.contact) h += `${d.contact}\\n`;
+    h += `${boldOn}LAPORAN TUTUP SHIFT${boldOff}\\n`;
+    h += `${left}Tanggal        : ${reportDate}\\n`;
+    h += `Kasir          : ${d.cashierName || '-'}\\n`;
+    h += `Mulai Shift    : ${c.startTime || '-'}\\n`;
+    h += `Tutup Shift    : ${c.endTime || '-'}\\n`;
     h += line;
-    h += `Total Penjualan: ${formatIDR(c.totalPenjualan)}\n`;
-    h += `Subtotal       : ${formatIDR(c.subtotal)}\n`;
-    h += `Diskon Bill    : ${formatIDR(c.diskonBill * -1)}\n`;
-    h += `Service Charge : ${formatIDR(c.service)}\n`;
+
+    h += `${boldOn}RINCIAN BARANG TERJUAL${boldOff}\\n`;
+    if (soldItems.length === 0) {
+        h += `Belum ada rincian barang.\\n`;
+    } else {
+        soldItems.forEach((item) => {
+            const name = String(item.name || 'Barang');
+            const qty = Number(item.qty || 0);
+            const price = Number(item.price || 0);
+            const total = Number(item.total ?? (qty * price));
+            h += `${name}\\n`;
+            h += `  ${qty} x ${formatIDR(price)} = ${formatIDR(total)}\\n`;
+        });
+    }
     h += line;
-    h += `Kas Diharapkan : ${formatIDR(c.kasDiharapkan)}\n`;
-    h += `Kas Aktual     : ${formatIDR(c.kasAktual)}\n`;
-    h += `Kas Selisih    : ${formatIDR(c.kasSelisih)}\n`;
+    h += `Total Qty      : ${Number(c.totalItemTerjual || soldItems.reduce((sum, item) => sum + Number(item.qty || 0), 0))}\\n`;
+    h += `Total Penjualan: ${formatIDR(c.totalPenjualan)}\\n`;
+    h += `Subtotal       : ${formatIDR(c.subtotal)}\\n`;
+    if (Number(c.diskonBill || 0) > 0) h += `Diskon Bill    : -${formatIDR(c.diskonBill)}\\n`;
+    if (Number(c.service || 0) > 0) h += `Service Charge : ${formatIDR(c.service)}\\n`;
     h += line;
-    h += `${center}\nCetak: ${new Date().toLocaleString('id-ID')}\n`;
+    h += `${boldOn}REKONSILIASI KAS${boldOff}\\n`;
+    h += `Modal Kas Awal : ${formatIDR(c.awalLaci)}\\n`;
+    h += `Kas Penjualan  : ${formatIDR(c.kasPenjualan)}\\n`;
+    h += `Kas Diharapkan : ${formatIDR(c.kasDiharapkan)}\\n`;
+    h += `Kas Aktual     : ${formatIDR(c.kasAktual)}\\n`;
+    h += `Kas Selisih    : ${formatIDR(c.kasSelisih)}\\n`;
+    h += line;
+    h += `${center}${d.footerText || 'SHIFT TELAH DITUTUP'}\\n`;
+    h += `Cetak: ${printedAt.toLocaleString('id-ID')}\\n`;
 
     const settlementBuffer = Buffer.from(h);
     const jobs = [];
-    
     jobs.push(sendToDevice(d.ip_kasir, 9100, settlementBuffer, "SETTLEMENT", tid));
-    if (d.ip_office) jobs.push(sendToDevice(d.ip_office, 9100, settlementBuffer, "SETTLEMENT_OFFICE", tid));
+    if (d.ip_office) {
+        jobs.push(sendToDevice(d.ip_office, 9100, settlementBuffer, "SETTLEMENT_OFFICE", tid));
+    }
 
-    await Promise.all(jobs);
-    res.json({ success: true });
+    const results = await Promise.all(jobs);
+    const successCount = results.filter(result => result === true).length;
+    if (successCount === 0) {
+        return res.status(500).json({
+            success: false,
+            message: "Laporan shift gagal dicetak. Periksa IP dan koneksi printer."
+        });
+    }
+    return res.json({ success: true, message: "Laporan shift dicetak", successCount });
 });
 
 /**
