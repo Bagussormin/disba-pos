@@ -10,7 +10,6 @@ type ReceiptData = {
   }>;
   subtotal: number;
   discount: number;
-  serviceCharge: number;
   tax: number;
   total: number;
   paymentMethod: string;

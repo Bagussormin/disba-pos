@@ -263,11 +263,10 @@ app.post('/print-receipt', async (req, res) => {
             h += `DISKON    : -${formatIDR(d.discount)}\n`;
         }
 
-        if (Number(d.serviceCharge) > 0) {
-            h += `SERVICE   : ${formatIDR(d.serviceCharge)}\n`;
+        if (Number(d.tax) > 0) {
+            h += `PAJAK 10% : ${formatIDR(d.tax)}\n`;
         }
 
-        // Baris pajak sengaja tidak dicetak.
         h += line;
         h += `${boldOn}TOTAL     : ${formatIDR(d.total)}${boldOff}\n`;
         h += `BAYAR     : ${formatIDR(d.paid ?? d.total)}\n`;

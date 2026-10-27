@@ -27,7 +27,7 @@ export default function KasirHome() {
   const tenantId = typeof window !== "undefined" ? localStorage.getItem("tenant_id") || "" : "";
 
   // --- DYNAMIC FISCAL SETTINGS ---
-  const [fiscalSettings, setFiscalSettings] = useState({ tax_rate: 0.10, service_charge: 0, use_tax: true, use_service_charge: false, loyalty_point_rate: 1000 });
+  const [fiscalSettings, setFiscalSettings] = useState({ loyalty_point_rate: 1000 });
 
   // --- CUSTOMER / CRM ---
   const [customerSearch, setCustomerSearch] = useState("");
@@ -232,9 +232,9 @@ loadTenantType();
   const fetchFiscalSettings = async () => {
     console.log("fetchFiscalSettings dipanggil, tenantId:", tenantId);
     try {
-      const { data } = await supabase.from("receipt_settings").select("tax_rate,service_charge,use_tax,use_service_charge,loyalty_point_rate,store_name").eq("tenant_id", tenantId).maybeSingle();
+      const { data } = await supabase.from("receipt_settings").select("loyalty_point_rate,store_name").eq("tenant_id", tenantId).maybeSingle();
       if (data) {
-        setFiscalSettings({ tax_rate: data.tax_rate ?? 0.10, service_charge: data.service_charge ?? 0.05, use_tax: data.use_tax !== false, use_service_charge: data.use_service_charge !== false, loyalty_point_rate: data.loyalty_point_rate ?? 1000 });
+        setFiscalSettings({ loyalty_point_rate: data.loyalty_point_rate ?? 1000 });
         if (data.store_name) setReceiptStoreName(data.store_name);
       }
     } catch (err) {
@@ -765,8 +765,7 @@ const fetchMenuItems = async () => {
   const getSubtotal = () => orderItems.reduce((a, b) => a + (b.qty * b.price), 0);
   const safeDiscount = Math.min(discount, getSubtotal());
   const getNetSubtotal = () => getSubtotal() - safeDiscount;
-  const getService = () => 0;
-  const getTax = () => fiscalSettings.use_tax ? Math.round(getNetSubtotal() * 0.10) : 0;
+  const getTax = () => Math.round(getNetSubtotal() * 0.10);
   const getGrandTotal = () => getNetSubtotal() + getTax();
   const getChange = () => Math.max(0, paidAmount - getGrandTotal());
 
@@ -905,7 +904,6 @@ const fetchMenuItems = async () => {
         items: orderItems, 
         subtotal: getSubtotal(), 
         discount: safeDiscount, 
-        serviceCharge: 0, 
         tax: getTax(), 
         total: getGrandTotal(), 
         paymentMethod: paymentMethod, 
@@ -1460,8 +1458,7 @@ DISBA POS Terminal - {tenantType}
                   <span>DISKON</span>
                   <input type="number" className="w-24 shrink-0 bg-blue-500/10 border border-blue-500/30 rounded-xl px-2.5 py-1 text-right text-blue-300 outline-none font-bold text-xs" value={discount || ""} onChange={(e) => setDiscount(Number(e.target.value))} />
                 </div>
-                {fiscalSettings.use_service_charge && <div className="flex justify-between items-center gap-3 text-[10px] font-bold text-slate-500"><span>SERVICE ({Math.round(fiscalSettings.service_charge*100)}%)</span><span className="whitespace-nowrap text-slate-300 font-mono">Rp {getService().toLocaleString('id-ID')}</span></div>}
-                {fiscalSettings.use_tax && <div className="flex justify-between items-center gap-3 text-[10px] font-bold text-slate-500"><span>PAJAK ({Math.round(fiscalSettings.tax_rate*100)}%)</span><span className="whitespace-nowrap text-slate-300 font-mono">Rp {getTax().toLocaleString('id-ID')}</span></div>}
+                <div className="flex justify-between items-center gap-3 text-[10px] font-bold text-slate-500"><span>PAJAK (10%)</span><span className="whitespace-nowrap text-slate-300 font-mono">Rp {getTax().toLocaleString('id-ID')}</span></div>
               </div>
 
               {/* CUSTOMER SELECTOR */}
