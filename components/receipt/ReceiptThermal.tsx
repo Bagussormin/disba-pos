@@ -12,9 +12,9 @@ export const ReceiptThermal = React.forwardRef<HTMLDivElement, Props>(({ data },
 
   const now = new Date();
   const subtotal = data.items?.reduce((sum: number, item: any) => sum + item.qty * item.price, 0) || 0;
-  const pb1 = Math.round(subtotal * 0.1);
-  const service = Math.round(subtotal * 0.07); // Service charge 7%
-  const grandTotal = subtotal + pb1 + service - (data.discount || 0);
+  const netSubtotal = subtotal - (Number(data.discount) || 0);
+  const pb1 = Math.round(netSubtotal * 0.1);
+  const grandTotal = netSubtotal + pb1;
 
   return (
     <div ref={ref} className="bg-white text-black p-[2mm] w-[58mm] font-mono text-[10px] leading-tight">
@@ -52,10 +52,6 @@ export const ReceiptThermal = React.forwardRef<HTMLDivElement, Props>(({ data },
         <div className="flex justify-between">
           <span>SUBTOTAL</span>
           <span>{subtotal.toLocaleString()}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>SERVICE (7%)</span>
-          <span>{service.toLocaleString()}</span>
         </div>
         <div className="flex justify-between">
           <span>PB1 (10%)</span>
