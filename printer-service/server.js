@@ -179,45 +179,45 @@ app.post('/print-settlement', async (req, res) => {
         day: '2-digit', month: 'long', year: 'numeric'
     });
 
-    let h = `${center}${boldOn}${d.storeName || 'DISBA POS'}${boldOff}\\n`;
-    if (d.address) h += `${d.address}\\n`;
-    if (d.contact) h += `${d.contact}\\n`;
-    h += `${boldOn}LAPORAN TUTUP SHIFT${boldOff}\\n`;
-    h += `${left}Tanggal        : ${reportDate}\\n`;
-    h += `Kasir          : ${d.cashierName || '-'}\\n`;
-    h += `Mulai Shift    : ${c.startTime || '-'}\\n`;
-    h += `Tutup Shift    : ${c.endTime || '-'}\\n`;
+    let h = `${center}${boldOn}${d.storeName || 'DISBA POS'}${boldOff}\n`;
+    if (d.address) h += `${d.address}\n`;
+    if (d.contact) h += `${d.contact}\n`;
+    h += `${boldOn}LAPORAN TUTUP SHIFT${boldOff}\n`;
+    h += `${left}Tanggal        : ${reportDate}\n`;
+    h += `Kasir          : ${d.cashierName || '-'}\n`;
+    h += `Mulai Shift    : ${c.startTime || '-'}\n`;
+    h += `Tutup Shift    : ${c.endTime || '-'}\n`;
     h += line;
 
-    h += `${boldOn}RINCIAN BARANG TERJUAL${boldOff}\\n`;
+    h += `${boldOn}RINCIAN BARANG TERJUAL${boldOff}\n`;
     if (soldItems.length === 0) {
-        h += `Belum ada rincian barang.\\n`;
+        h += `Belum ada rincian barang.\n`;
     } else {
         soldItems.forEach((item) => {
             const name = String(item.name || 'Barang');
             const qty = Number(item.qty || 0);
             const price = Number(item.price || 0);
             const total = Number(item.total ?? (qty * price));
-            h += `${name}\\n`;
-            h += `  ${qty} x ${formatIDR(price)} = ${formatIDR(total)}\\n`;
+            h += `${name}\n`;
+            h += `  ${qty} x ${formatIDR(price)} = ${formatIDR(total)}\n`;
         });
     }
     h += line;
-    h += `Total Qty      : ${Number(c.totalItemTerjual || soldItems.reduce((sum, item) => sum + Number(item.qty || 0), 0))}\\n`;
-    h += `Total Penjualan: ${formatIDR(c.totalPenjualan)}\\n`;
-    h += `Subtotal       : ${formatIDR(c.subtotal)}\\n`;
-    if (Number(c.diskonBill || 0) > 0) h += `Diskon Bill    : -${formatIDR(c.diskonBill)}\\n`;
-    if (Number(c.service || 0) > 0) h += `Service Charge : ${formatIDR(c.service)}\\n`;
+    h += `Total Qty      : ${Number(c.totalItemTerjual || soldItems.reduce((sum, item) => sum + Number(item.qty || 0), 0))}\n`;
+    h += `Total Penjualan: ${formatIDR(c.totalPenjualan)}\n`;
+    h += `Subtotal       : ${formatIDR(c.subtotal)}\n`;
+    if (Number(c.diskonBill || 0) > 0) h += `Diskon Bill    : -${formatIDR(c.diskonBill)}\n`;
+    if (Number(c.service || 0) > 0) h += `Service Charge : ${formatIDR(c.service)}\n`;
     h += line;
-    h += `${boldOn}REKONSILIASI KAS${boldOff}\\n`;
-    h += `Modal Kas Awal : ${formatIDR(c.awalLaci)}\\n`;
-    h += `Kas Penjualan  : ${formatIDR(c.kasPenjualan)}\\n`;
-    h += `Kas Diharapkan : ${formatIDR(c.kasDiharapkan)}\\n`;
-    h += `Kas Aktual     : ${formatIDR(c.kasAktual)}\\n`;
-    h += `Kas Selisih    : ${formatIDR(c.kasSelisih)}\\n`;
+    h += `${boldOn}REKONSILIASI KAS${boldOff}\n`;
+    h += `Modal Kas Awal : ${formatIDR(c.awalLaci)}\n`;
+    h += `Kas Penjualan  : ${formatIDR(c.kasPenjualan)}\n`;
+    h += `Kas Diharapkan : ${formatIDR(c.kasDiharapkan)}\n`;
+    h += `Kas Aktual     : ${formatIDR(c.kasAktual)}\n`;
+    h += `Kas Selisih    : ${formatIDR(c.kasSelisih)}\n`;
     h += line;
-    h += `${center}${d.footerText || 'SHIFT TELAH DITUTUP'}\\n`;
-    h += `Cetak: ${printedAt.toLocaleString('id-ID')}\\n`;
+    h += `${center}${d.footerText || 'SHIFT TELAH DITUTUP'}\n`;
+    h += `Cetak: ${printedAt.toLocaleString('id-ID')}\n`;
 
     const settlementBuffer = Buffer.from(h);
     const jobs = [];
