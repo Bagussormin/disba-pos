@@ -11,10 +11,12 @@ export const ReceiptThermal = React.forwardRef<HTMLDivElement, Props>(({ data },
   const tenantName = typeof window !== "undefined" ? localStorage.getItem("tenant_name") || "STORE" : "STORE";
 
   const now = new Date();
-  const subtotal = data.items?.reduce((sum: number, item: any) => sum + item.qty * item.price, 0) || 0;
-  const netSubtotal = subtotal - (Number(data.discount) || 0);
-  const pb1 = Math.round(netSubtotal * 0.1);
-  const grandTotal = netSubtotal + pb1;
+  const itemSubtotal = data.items?.reduce((sum: number, item: any) => sum + item.qty * item.price, 0) || 0;
+  const subtotal = Number(data.subtotal ?? itemSubtotal);
+  const discount = Math.min(subtotal, Math.max(0, Number(data.discount) || 0));
+  const netSubtotal = subtotal - discount;
+  const pb1 = Number(data.pb1 ?? data.tax ?? Math.round(netSubtotal * 0.10));
+  const grandTotal = Number(data.total ?? (netSubtotal + pb1));
 
   return (
     <div ref={ref} className="bg-white text-black p-[2mm] w-[58mm] font-mono text-[10px] leading-tight">
@@ -53,16 +55,16 @@ export const ReceiptThermal = React.forwardRef<HTMLDivElement, Props>(({ data },
           <span>SUBTOTAL</span>
           <span>{subtotal.toLocaleString()}</span>
         </div>
+        {discount > 0 && (
+          <div className="flex justify-between">
+            <span>DISKON</span>
+            <span>-{discount.toLocaleString()}</span>
+          </div>
+        )}
         <div className="flex justify-between">
           <span>PB1 (10%)</span>
           <span>{pb1.toLocaleString()}</span>
         </div>
-        {data.discount > 0 && (
-          <div className="flex justify-between">
-            <span>DISKON</span>
-            <span>-{data.discount.toLocaleString()}</span>
-          </div>
-        )}
         <div className="flex justify-between text-[12px] border-t border-black pt-1">
           <span>TOTAL</span>
           <span>{grandTotal.toLocaleString()}</span>

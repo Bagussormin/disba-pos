@@ -167,7 +167,6 @@ export const executePrint = async (receiptData: any) => {
         items: receiptData.items,
         subtotal: receiptData.subtotal,
         discount: receiptData.discount ?? 0,
-        serviceCharge: receiptData.serviceCharge ?? 0,
         tax: receiptData.tax ?? 0,
         total: receiptData.total,
         paid: receiptData.paid,
