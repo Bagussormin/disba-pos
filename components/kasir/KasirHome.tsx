@@ -977,8 +977,14 @@ const fetchMenuItems = async () => {
         if (error) throw error; 
       }
 
-      // Print closing settlement
-      await handlePrintShiftClosing(selisih);
+      // Cetak laporan setelah shift berhasil ditutup.
+      // Jika printer gagal, status shift tetap tertutup dan proses logout tetap berjalan.
+      try {
+        await handlePrintShiftClosing(selisih);
+      } catch (printError: any) {
+        console.error("Laporan shift gagal dicetak:", printError);
+        alert("Shift berhasil ditutup, tetapi laporan gagal dicetak. Periksa printer lalu cetak ulang dari arsip jika tersedia.");
+      }
       
       // Auto-email closing settlement
       if (isOnline) {
