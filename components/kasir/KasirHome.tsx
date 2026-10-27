@@ -1178,10 +1178,10 @@ DISBA POS Terminal - {tenantType}
       </header>
 
       {/* CORE BODY */}
-<div className="flex-1 flex flex-col xl:flex-row gap-2 p-2 min-h-0 overflow-y-auto xl:overflow-hidden bg-slate-950/20">
+<div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 lg:grid-cols-[150px_minmax(0,1fr)_280px] 2xl:grid-cols-[180px_minmax(0,1fr)_320px] gap-2 p-2 overflow-y-auto lg:overflow-hidden bg-slate-950/20">
         
          {/* PANEL MEJA (SIDEBAR) */}
-    <div className="w-full shrink-0 max-h-64 xl:max-h-72 overflow-y-auto no-scrollbar">
+    <div className="min-w-0 min-h-0 w-full lg:w-auto lg:h-full lg:max-h-full overflow-y-auto no-scrollbar">
       {tables.length === 0 && (
         <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
           <p className="text-sm font-bold">Kursi/meja belum berhasil dimuat.</p>
@@ -1190,7 +1190,7 @@ DISBA POS Terminal - {tenantType}
           <button onClick={() => fetchData()} className="mt-3 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950">Coba Muat Ulang Meja</button>
         </div>
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 gap-2">
         {tables.map(t => {
           const hasOrder = orders.some(o => o.table_id === t.id);
           const isSelected = selectedTable?.id === t.id;
@@ -1252,7 +1252,7 @@ DISBA POS Terminal - {tenantType}
                   setLoading(false);
                 }
               }}
-              className={`min-h-[112px] rounded-2xl border-2 transition-all px-2 py-3 text-center font-medium flex flex-col items-center justify-center gap-2 shadow-sm ${
+              className={`w-full min-h-[56px] h-14 rounded-lg border-2 transition-all px-2 py-1 text-center font-medium flex flex-row items-center justify-center gap-2 shadow-sm ${
                 isSelected
                   ? "border-blue-600 bg-blue-100 text-blue-900"
                   : hasOrder
@@ -1262,9 +1262,9 @@ DISBA POS Terminal - {tenantType}
                       : "border-slate-300 bg-slate-100 text-slate-800 hover:border-slate-400"
               }`}
             >
-              <Armchair size={23} strokeWidth={2.2} />
-              <span className="text-base leading-tight">{t.name}</span>
-              <span className="text-xs opacity-80">{statusLabel}</span>
+              <Armchair size={17} strokeWidth={2} />
+              <span className="text-xs leading-tight font-semibold">{t.name}</span>
+              <span className="text-[9px] leading-tight opacity-80">{statusLabel}</span>
             </button>
           );
         })}
@@ -1272,7 +1272,7 @@ DISBA POS Terminal - {tenantType}
     </div>
 
         {/* ORDER DETAILS PANEL */}
-        <div className="min-w-0 min-h-[22rem] xl:min-h-0 flex-none xl:flex-1 bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col overflow-hidden backdrop-blur-xl">
+        <div className="min-w-0 min-h-0 flex-1 bg-slate-900/40 rounded-2xl border border-slate-800/80 flex flex-col overflow-hidden backdrop-blur-xl">
           {activeOrder ? (
             <div className="flex flex-col h-full">
               <div className="p-4 border-b border-slate-800/80 bg-slate-950/20 flex justify-between items-center">
@@ -1304,7 +1304,7 @@ DISBA POS Terminal - {tenantType}
                       <div key={category}>
                         <div className="mb-2 text-[9px] font-black uppercase text-slate-500 tracking-wider">{category}</div>
 
-<div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-1.5">
+<div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5">
   {items.map(menu => (
     <button
       key={menu.id}
@@ -1330,7 +1330,7 @@ DISBA POS Terminal - {tenantType}
                 </div>
               )}
               <div className="flex-1 min-h-0 overflow-auto p-2 sm:p-5 no-scrollbar">
-                <table className="w-full min-w-[34rem] table-fixed text-left text-[10px]">
+                <table className="w-full min-w-0 table-fixed text-left text-[10px]">
                   <thead className="text-[9px] font-bold text-slate-500 border-b border-slate-800 uppercase tracking-wider sticky top-0 bg-[#020617] z-10">
                     <tr>
                       <th className="w-[40%] pb-2">NAMA PRODUK</th>
@@ -1417,7 +1417,7 @@ DISBA POS Terminal - {tenantType}
         </div>
 
         {/* CHECKOUT PANEL */}
-        <div className="w-full xl:w-96 2xl:w-[26rem] xl:shrink-0 min-h-0 max-h-[70vh] xl:h-full xl:max-h-full overflow-y-auto bg-slate-900/40 rounded-3xl border border-slate-800/80 flex flex-col p-3 sm:p-4 shadow-2xl backdrop-blur-xl">
+        <div className="w-full min-w-0 min-h-0 max-h-full overflow-y-auto bg-slate-900/40 rounded-2xl border border-slate-800/80 flex flex-col p-3 shadow-2xl backdrop-blur-xl">
           {activeOrder ? (
             <div className="flex flex-col min-h-full">
               <h3 className="text-[10px] font-bold text-slate-400 tracking-wider mb-4 border-b border-slate-800 pb-2.5 flex items-center gap-2 uppercase"><CreditCard size={14}/> Ringkasan Pembayaran</h3>
