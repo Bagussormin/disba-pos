@@ -228,3 +228,47 @@ export const executeKitchenPrint = async (receiptData: any) => {
     throw new Error(errorMsg);
   }
 };
+
+
+// =====================================================
+// 3. CETAK LAPORAN TUTUP SHIFT
+// =====================================================
+
+export const executeShiftClosingPrint = async (reportData: any) => {
+  try {
+    if (!reportData?.closingData) {
+      throw new Error("Data laporan tutup shift tidak tersedia.");
+    }
+
+    const settings = await getTenantSettings();
+    if (!settings.cashier_printer_ip) {
+      throw new Error("IP printer kasir belum diatur pada pengaturan struk.");
+    }
+
+    await sendToBridge(
+      "/print-settlement",
+      {
+        ip_kasir: settings.cashier_printer_ip,
+        ip_office: settings.office_printer_ip || null,
+        storeName: settings.store_name || "DISBA POS",
+        address: settings.address || "",
+        contact: settings.contact || "",
+        footerText: settings.footer_text || "",
+        cashierName: reportData.cashierName || "Kasir",
+        closingData: reportData.closingData,
+        items: Array.isArray(reportData.items) ? reportData.items : [],
+      },
+      "Gagal mencetak laporan tutup shift"
+    );
+
+    return {
+      success: true,
+      message: "Laporan tutup shift berhasil dikirim ke printer kasir.",
+    };
+  } catch (err: unknown) {
+    const errorMsg =
+      err instanceof Error ? err.message : "Gagal mencetak laporan tutup shift.";
+    console.error("Shift closing print error:", errorMsg);
+    throw new Error(errorMsg);
+  }
+};
