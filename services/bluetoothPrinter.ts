@@ -78,6 +78,7 @@ export async function printBluetoothReceipt(data: ReceiptData) {
     "--------------------------------",
     `Subtotal: ${money(data.subtotal)}`,
     `Diskon: ${money(data.discount)}`,
+    `Servis: ${money(data.serviceCharge)}`,
     `Pajak: ${money(data.tax)}`,
     `TOTAL: ${money(data.total)}`,
     `Bayar: ${data.paymentMethod}`,
@@ -91,7 +92,7 @@ export async function printBluetoothReceipt(data: ReceiptData) {
     {
       type: "text",
       text: lines.join("\n"),
-      align: "center",
+      align: "left",
     },
     { type: "feed", lines: 3 },
   ]);
