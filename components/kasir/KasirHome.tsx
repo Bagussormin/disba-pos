@@ -801,7 +801,7 @@ const fetchMenuItems = async () => {
       }
         
       const urutan = (count + 1).toString().padStart(3, '0');
-      const receiptNo = `INV/NES/${dateStr}/${urutan}`;
+      const receiptNo = `INV/BWL/${dateStr}/${urutan}`;
       
       let tenantConfig: any = null;
       try {
