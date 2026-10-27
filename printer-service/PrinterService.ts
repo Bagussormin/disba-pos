@@ -48,7 +48,7 @@ const formatLeftRight = (left: string, right: string, width: number = 32) => {
 app.post('/print-receipt', (req, res) => {
     const { 
         target_ip, table_name, items_list, subtotal, discount_total, 
-        service_charge, tax_total, total, paid, change, cashier,
+        tax_total, total, paid, change, cashier,
         header_title, header_address, header_contact,
         footer_thanks, footer_message, footer_wifi,
         payment_method, paper_size
@@ -85,7 +85,6 @@ app.post('/print-receipt', (req, res) => {
     t += "-".repeat(paperWidth) + "\n";
     t += formatLeftRight("SUBTOTAL", `Rp${(subtotal || 0).toLocaleString('id-ID')}`, paperWidth);
     if(discount_total > 0) t += formatLeftRight("DISCOUNT", `-Rp${discount_total.toLocaleString('id-ID')}`, paperWidth);
-    if(service_charge > 0) t += formatLeftRight("SERVICE(5%)", `Rp${service_charge.toLocaleString('id-ID')}`, paperWidth);
     if(tax_total > 0)      t += formatLeftRight("PB1 (10%)", `Rp${tax_total.toLocaleString('id-ID')}`, paperWidth);
     
     t += "=".repeat(paperWidth) + "\n";
