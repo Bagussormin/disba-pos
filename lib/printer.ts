@@ -1,4 +1,6 @@
 
+import { Capacitor } from "@capacitor/core";
+import { printBluetoothShiftReport } from "../services/bluetoothPrinter";
 import { supabase } from "./supabase";
 
 // REQUEST TIMEOUT CONFIG
@@ -236,6 +238,16 @@ export const executeShiftClosingPrint = async (data: any) => {
   try {
     if (!data || !data.closingData) {
       throw new Error("Data tutup shift tidak tersedia.");
+    }
+
+    // Android prints directly through the native Bluetooth plugin.
+    // Browser/laptop continues using the existing LAN bridge unchanged.
+    if (Capacitor.getPlatform() === "android") {
+      await printBluetoothShiftReport(data);
+      return {
+        success: true,
+        message: "Laporan tutup shift dikirim ke printer Bluetooth",
+      };
     }
 
     const settings = await getTenantSettings();
