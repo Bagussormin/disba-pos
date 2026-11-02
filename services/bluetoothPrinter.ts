@@ -128,7 +128,7 @@ export async function printBluetoothShiftReport(data: any) {
     divider(),
     text(detailLines, "left"),
     divider(),
-    text((data.footerText || "Laporan selesai").toUpperCase(), "center", true),
+    text((data.footerText || "Supported by DISBA POS").toUpperCase(), "center", true),
     { type: "feed", lines: 4 },
   ]);
 }

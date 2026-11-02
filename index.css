@@ -117,3 +117,21 @@ body {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+/* 6. RESPONSIVE */
+
+/* Desktop */
+@media (max-width: 1440px) {
+  /* contoh */
+  .pos-sidebar { width: 220px; }
+}
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .pos-sidebar { width: 72px; }
+  .glass-card { backdrop-filter: blur(12px); }
+}
+
+/* Phone */
+@media (max-width: 600px) {
+  .pos-sidebar { display: none; }
+}
