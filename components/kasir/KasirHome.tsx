@@ -1426,63 +1426,35 @@ export default function KasirHome() {
     : "";
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#f3f5f9] font-sans text-[#1c2433] md:flex-row">
-      <aside className="hidden w-20 shrink-0 flex-col bg-[#16233b] text-slate-200 shadow-xl md:flex">
-        <div className="flex justify-center px-2 pb-3 pt-4">
-          <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f08a24] text-xl font-black text-white"
-            title="DISBA POS"
-          >
-            D
-          </div>
-        </div>
-
-        <nav className="flex-1 space-y-1 px-1.5 py-2" aria-label="Navigasi kasir">
-          <button
-            type="button"
-            onClick={() => document.getElementById("kasir-tables")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            title="Kasir"
-            className="flex w-full flex-col items-center gap-1 rounded-xl bg-[#1f6fe0] px-1 py-2.5 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
-          >
-            <Armchair size={22} />
-            <span className="text-[11px] font-medium leading-none">Kasir</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => void openShiftModal("LAPORAN")}
-            title="Cetak laporan shift hari ini"
-            className="flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-[#9fb0cf] transition-colors hover:bg-[#21345a] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
-          >
-            <BarChart3 size={22} />
-            <span className="text-[11px] font-medium leading-none">Laporan</span>
-          </button>
-        </nav>
-
-        <div className="space-y-3 border-t border-white/10 px-2 py-3">
-          <div className="flex flex-col items-center gap-1 text-center" title={outletName}>
-            <p className="w-full truncate text-[11px] font-semibold text-white">{outletName}</p>
-            <div className={`flex flex-col items-center gap-0.5 text-[11px] font-bold ${isOnline ? "text-emerald-400" : "text-red-300"}`}>
-              {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
-              <span>{isOnline ? "ONLINE" : "OFFLINE"}</span>
-            </div>
-          </div>
-          <div className="flex justify-center" title={cashierName}>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-sm font-bold text-blue-200">
-              {cashierName.charAt(0).toUpperCase()}
-            </div>
-          </div>
-        </div>
-      </aside>
-
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#f3f5f9] font-sans text-[#1c2433]">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       
       {/* HEADER CONTROL */}
-      <header className="flex min-h-[56px] shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#e3e7ef] bg-white px-3 py-2 sm:px-4 md:flex-nowrap md:py-0">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-bold tracking-tight text-[#1c2433]">
-              Dashboard Kasir
-            </h1>
+      <header className="flex min-h-[56px] shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#e3e7ef] bg-white px-3 py-2 sm:px-4 md:flex-nowrap md:py-1.5">
+        <div className="flex min-w-0 items-center gap-2 md:gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f08a24] text-lg font-black text-white" title="DISBA POS">D</div>
+          <nav className="flex shrink-0 items-center gap-1" aria-label="Navigasi kasir">
+            <button
+              type="button"
+              onClick={() => document.getElementById("kasir-tables")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              title="Kasir"
+              className="flex h-10 items-center gap-1.5 rounded-xl bg-[#1f6fe0] px-3 text-xs font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
+            >
+              <Armchair size={16} />
+              <span>Kasir</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void openShiftModal("LAPORAN")}
+              title="Cetak laporan shift hari ini"
+              className="flex h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
+            >
+              <BarChart3 size={16} />
+              <span>Laporan</span>
+            </button>
+          </nav>
+          <div className="min-w-0 max-w-[170px] md:border-l md:border-[#e3e7ef] md:pl-3 xl:max-w-[260px]" title={outletName}>
+            <h1 className="hidden truncate text-sm font-bold tracking-tight text-[#1c2433] xl:block">Dashboard Kasir</h1>
             <p className="truncate text-xs font-medium text-[#6b7588]">{outletName} · {tenantType}</p>
           </div>
           <div className="flex gap-2">
@@ -1498,7 +1470,7 @@ export default function KasirHome() {
           {/* STATUS KONEKSI (ONLINE/OFFLINE RESILIENCE INDICATOR) */}
           <div className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold tracking-wide ${isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
             {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
-            <span>{isOnline ? 'ONLINE' : 'OFFLINE MODE'}</span>
+            <span className="hidden xl:inline">{isOnline ? 'ONLINE' : 'OFFLINE MODE'}</span>
           </div>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
@@ -1574,7 +1546,7 @@ export default function KasirHome() {
         <div id="kasir-order-panel" className={`${isOrderView ? "flex" : "hidden"} min-h-[min(68vh,720px)] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#e3e7ef] bg-white shadow-sm [@media(orientation:landscape)_and_(min-width:768px)]:h-full [@media(orientation:landscape)_and_(min-width:768px)]:min-h-0`}>
           {activeOrder ? (
             <div className="flex h-full min-h-0 flex-col">
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e3e7ef] bg-white p-3 sm:px-4">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e3e7ef] bg-white p-3 [@media(max-height:620px)]:py-1.5 sm:px-4">
                 <div className="flex items-center gap-2.5">
                   <Receipt size={16} className="text-[#1f6fe0]"/>
                   <div className="min-w-0">
@@ -1587,22 +1559,22 @@ export default function KasirHome() {
                   <button onClick={() => setSelectedTable(null)} title="Kembali ke daftar meja" className="flex h-10 items-center gap-1.5 rounded-xl border border-[#e3e7ef] bg-white px-3 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"><X size={18}/><span>Ke Meja</span></button>
                 </div>
               </div>
-              {/* AREA ISI: menu (kiri) + daftar pesanan (kanan). Di layar < 1280px keduanya bertumpuk. */}
-              <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 xl:flex-row">
+              {/* AREA ISI: menu (kiri) + daftar pesanan (kanan). Tablet landscape & layar >= 1280px: berdampingan. Layar sempit/portrait: pesanan di atas, menu di bawah, area ini bisa di-scroll. */}
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 [@media(max-height:620px)]:p-2 xl:flex-row xl:overflow-y-hidden [@media(orientation:landscape)_and_(min-width:768px)]:flex-row [@media(orientation:landscape)_and_(min-width:768px)]:overflow-y-hidden">
 
                 {/* PILIH MENU */}
                 {menuItems.length > 0 && (
                   <section
                     id="kasir-menu-section"
-                    className="flex min-h-[300px] min-w-0 flex-[3] flex-col overflow-hidden rounded-xl border border-[#e3e7ef] bg-[#f8f9fc] p-3 xl:min-h-0"
+                    className="flex min-h-[300px] min-w-0 flex-[3] flex-col overflow-hidden rounded-xl border border-[#e3e7ef] bg-[#f8f9fc] p-3 [@media(max-height:620px)]:p-2 xl:min-h-0 [@media(orientation:landscape)_and_(min-width:768px)]:min-h-0"
                   >
-                    <div className="mb-2 flex shrink-0 items-center justify-between text-xs font-bold uppercase tracking-widest text-[#6b7588]">
+                    <div className="mb-2 flex shrink-0 items-center justify-between text-xs font-bold uppercase tracking-widest text-[#6b7588] [@media(max-height:620px)]:hidden">
                       <span>Pilih Menu</span>
                       <span className="font-semibold">{filteredMenuItems.length} item</span>
                     </div>
 
                     {/* KOLOM CARI MENU */}
-                    <div className="relative mb-3 shrink-0">
+                    <div className="relative mb-2 shrink-0">
                       <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
@@ -1620,7 +1592,7 @@ export default function KasirHome() {
                         }}
                         placeholder="Cari menu..."
                         aria-label="Cari menu"
-                        className="h-11 w-full rounded-xl border border-[#e3e7ef] bg-white pl-9 pr-10 text-sm text-[#1c2433] outline-none transition-colors focus:border-[#1f6fe0]"
+                        className="h-10 w-full rounded-xl border border-[#e3e7ef] bg-white pl-9 pr-10 text-sm text-[#1c2433] outline-none transition-colors focus:border-[#1f6fe0]"
                       />
                       {menuSearch && (
                         <button
@@ -1634,13 +1606,13 @@ export default function KasirHome() {
                       )}
                     </div>
 
-                    {/* TOMBOL KATEGORI: dibungkus ke baris berikutnya agar semua terlihat */}
-                    <div className="mb-3 flex shrink-0 flex-wrap gap-2">
+                    {/* TOMBOL KATEGORI: satu baris, geser ke samping supaya daftar produk punya ruang */}
+                    <div className="no-scrollbar mb-2 flex shrink-0 flex-nowrap gap-2 overflow-x-auto pb-1">
                       {["SEMUA", ...Object.keys(menuCategories)].map((category) => (
                         <button
                           key={category}
                           onClick={() => { setSelectedMenuCategory(category); setMenuSearch(""); }}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+                          className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold ${
                             !searchQuery && selectedMenuCategory === category
                               ? "bg-[#1f6fe0] text-white"
                               : "border border-[#e3e7ef] bg-white text-[#6b7588] hover:border-[#1f6fe0]"
@@ -1658,7 +1630,7 @@ export default function KasirHome() {
                           {searchQuery ? `Tidak ada menu dengan nama "${menuSearch.trim()}".` : "Belum ada menu di kategori ini."}
                         </p>
                       )}
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(140px,100%),1fr))] gap-2">
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(120px,100%),1fr))] gap-2">
                         {filteredMenuItems.map((menu: any) => (
                           <button
                             key={menu.id}
@@ -1688,7 +1660,7 @@ export default function KasirHome() {
                 {/* DAFTAR PESANAN */}
                 <section
                   id="kasir-order-items"
-                  className="flex min-h-[260px] min-w-0 flex-[2] flex-col overflow-hidden rounded-xl border border-[#e3e7ef] bg-white xl:min-h-0"
+                  className="order-first flex max-h-[45vh] min-h-[220px] min-w-0 flex-[2] flex-col overflow-hidden rounded-xl border border-[#e3e7ef] bg-white xl:order-none xl:max-h-none xl:min-h-0 [@media(orientation:landscape)_and_(min-width:768px)]:order-none [@media(orientation:landscape)_and_(min-width:768px)]:max-h-none [@media(orientation:landscape)_and_(min-width:768px)]:min-h-0 [@media(orientation:landscape)_and_(min-width:768px)]:min-w-[240px]"
                 >
                   <div className="flex shrink-0 items-center justify-between border-b border-[#e3e7ef] px-3 py-2.5">
                     <h3 className="text-xs font-bold uppercase tracking-widest text-[#6b7588]">Pesanan</h3>
@@ -1713,8 +1685,8 @@ export default function KasirHome() {
                                 Rp {(item.qty * item.price).toLocaleString("id-ID")}
                               </span>
                             </div>
-                            <div className="mt-1.5 flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1">
+                            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-1">
                                 <button onClick={() => handleUpdateOrderItemQty(item, -1)} className="h-9 w-9 rounded-lg border border-[#e3e7ef] bg-white text-lg font-semibold leading-none text-[#1f6fe0] transition-colors hover:bg-[#e8f0fd]">-</button>
                                 <div className="min-w-[2rem] text-center text-sm font-bold text-[#1c2433]">{item.qty}</div>
                                 <button onClick={() => handleUpdateOrderItemQty(item, 1)} className="h-9 w-9 rounded-lg border border-[#e3e7ef] bg-white text-lg font-semibold leading-none text-[#1f6fe0] transition-colors hover:bg-[#e8f0fd]">+</button>
